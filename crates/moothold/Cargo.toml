@@ -1,0 +1,11 @@
+[package]
+name = "moothold"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Community and federation supercrate for the Mere browser — moots, demesnes, social primitives across protocols."
+keywords = ["federation", "community", "social", "p2p", "browser"]
+categories = ["network-programming"]
+
+[lib]
+path = "src/lib.rs"
