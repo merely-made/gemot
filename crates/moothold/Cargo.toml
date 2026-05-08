@@ -3,7 +3,10 @@ name = "moothold"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Community and federation supercrate for the Mere browser — moots, demesnes, social primitives across protocols."
+documentation = "https://docs.rs/moothold"
+readme = "README.md"
 keywords = ["federation", "community", "social", "p2p", "browser"]
 categories = ["network-programming"]
 
