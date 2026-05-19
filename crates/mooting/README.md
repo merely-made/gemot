@@ -132,12 +132,12 @@ moothold.
 - **`mooting-*` adapter crates** (planned) — one per p2p protocol that
   the moot links to or members host. Thin protocol clients, not
   translators.
-- [`mere-identity`](https://crates.io/crates/mere-identity) — adapters
+- [`identity`](https://crates.io/crates/identity) — adapters
   use identity for member addressing and capability signing. Each
   adapter decides which identity surface it uses (master pubkey,
   chain-rooted persona key, protocol-specific derived key).
-- [`mere-transport`](https://crates.io/crates/mere-transport) —
-  adapters that ride iroh use mere-transport directly. Adapters that
+- [`transport`](https://crates.io/crates/transport) —
+  adapters that ride iroh use transport directly. Adapters that
   ride foreign transports (Matrix homeservers, Nostr relays, ATProto
   PDSs) bring their own.
 - [`murm`](https://crates.io/crates/murm) /
