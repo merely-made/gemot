@@ -137,7 +137,7 @@ it back up.
                             │
         ┌───────────────────┼─────────────────────┐
         ▼                   ▼                     ▼
-     mooting          mere-identity        mere-transport
+     mooting          identity        transport
    (protocol-core +    (members,            (moot streams,
     thin client        capabilities,        gossip topics,
     orchestration      chain-rooted         iroh-blobs for
@@ -156,11 +156,11 @@ it back up.
   Defines `MootProtocol` (small surface for moot-internal coordination
   over MereEvents) plus client orchestration for foreign-protocol
   resources linked from a moot.
-- [`mere-identity`](https://crates.io/crates/mere-identity) — moot
+- [`identity`](https://crates.io/crates/identity) — moot
   members are identified by master pubkey or chain-rooted persona
   pubkeys. Tessera accrues against the chain root, not the leaf
   persona; capabilities are signed Ed25519 credentials.
-- [`mere-transport`](https://crates.io/crates/mere-transport) —
+- [`transport`](https://crates.io/crates/transport) —
   moot-scoped streams (per-moot ALPN), iroh-gossip topics for
   cross-member event broadcast, iroh-blobs for content-addressed
   pinning. Optional Veilid backend activates when a moot declares a
