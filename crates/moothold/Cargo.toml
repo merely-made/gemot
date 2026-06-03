@@ -12,3 +12,12 @@ categories = ["network-programming"]
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+# Tessera events are wire-ready (they become signed operation extensions on the
+# event-DAG, like murmuring's `CabalExt`). serde sets the event types up for that
+# wire bridge; p2panda-core is the operation/signing substrate the bridge rides
+# (same as murm posts); identity supplies the Ed25519 signing keypair.
+serde = { version = "1", features = ["derive"] }
+p2panda-core = "0.6.1"
+identity.workspace = true
