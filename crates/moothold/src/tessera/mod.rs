@@ -16,6 +16,15 @@
 //! - [`ledger`] — the projection: folds an event sequence into a per-chain-root
 //!   score, deriving lapse from missing heartbeats. Deterministic integer math,
 //!   so every peer computing it over the same events + clock agrees.
+//! - [`store`] / [`log_store`] — the redb operation store: persists a moot's
+//!   tessera operations and exposes the `LogStore` + `TopicStore` p2panda-net's
+//!   LogSync reconciles, plus [`fold_moot`](store::TesseraStore::fold_moot), the
+//!   moot-wide projection that folds every member's log into one ledger (the
+//!   probe `tessera-logsync` proved two peers converge on it over the wire).
+//! - [`sync`] — the LogSync session ([`SyncedMoot`](sync::SyncedMoot)) over that
+//!   store: reconciles the moot's log with peers and folds the result to scores,
+//!   the productized form of the probe (murm's `gossip_sync`, host-transport
+//!   decoupled).
 //! - [`persona_chain`] (Phase 2) — the persona forest over the root-keyed ledger:
 //!   resolves a leaf persona to its chain root + depth, and presents a
 //!   depreciated *effective* score (the Sybil cost of a fresh face), while debt
@@ -38,15 +47,22 @@ pub mod concord;
 pub mod event;
 pub mod gate;
 pub mod ledger;
+pub mod log_store;
 pub mod persona_chain;
 pub mod persona_vault;
 pub mod reciprocity;
+pub mod store;
+pub mod sync;
 pub mod wire;
 
 pub use crate::tessera::concord::{CompositionPolicy, MootId, RepLens};
 pub use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-pub use crate::tessera::gate::{may_act, DenyReason, GateConfig, GateDecision, TesseraFacts};
+pub use crate::tessera::gate::{
+    authorize, may_act, DenyReason, GateConfig, GateDecision, Policy, TesseraFacts,
+};
 pub use crate::tessera::ledger::{Ledger, TesseraConfig};
 pub use crate::tessera::persona_chain::{PersonaChains, PersonaId};
 pub use crate::tessera::reciprocity::Reciprocity;
+pub use crate::tessera::store::{TesseraStore, TesseraStoreError};
+pub use crate::tessera::sync::{MootSyncError, SyncRound, SyncStatus, SyncedMoot};
 pub use crate::tessera::wire::{from_operation, to_operation, TesseraExt, WireError};
