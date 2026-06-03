@@ -27,6 +27,8 @@
 
 #![doc(html_root_url = "https://docs.rs/moothold/0.0.1")]
 
+pub mod tessera;
+
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
