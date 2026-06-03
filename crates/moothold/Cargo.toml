@@ -21,3 +21,33 @@ path = "src/lib.rs"
 serde = { version = "1", features = ["derive"] }
 p2panda-core = "0.6.1"
 identity.workspace = true
+# The tessera store. A moot's tessera log is the synced operation log; the store
+# persists `Operation<TesseraExt>` and exposes the two traits p2panda-net's
+# LogSync reconciles — `LogStore` (per-author append-only logs) + `TopicStore`
+# (which logs a moot holds) — over redb, exactly as murmuring's
+# `PersistentCabalStore`. Traits only: `logs`/`topics` are always available; we
+# skip the SQLite backend and the `macros` (OperationStore) feature — received
+# ops persist via the store's own `insert`, not OperationStore.
+p2panda-store = { version = "0.6.1", default-features = false }
+redb = "2"
+thiserror = "1"
+# The tessera sync lane (`tessera::sync`): a LogSync session over the store,
+# mirroring murm's `gossip_sync`. `p2panda-net` is the protocol (the `Endpoint` /
+# `Gossip` it drives come from the host's transport via `sync_parts`, so this
+# stays decoupled from the `transport` crate), `p2panda-sync` its event types;
+# `rt` runs the drain task, `time` bounds the manual `resync` checkpoint,
+# `tokio-stream` reads the subscription.
+p2panda-net = "0.6.1"
+p2panda-sync = "0.6.1"
+tokio = { version = "1", features = ["rt", "time"] }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+# `transport` (dev-only) builds the two real p2panda-net peers for the
+# convergence test + supplies `sync_overlay_topic` for their explicit bootstrap;
+# the library itself takes raw `Endpoint`/`Gossip`, not a `P2pandaTransport`.
+# `macros` + `rt-multi-thread` run the async / two-peer tests; tempfile backs the
+# persistent-store reopen test.
+transport.workspace = true
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+tempfile = "3"
