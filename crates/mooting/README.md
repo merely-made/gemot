@@ -125,7 +125,7 @@ moothold.
 ```
 
 - [`moothold`](https://crates.io/crates/moothold) — wraps mooting with
-  tier lifecycle (t1 orrery → t2 moot → t3 moothold → t4 demesne),
+  tier lifecycle (t1 orrery → t2 moot → t3 moothold → t4 coalition),
   federation reciprocity, governance, tessera, capability scopes,
   forking. moothold owns the user-facing moot abstraction; mooting
   owns the protocol-coordination abstraction.
