@@ -9,7 +9,7 @@ sibling crates.
 A *moot* is a single persistent themed federatable graph-view community
 (t2). A *moothold* is a federation of moots (t3) — *a holding of moots*,
 in the Anglo-Saxon sense (cf. *household*, *stronghold*, *freehold*). A
-*demesne* (t4) is a sovereign coalition of mootholds, a future tier that
+*coalition* (t4) is a sovereign cluster of mootholds, a future tier that
 provides organizing defaults member mootholds can adopt or override.
 
 The big bet: **moots are a durable, crowd-hostable substrate for
@@ -41,7 +41,7 @@ themselves and members reach them via thin clients.
 - **Engram flora** — durable contributions accumulated over time,
   forming the moot's culture / geist.
 - **Tier transitions** — moot → moothold (federation), moothold →
-  demesne (coalition). Each transition is a first-class governance
+  coalition. Each transition is a first-class governance
   event.
 - **Forking primitives** — all structures are forkable. A fork copies
   graph state, inherits some/all members per the fork's terms, commits
@@ -57,9 +57,10 @@ framing.
 
 The Anglo-Saxon *-hold* (household, stronghold, freehold) connotes a
 **holding of bounded units**. A federation of moots is literally a
-holding-of-moots. Latin *demesne* (a sovereign's directly-controlled
-lands) connotes a higher coordinating authority and is now reserved for
-t4.
+holding-of-moots. Tier 4, **coalition**, is the sovereign cluster of
+mootholds (originally named *demesne* for the Latin sense of a
+directly-controlled domain; renamed 2026-06-04 because *demesne* sounds like
+*domain*, which already names the domain layer).
 
 ## The tier framework
 
@@ -68,7 +69,7 @@ t4.
 | **T1** | **orrery** | A user's root graph view. *"Your orrery is your moot."* | Personal eidetic. |
 | **T2** | **moot** | A persistent themed federatable graph-view community. | Voluntary pin pool. Dissolves if nobody pins. |
 | **T3** | **moothold** | A federation of moots. | ILL-shaped reciprocity between member moots. |
-| **T4** | **demesne** | A sovereign coalition of mootholds. | Demesne-wide reciprocity ledger; per-moothold override; fork-out always possible. |
+| **T4** | **coalition** | A sovereign cluster of mootholds. | Coalition-wide reciprocity ledger; per-moothold override; fork-out always possible. |
 
 **Practical t2 ceiling: 5K–10K active members** before a moothold of
 related moots is healthier than a single mega-moot. T4 is a future tier;
@@ -127,7 +128,7 @@ it back up.
 ## How it relates to other workspace crates
 
 ```text
-                graphshell moot/demesne UI
+                graphshell moot/coalition UI
                             │
                             ▼
                         moothold
@@ -196,7 +197,7 @@ constants. The first concrete slices land per the
   heartbeats.
 - **T3 milestone**: two moots federate into a moothold; reciprocity
   pledges; cross-moot pin requests via the reciprocity ledger.
-- **T4 (demesne)**: deferred until t3 is solid.
+- **T4 (coalition)**: deferred until t3 is solid.
 
 Forward direction:
 

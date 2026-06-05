@@ -2,9 +2,9 @@
 //!
 //! Community and federation supercrate for the
 //! [`mere`](https://crates.io/crates/mere) browser. A *moot* is a single
-//! persistent themed federatable graph-view community; a *demesne* is a
+//! persistent themed federatable graph-view community; a *coalition* is a
 //! federation of moots (a sovereign cluster). `moothold` is the system that
-//! holds them — manages moot lifecycle, demesne federation, replication, and
+//! holds them — manages moot lifecycle, coalition federation, replication, and
 //! tessera (trust-token) validation across communities.
 //!
 //! Inside `moothold`, the [`mooting`](https://crates.io/crates/mooting)
