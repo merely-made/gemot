@@ -27,6 +27,7 @@
 
 #![doc(html_root_url = "https://docs.rs/moothold/0.0.1")]
 
+pub mod moot;
 pub mod tessera;
 
 /// Crate version.
