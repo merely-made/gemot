@@ -25,10 +25,10 @@ identity.workspace = true
 # persists `Operation<TesseraExt>` and exposes the two traits p2panda-net's
 # LogSync reconciles — `LogStore` (per-author append-only logs) + `TopicStore`
 # (which logs a moot holds) — over redb, exactly as murmuring's
-# `PersistentCabalStore`. Traits only: `logs`/`topics` are always available; we
-# skip the SQLite backend and the `macros` (OperationStore) feature — received
-# ops persist via the store's own `insert`, not OperationStore.
-p2panda-store = { version = "0.6.1", default-features = false }
+# `PersistentCabalStore`. The `sqlite` feature backs the *moot object* lane's
+# `MootStore` (the mesh-proven path: p2panda's own SQLite impls of all three
+# store traits); `macros` (OperationStore derive) stays off.
+p2panda-store = { version = "0.6.1", default-features = false, features = ["sqlite"] }
 redb = "2"
 thiserror = "1"
 # The tessera sync lane (`tessera::sync`): a LogSync session over the store,
