@@ -42,10 +42,7 @@ impl MootStore {
     /// One connection — with `sqlite::memory:` every pooled connection is
     /// its own empty database.
     pub async fn in_memory() -> Result<Self, MootStoreError> {
-        let sqlite = SqliteStoreBuilder::new()
-            .max_connections(1)
-            .build()
-            .await?;
+        let sqlite = SqliteStoreBuilder::new().max_connections(1).build().await?;
         Ok(Self { sqlite })
     }
 
@@ -69,10 +66,7 @@ impl MootStore {
         let permit = self.sqlite.begin().await?;
         // An error before commit drops the permit, rolling the transaction
         // back — the op row and its index entry land together or not at all.
-        let fresh = self
-            .sqlite
-            .insert_operation(&op.hash, op, &moot_id)
-            .await?;
+        let fresh = self.sqlite.insert_operation(&op.hash, op, &moot_id).await?;
         self.sqlite
             .associate(&Topic::from(moot_id), &op.header.verifying_key, &moot_id)
             .await?;
@@ -119,7 +113,7 @@ impl MootStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::wire::{to_operation, MootEvent};
+    use crate::moot::wire::{MootEvent, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [0x6d; 32];

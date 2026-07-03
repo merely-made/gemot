@@ -58,11 +58,11 @@ pub mod wire;
 pub use crate::tessera::concord::{CompositionPolicy, MootId, RepLens};
 pub use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
 pub use crate::tessera::gate::{
-    authorize, may_act, DenyReason, GateConfig, GateDecision, Policy, TesseraFacts,
+    DenyReason, GateConfig, GateDecision, Policy, TesseraFacts, authorize, may_act,
 };
 pub use crate::tessera::ledger::{Ledger, TesseraConfig};
 pub use crate::tessera::persona_chain::{PersonaChains, PersonaId};
 pub use crate::tessera::reciprocity::Reciprocity;
 pub use crate::tessera::store::{TesseraStore, TesseraStoreError};
 pub use crate::tessera::sync::{MootSyncError, SyncRound, SyncStatus, SyncedMoot};
-pub use crate::tessera::wire::{from_operation, to_operation, TesseraExt, WireError};
+pub use crate::tessera::wire::{TesseraExt, WireError, from_operation, to_operation};

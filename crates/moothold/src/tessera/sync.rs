@@ -230,7 +230,7 @@ impl Drop for SyncedMoot {
 mod tests {
     use super::*;
     use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-    use crate::tessera::wire::{to_operation, TesseraExt};
+    use crate::tessera::wire::{TesseraExt, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
     use p2panda_core::Operation;
     use std::sync::Arc;
@@ -250,7 +250,11 @@ mod tests {
             duration_ms: None,
             at_ms: 1_000,
         };
-        let e1 = TesseraEvent::CommitmentFulfilled { by, commitment: cid, at_ms: 1_050 };
+        let e1 = TesseraEvent::CommitmentFulfilled {
+            by,
+            commitment: cid,
+            at_ms: 1_050,
+        };
         let e2 = TesseraEvent::GovernanceParticipation { by, at_ms: 1_100 };
         let op0 = to_operation(kp, MOOT, &e0, 0, None);
         let op1 = to_operation(kp, MOOT, &e1, 1, Some(*op0.hash.as_bytes()));
@@ -287,9 +291,15 @@ mod tests {
 
         // LogSync joins gossip on the derived overlay topic — tag peers with it.
         let overlay = transport::sync_overlay_topic(MOOT);
-        alice_t.add_peer(bob_t.endpoint_addr().await.unwrap()).await.unwrap();
+        alice_t
+            .add_peer(bob_t.endpoint_addr().await.unwrap())
+            .await
+            .unwrap();
         alice_t.set_topics(bob_id, &[overlay]).await.unwrap();
-        bob_t.add_peer(alice_t.endpoint_addr().await.unwrap()).await.unwrap();
+        bob_t
+            .add_peer(alice_t.endpoint_addr().await.unwrap())
+            .await
+            .unwrap();
         bob_t.set_topics(alice_id, &[overlay]).await.unwrap();
 
         // Alice holds a 3-event tessera log before bob connects (offline catch-up).
@@ -347,7 +357,10 @@ mod tests {
 
         // The manual checkpoint returns quickly (already synced).
         let round = bob_moot.resync().await.expect("resync runs");
-        println!("tessera resync checkpoint: items_received={}", round.items_received);
+        println!(
+            "tessera resync checkpoint: items_received={}",
+            round.items_received
+        );
     }
 
     /// The same convergence, bootstrapped by **ticket** — the host's "connect to
@@ -382,12 +395,18 @@ mod tests {
             .add_peer_ticket(&alice_t.ticket().await.unwrap())
             .await
             .unwrap();
-        bob_t.set_topics(bob_learns_alice, &[overlay]).await.unwrap();
+        bob_t
+            .set_topics(bob_learns_alice, &[overlay])
+            .await
+            .unwrap();
         let alice_learns_bob = alice_t
             .add_peer_ticket(&bob_t.ticket().await.unwrap())
             .await
             .unwrap();
-        alice_t.set_topics(alice_learns_bob, &[overlay]).await.unwrap();
+        alice_t
+            .set_topics(alice_learns_bob, &[overlay])
+            .await
+            .unwrap();
 
         let alice_store = TesseraStore::in_memory().unwrap();
         for op in commit_fulfil_govern(&author) {
@@ -429,7 +448,10 @@ mod tests {
             .ledger(TesseraConfig::default())
             .unwrap()
             .score(&author_root, 5_000);
-        assert_eq!(bob_score, alice_score, "both peers agree after a ticket bootstrap");
+        assert_eq!(
+            bob_score, alice_score,
+            "both peers agree after a ticket bootstrap"
+        );
         assert_eq!(bob_score, 11);
     }
 }

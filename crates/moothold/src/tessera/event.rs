@@ -160,13 +160,41 @@ mod tests {
                 duration_ms: None,
                 at_ms: 1,
             },
-            TesseraEvent::Heartbeat { by: root, commitment: cid, at_ms: 2 },
-            TesseraEvent::CommitmentFulfilled { by: root, commitment: cid, at_ms: 3 },
-            TesseraEvent::CleanHandoff { from: root, to: ChainRoot([9; 32]), commitment: cid, at_ms: 4 },
-            TesseraEvent::Vouch { voucher: root, newcomer: ChainRoot([9; 32]), fraction_bp: 5_000, at_ms: 5 },
+            TesseraEvent::Heartbeat {
+                by: root,
+                commitment: cid,
+                at_ms: 2,
+            },
+            TesseraEvent::CommitmentFulfilled {
+                by: root,
+                commitment: cid,
+                at_ms: 3,
+            },
+            TesseraEvent::CleanHandoff {
+                from: root,
+                to: ChainRoot([9; 32]),
+                commitment: cid,
+                at_ms: 4,
+            },
+            TesseraEvent::Vouch {
+                voucher: root,
+                newcomer: ChainRoot([9; 32]),
+                fraction_bp: 5_000,
+                at_ms: 5,
+            },
             TesseraEvent::GovernanceParticipation { by: root, at_ms: 6 },
-            TesseraEvent::Pardon { by: ChainRoot([50; 32]), target: root, weight: 10, at_ms: 7 },
-            TesseraEvent::Censure { by: ChainRoot([50; 32]), target: root, weight: 10, at_ms: 8 },
+            TesseraEvent::Pardon {
+                by: ChainRoot([50; 32]),
+                target: root,
+                weight: 10,
+                at_ms: 7,
+            },
+            TesseraEvent::Censure {
+                by: ChainRoot([50; 32]),
+                target: root,
+                weight: 10,
+                at_ms: 8,
+            },
         ];
         let stamps: Vec<u64> = events.iter().map(TesseraEvent::at_ms).collect();
         assert_eq!(stamps, vec![1, 2, 3, 4, 5, 6, 7, 8]);

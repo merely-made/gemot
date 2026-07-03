@@ -88,7 +88,10 @@ pub enum Policy {
     /// floor with a vouch bypass for trusted newcomers.
     VouchedOrScore(GateConfig),
     /// Admit only admitted members; standing is not consulted. The closed moot.
-    MembersOnly { rate_limit: u32, rate_window_ms: u64 },
+    MembersOnly {
+        rate_limit: u32,
+        rate_window_ms: u64,
+    },
 }
 
 /// Evaluate a moot's [`Policy`] for a persona — the reference **authorizer**.
@@ -172,7 +175,12 @@ mod tests {
     #[test]
     fn allows_when_cap_and_facts_pass() {
         assert_eq!(
-            may_act(true, &facts(50, vec![1, 2, 3]), 1_000, &GateConfig::default()),
+            may_act(
+                true,
+                &facts(50, vec![1, 2, 3]),
+                1_000,
+                &GateConfig::default()
+            ),
             GateDecision::Allow
         );
     }

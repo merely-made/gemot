@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 
 use p2panda_core::Operation;
 
-use super::wire::{from_operation, verify, MootEvent, MootExt};
+use super::wire::{MootEvent, MootExt, from_operation, verify};
 
 /// The founding statement, as resolved by the fold.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,7 +92,11 @@ impl MootRoster {
             let author = *op.header.verifying_key.as_bytes();
             let op_hash = *op.hash.as_bytes();
             match event {
-                MootEvent::Declared { name, charter, at_ms } => {
+                MootEvent::Declared {
+                    name,
+                    charter,
+                    at_ms,
+                } => {
                     declarations.insert(
                         op_hash,
                         Declaration {
