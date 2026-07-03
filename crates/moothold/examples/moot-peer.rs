@@ -66,9 +66,18 @@ fn parse_hex32(s: &str) -> Result<[u8; 32], String> {
 }
 
 enum Mode {
-    Declare { name: String, charter: String },
-    Join { name: String },
-    Share { manifest_id: [u8; 32], schema_id: String, title: String },
+    Declare {
+        name: String,
+        charter: String,
+    },
+    Join {
+        name: String,
+    },
+    Share {
+        manifest_id: [u8; 32],
+        schema_id: String,
+        title: String,
+    },
     Show,
 }
 

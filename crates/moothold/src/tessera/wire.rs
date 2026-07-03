@@ -130,7 +130,10 @@ mod tests {
         let kp = keypair();
         let mut op = to_operation(&kp, MOOT, &sample_event(ChainRoot([1; 32])), 0, None);
         op.header.extensions.moot_id = [0xff; 32];
-        assert!(!verify(&op), "the moot id is signed, so a cross-moot replay fails");
+        assert!(
+            !verify(&op),
+            "the moot id is signed, so a cross-moot replay fails"
+        );
     }
 
     #[test]

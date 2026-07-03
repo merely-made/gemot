@@ -36,12 +36,13 @@ use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use redb::{ReadableTable, TableDefinition, WriteTransaction};
 
-use crate::tessera::store::{be, TesseraStore, TesseraStoreError, OPS};
+use crate::tessera::store::{OPS, TesseraStore, TesseraStoreError, be};
 use crate::tessera::wire::TesseraExt;
 
 /// `author(32) ++ log_id_be(8) ++ seq_be(8)` → `hash(32)` — per-author log
 /// entries in `seq` order (native redb range scan).
-pub(crate) const OPS_BY_LOG: TableDefinition<&[u8], &[u8]> = TableDefinition::new("tessera_ops_by_log");
+pub(crate) const OPS_BY_LOG: TableDefinition<&[u8], &[u8]> =
+    TableDefinition::new("tessera_ops_by_log");
 /// `moot_id(32) ++ author(32) ++ log_id_be(8)` → `()` — a moot → its `(author, log)` pairs.
 pub(crate) const LOG_TOPICS: TableDefinition<&[u8], &[u8]> =
     TableDefinition::new("tessera_log_topics");
@@ -211,7 +212,11 @@ impl LogStore<Operation<TesseraExt>, VerifyingKey, u64, u64, Hash> for TesseraSt
                 bytes += stored.value().len() as u64;
             }
         }
-        Ok(if count == 0 { None } else { Some((count, bytes)) })
+        Ok(if count == 0 {
+            None
+        } else {
+            Some((count, bytes))
+        })
     }
 
     async fn get_log_entries(
@@ -309,7 +314,10 @@ impl TopicStore<Topic, VerifyingKey, u64> for TesseraStore {
         Ok(removed)
     }
 
-    async fn resolve(&self, topic: &Topic) -> Result<BTreeMap<VerifyingKey, Vec<u64>>, Self::Error> {
+    async fn resolve(
+        &self,
+        topic: &Topic,
+    ) -> Result<BTreeMap<VerifyingKey, Vec<u64>>, Self::Error> {
         let prefix = topic.as_bytes();
         let read = self.db.begin_read().map_err(be)?;
         let t = read.open_table(LOG_TOPICS).map_err(be)?;
@@ -352,7 +360,12 @@ mod tests {
             .unwrap()
     }
 
-    fn govern(kp: &Ed25519Keypair, seq: u64, backlink: Option<Hash>, at_ms: u64) -> Operation<TesseraExt> {
+    fn govern(
+        kp: &Ed25519Keypair,
+        seq: u64,
+        backlink: Option<Hash>,
+        at_ms: u64,
+    ) -> Operation<TesseraExt> {
         let event = TesseraEvent::GovernanceParticipation {
             by: ChainRoot(kp.public_key().to_bytes()),
             at_ms,
@@ -374,22 +387,42 @@ mod tests {
         store.insert(&op1).unwrap();
         store.insert(&op2).unwrap();
 
-        let latest = store.get_latest_entry(&author, &LOG_ID).await.unwrap().unwrap();
+        let latest = store
+            .get_latest_entry(&author, &LOG_ID)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(latest.hash, op2.hash);
 
-        let heights = store.get_log_heights(&author, &[LOG_ID]).await.unwrap().unwrap();
+        let heights = store
+            .get_log_heights(&author, &[LOG_ID])
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(heights.get(&LOG_ID), Some(&2));
 
-        let all = store.get_log_entries(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let all = store
+            .get_log_entries(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(all.len(), 3);
         assert_eq!(all[0].0.hash, op0.hash);
         assert_eq!(all[2].0.hash, op2.hash);
 
-        let ranged = store.get_log_entries(&author, &LOG_ID, Some(0), None).await.unwrap().unwrap();
+        let ranged = store
+            .get_log_entries(&author, &LOG_ID, Some(0), None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(ranged.len(), 2);
         assert_eq!(ranged[0].0.hash, op1.hash);
 
-        let (count, bytes) = store.get_log_size(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let (count, bytes) = store
+            .get_log_size(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(count, 3);
         assert!(bytes > 0);
     }
@@ -408,7 +441,11 @@ mod tests {
         store.insert(&op0).unwrap();
         store.insert(&op1).unwrap();
 
-        let entries = store.get_log_entries(&author, &LOG_ID, None, None).await.unwrap().unwrap();
+        let entries = store
+            .get_log_entries(&author, &LOG_ID, None, None)
+            .await
+            .unwrap()
+            .unwrap();
         let h0 = &entries[0].0.header;
         let h1 = &entries[1].0.header;
         assert!(validate_header(h0).is_ok());
@@ -448,7 +485,10 @@ mod tests {
 
         assert!(store.associate(&topic, &vk, &LOG_ID).await.unwrap());
         assert!(!store.associate(&topic, &vk, &LOG_ID).await.unwrap());
-        assert_eq!(store.resolve(&topic).await.unwrap().get(&vk), Some(&vec![LOG_ID]));
+        assert_eq!(
+            store.resolve(&topic).await.unwrap().get(&vk),
+            Some(&vec![LOG_ID])
+        );
 
         assert!(store.remove(&topic, &vk, &LOG_ID).await.unwrap());
         assert!(store.resolve(&topic).await.unwrap().is_empty());

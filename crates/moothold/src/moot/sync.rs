@@ -31,7 +31,7 @@ use tokio_stream::StreamExt;
 
 use super::roster::MootRoster;
 use super::store::{MootStore, MootStoreError};
-use super::wire::{to_operation, verify, MootEvent, MootExt};
+use super::wire::{MootEvent, MootExt, to_operation, verify};
 
 type MootLogSync = LogSync<SqliteStore, [u8; 32], MootExt>;
 type MootSyncHandle = SyncHandle<Operation<MootExt>, TopicLogSyncEvent<MootExt>>;
@@ -235,8 +235,7 @@ mod tests {
     async fn two_peers() -> (P2pandaTransport, P2pandaTransport) {
         let founder_provider = StdArc::new(InMemoryProvider::from_seed([70; 32]));
         let friend_provider = StdArc::new(InMemoryProvider::from_seed([71; 32]));
-        let founder_id =
-            transport::PeerID::from_public_key(founder_provider.master_public_key());
+        let founder_id = transport::PeerID::from_public_key(founder_provider.master_public_key());
         let friend_id = transport::PeerID::from_public_key(friend_provider.master_public_key());
 
         let founder_t = P2pandaTransport::builder(founder_provider.master_keypair())

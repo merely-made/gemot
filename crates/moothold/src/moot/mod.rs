@@ -27,4 +27,4 @@ pub mod wire;
 pub use roster::{Declaration, FloraEntry, Member, MootRoster};
 pub use store::{MootStore, MootStoreError};
 pub use sync::{MootSyncError, SyncRound, SyncStatus, SyncedMootSpace};
-pub use wire::{from_operation, to_operation, verify, MootEvent, MootExt, WireError};
+pub use wire::{MootEvent, MootExt, WireError, from_operation, to_operation, verify};

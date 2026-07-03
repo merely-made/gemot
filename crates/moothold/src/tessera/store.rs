@@ -33,10 +33,10 @@ use serde::{Deserialize, Serialize};
 use crate::tessera::event::TesseraEvent;
 use crate::tessera::ledger::{Ledger, TesseraConfig};
 use crate::tessera::log_store::{
-    create_index_tables, index_op_in_txn, log_prefix, seq_from_key, with_seq, LOG_TOPICS,
-    OPS_BY_LOG,
+    LOG_TOPICS, OPS_BY_LOG, create_index_tables, index_op_in_txn, log_prefix, seq_from_key,
+    with_seq,
 };
-use crate::tessera::wire::{from_operation, TesseraExt};
+use crate::tessera::wire::{TesseraExt, from_operation};
 
 /// `hash(32)` → stored operation (CBOR header + body). `pub(crate)` so the sync
 /// layer ([`log_store`](super::log_store)) can read operations back.
@@ -312,7 +312,11 @@ mod tests {
             duration_ms: None,
             at_ms: 1_000,
         };
-        let e1 = TesseraEvent::CommitmentFulfilled { by, commitment: cid, at_ms: 1_050 };
+        let e1 = TesseraEvent::CommitmentFulfilled {
+            by,
+            commitment: cid,
+            at_ms: 1_050,
+        };
         let e2 = TesseraEvent::GovernanceParticipation { by, at_ms: 1_100 };
         let op0 = to_operation(kp, MOOT, &e0, 0, None);
         let op1 = to_operation(kp, MOOT, &e1, 1, Some(*op0.hash.as_bytes()));
@@ -327,7 +331,10 @@ mod tests {
         assert!(store.insert(&op0).unwrap());
         assert!(store.insert(&op1).unwrap());
         assert!(store.insert(&op2).unwrap());
-        assert!(!store.insert(&op2).unwrap(), "re-insert is idempotent on the hash");
+        assert!(
+            !store.insert(&op2).unwrap(),
+            "re-insert is idempotent on the hash"
+        );
         assert_eq!(store.len().unwrap(), 3);
 
         let got = store.get(&op1.hash).unwrap().expect("op stored");
@@ -360,7 +367,9 @@ mod tests {
             by: root_of(&bob),
             at_ms: 1_200,
         };
-        store.insert(&to_operation(&bob, MOOT, &bob_govern, 0, None)).unwrap();
+        store
+            .insert(&to_operation(&bob, MOOT, &bob_govern, 0, None))
+            .unwrap();
 
         let ledger = store.fold_moot(MOOT, TesseraConfig::default()).unwrap();
         assert_eq!(ledger.score(&root_of(&alice), 5_000), 11);
@@ -375,7 +384,9 @@ mod tests {
             store.insert(&op).unwrap();
         }
         // A different moot id resolves to no logs, so the fold is empty.
-        let ledger = store.fold_moot([0xee; 32], TesseraConfig::default()).unwrap();
+        let ledger = store
+            .fold_moot([0xee; 32], TesseraConfig::default())
+            .unwrap();
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 0);
     }
 

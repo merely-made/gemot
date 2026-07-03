@@ -41,7 +41,9 @@ pub fn tessera_persona_id(
     persona_id: &[u8],
 ) -> Result<PersonaId, IdentityError> {
     Ok(PersonaId(
-        persona_keypair(provider, persona_id)?.public_key().to_bytes(),
+        persona_keypair(provider, persona_id)?
+            .public_key()
+            .to_bytes(),
     ))
 }
 
@@ -93,7 +95,11 @@ mod tests {
         let chains = build_chains(&p, links).unwrap();
         let throwaway = tessera_persona_id(&p, b"throwaway").unwrap();
         let (root, depth) = chains.root_and_depth(throwaway);
-        assert_eq!(root, ChainRoot(work.0), "the fork resolves to work's chain root");
+        assert_eq!(
+            root,
+            ChainRoot(work.0),
+            "the fork resolves to work's chain root"
+        );
         assert_eq!(depth, 1);
     }
 
@@ -108,6 +114,9 @@ mod tests {
             at_ms: 1,
         };
         let op = to_operation(&kp, [0x30; 32], &event, 0, None);
-        assert!(verify(&op), "a vault-derived persona key signs a valid tessera op");
+        assert!(
+            verify(&op),
+            "a vault-derived persona key signs a valid tessera op"
+        );
     }
 }

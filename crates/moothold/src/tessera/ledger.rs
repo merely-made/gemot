@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use crate::tessera::event::{ChainRoot, CommitmentId, TesseraEvent, BASIS_POINTS};
+use crate::tessera::event::{BASIS_POINTS, ChainRoot, CommitmentId, TesseraEvent};
 
 /// Tunable weights and curves for the score. Per-moot configurable — the plan
 /// keeps no global hardcoded reputation economy — these are the defaults.
@@ -209,10 +209,7 @@ impl Ledger {
                 *self.accruals.entry(*by).or_default() += self.config.governance_reward;
             }
             TesseraEvent::Pardon {
-                by,
-                target,
-                weight,
-                ..
+                by, target, weight, ..
             } => {
                 // Community forgiveness. You cannot pardon yourself, so a
                 // self-judgement is ignored (defence-in-depth behind the
@@ -222,10 +219,7 @@ impl Ledger {
                 }
             }
             TesseraEvent::Censure {
-                by,
-                target,
-                weight,
-                ..
+                by, target, weight, ..
             } => {
                 if by != target {
                     *self.accruals.entry(*target).or_default() -= *weight as i64;
@@ -310,12 +304,19 @@ mod tests {
             TesseraConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CommitmentFulfilled { by: a, commitment: c, at_ms: 50 },
+                TesseraEvent::CommitmentFulfilled {
+                    by: a,
+                    commitment: c,
+                    at_ms: 50,
+                },
             ],
         );
         // Fulfilled before lapse: +reward, and no lapse penalty ever after.
         assert_eq!(ledger.score(&a, 10_000), 10);
-        assert!(ledger.lapsed(10_000).is_empty(), "a fulfilled commitment can't lapse");
+        assert!(
+            ledger.lapsed(10_000).is_empty(),
+            "a fulfilled commitment can't lapse"
+        );
     }
 
     #[test]
@@ -336,15 +337,31 @@ mod tests {
         let c = cid(1);
         let mut ledger = Ledger::new(TesseraConfig::default());
         ledger.apply(&made(a, c, 100, 0));
-        ledger.apply(&TesseraEvent::Heartbeat { by: a, commitment: c, at_ms: 80 });
-        ledger.apply(&TesseraEvent::Heartbeat { by: a, commitment: c, at_ms: 160 });
+        ledger.apply(&TesseraEvent::Heartbeat {
+            by: a,
+            commitment: c,
+            at_ms: 80,
+        });
+        ledger.apply(&TesseraEvent::Heartbeat {
+            by: a,
+            commitment: c,
+            at_ms: 160,
+        });
         // Alive shortly after the last heartbeat.
         assert_eq!(ledger.score(&a, 200), 0);
         // Goes silent: lapsed well past the last heartbeat + cadence.
         assert_eq!(ledger.score(&a, 400), -20);
         // Revive: a fresh heartbeat un-lapses it as of a later-but-close clock.
-        ledger.apply(&TesseraEvent::Heartbeat { by: a, commitment: c, at_ms: 410 });
-        assert_eq!(ledger.score(&a, 450), 0, "lapse-and-revive: resuming clears the lapse");
+        ledger.apply(&TesseraEvent::Heartbeat {
+            by: a,
+            commitment: c,
+            at_ms: 410,
+        });
+        assert_eq!(
+            ledger.score(&a, 450),
+            0,
+            "lapse-and-revive: resuming clears the lapse"
+        );
     }
 
     #[test]
@@ -357,7 +374,12 @@ mod tests {
             TesseraConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CleanHandoff { from: a, to: b, commitment: c, at_ms: 50 },
+                TesseraEvent::CleanHandoff {
+                    from: a,
+                    to: b,
+                    commitment: c,
+                    at_ms: 50,
+                },
             ],
         );
         // After the handoff window, the lapse falls on B (current owner), not A.
@@ -375,12 +397,25 @@ mod tests {
             TesseraConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CleanHandoff { from: a, to: b, commitment: c, at_ms: 50 },
-                TesseraEvent::CommitmentFulfilled { by: b, commitment: c, at_ms: 80 },
+                TesseraEvent::CleanHandoff {
+                    from: a,
+                    to: b,
+                    commitment: c,
+                    at_ms: 50,
+                },
+                TesseraEvent::CommitmentFulfilled {
+                    by: b,
+                    commitment: c,
+                    at_ms: 80,
+                },
             ],
         );
         assert_eq!(ledger.score(&a, 10_000), 0);
-        assert_eq!(ledger.score(&b, 10_000), 10, "the successor who finished it earns the reward");
+        assert_eq!(
+            ledger.score(&b, 10_000),
+            10,
+            "the successor who finished it earns the reward"
+        );
     }
 
     #[test]
@@ -393,8 +428,16 @@ mod tests {
             &[
                 made(a, c, 100, 0),
                 // A stranger's heartbeat + fulfilment must not count.
-                TesseraEvent::Heartbeat { by: stranger, commitment: c, at_ms: 90 },
-                TesseraEvent::CommitmentFulfilled { by: stranger, commitment: c, at_ms: 95 },
+                TesseraEvent::Heartbeat {
+                    by: stranger,
+                    commitment: c,
+                    at_ms: 90,
+                },
+                TesseraEvent::CommitmentFulfilled {
+                    by: stranger,
+                    commitment: c,
+                    at_ms: 95,
+                },
             ],
         );
         // Still lapses (the stranger's heartbeat didn't keep it alive), and the
@@ -426,12 +469,29 @@ mod tests {
             &[
                 // A earns 10 by fulfilling, then vouches half of it to newcomer B.
                 made(a, c, 100, 0),
-                TesseraEvent::CommitmentFulfilled { by: a, commitment: c, at_ms: 10 },
-                TesseraEvent::Vouch { voucher: a, newcomer: b, fraction_bp: 5_000, at_ms: 20 },
+                TesseraEvent::CommitmentFulfilled {
+                    by: a,
+                    commitment: c,
+                    at_ms: 10,
+                },
+                TesseraEvent::Vouch {
+                    voucher: a,
+                    newcomer: b,
+                    fraction_bp: 5_000,
+                    at_ms: 20,
+                },
             ],
         );
-        assert_eq!(ledger.score(&a, 1_000), 10, "vouching lends, it does not spend the voucher's own score");
-        assert_eq!(ledger.score(&b, 1_000), 5, "the newcomer gets half of A's standing as a boost");
+        assert_eq!(
+            ledger.score(&a, 1_000),
+            10,
+            "vouching lends, it does not spend the voucher's own score"
+        );
+        assert_eq!(
+            ledger.score(&b, 1_000),
+            5,
+            "the newcomer gets half of A's standing as a boost"
+        );
     }
 
     #[test]
@@ -444,7 +504,11 @@ mod tests {
             &[
                 // A keeps one commitment, ghosts another; B participates in governance.
                 made(a, c1, 100, 0),
-                TesseraEvent::CommitmentFulfilled { by: a, commitment: c1, at_ms: 40 },
+                TesseraEvent::CommitmentFulfilled {
+                    by: a,
+                    commitment: c1,
+                    at_ms: 40,
+                },
                 made(a, c2, 100, 0), // never heartbeated -> will lapse
                 TesseraEvent::GovernanceParticipation { by: b, at_ms: 5 },
             ],
@@ -460,7 +524,12 @@ mod tests {
         let gov = root(50); // a moot's governance identity
         let censured = Ledger::from_events(
             TesseraConfig::default(),
-            &[TesseraEvent::Censure { by: gov, target: a, weight: 30, at_ms: 1 }],
+            &[TesseraEvent::Censure {
+                by: gov,
+                target: a,
+                weight: 30,
+                at_ms: 1,
+            }],
         );
         assert_eq!(censured.score(&a, 10), -30);
 
@@ -468,8 +537,18 @@ mod tests {
         let pardoned = Ledger::from_events(
             TesseraConfig::default(),
             &[
-                TesseraEvent::Censure { by: gov, target: a, weight: 30, at_ms: 1 },
-                TesseraEvent::Pardon { by: gov, target: a, weight: 30, at_ms: 2 },
+                TesseraEvent::Censure {
+                    by: gov,
+                    target: a,
+                    weight: 30,
+                    at_ms: 1,
+                },
+                TesseraEvent::Pardon {
+                    by: gov,
+                    target: a,
+                    weight: 30,
+                    at_ms: 2,
+                },
             ],
         );
         assert_eq!(pardoned.score(&a, 10), 0);
@@ -483,7 +562,12 @@ mod tests {
             TesseraConfig::default(),
             &[
                 made(a, cid(1), 100, 0), // ghosted -> lapses (-20)
-                TesseraEvent::Pardon { by: gov, target: a, weight: 20, at_ms: 1 },
+                TesseraEvent::Pardon {
+                    by: gov,
+                    target: a,
+                    weight: 20,
+                    at_ms: 1,
+                },
             ],
         );
         // The -20 lapse is offset by +20 of community forgiveness.
@@ -497,8 +581,18 @@ mod tests {
         let ledger = Ledger::from_events(
             TesseraConfig::default(),
             &[
-                TesseraEvent::Pardon { by: a, target: a, weight: 100, at_ms: 1 },
-                TesseraEvent::Censure { by: a, target: a, weight: 100, at_ms: 2 },
+                TesseraEvent::Pardon {
+                    by: a,
+                    target: a,
+                    weight: 100,
+                    at_ms: 1,
+                },
+                TesseraEvent::Censure {
+                    by: a,
+                    target: a,
+                    weight: 100,
+                    at_ms: 2,
+                },
             ],
         );
         assert_eq!(ledger.score(&a, 10), 0);
@@ -514,9 +608,23 @@ mod tests {
             &[
                 // A earns standing, vouches for B, then B is censured.
                 made(a, cid(1), 100, 0),
-                TesseraEvent::CommitmentFulfilled { by: a, commitment: cid(1), at_ms: 10 },
-                TesseraEvent::Vouch { voucher: a, newcomer: b, fraction_bp: 5_000, at_ms: 20 },
-                TesseraEvent::Censure { by: gov, target: b, weight: 30, at_ms: 30 },
+                TesseraEvent::CommitmentFulfilled {
+                    by: a,
+                    commitment: cid(1),
+                    at_ms: 10,
+                },
+                TesseraEvent::Vouch {
+                    voucher: a,
+                    newcomer: b,
+                    fraction_bp: 5_000,
+                    at_ms: 20,
+                },
+                TesseraEvent::Censure {
+                    by: gov,
+                    target: b,
+                    weight: 30,
+                    at_ms: 30,
+                },
             ],
         );
         // B: +5 vouch boost (half of A's 10) - 30 censure = -25.
@@ -531,9 +639,18 @@ mod tests {
         let gov = root(50);
         let ledger = Ledger::from_events(
             TesseraConfig::default(),
-            &[TesseraEvent::Censure { by: gov, target: b, weight: 30, at_ms: 1 }],
+            &[TesseraEvent::Censure {
+                by: gov,
+                target: b,
+                weight: 30,
+                at_ms: 1,
+            }],
         );
         assert_eq!(ledger.score(&b, 10), -30);
-        assert_eq!(ledger.score(&root(1), 10), 0, "no voucher exists, nobody else is touched");
+        assert_eq!(
+            ledger.score(&root(1), 10),
+            0,
+            "no voucher exists, nobody else is touched"
+        );
     }
 }

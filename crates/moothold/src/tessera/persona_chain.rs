@@ -19,7 +19,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::tessera::event::{ChainRoot, BASIS_POINTS};
+use crate::tessera::event::{BASIS_POINTS, ChainRoot};
 use crate::tessera::ledger::Ledger;
 
 /// A persona's leaf identity (its public key). Derives in production from
