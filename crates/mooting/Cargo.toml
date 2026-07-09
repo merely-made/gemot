@@ -17,7 +17,7 @@ path = "src/lib.rs"
 # The portable byte-backend seam. mooting's store rides muniment so a moot's log
 # lands on redb (desktop) or IndexedDB + OPFS (browser) without the adapter
 # knowing which.
-muniment = { path = "../../../../muniment" }
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
 # A moot event IS a p2panda-core Operation on the wire; the store speaks the same
 # Header/Body/Hash types murm's cable does.
 p2panda-core = "0.6.1"
