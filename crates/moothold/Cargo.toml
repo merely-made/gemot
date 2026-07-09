@@ -31,23 +31,22 @@ identity.workspace = true
 p2panda-store = { version = "0.6.1", default-features = false, features = ["sqlite"] }
 redb = "2"
 thiserror = "1"
-# The tessera sync lane (`tessera::sync`): a LogSync session over the store,
-# mirroring murm's `gossip_sync`. `p2panda-net` is the protocol (the `Endpoint` /
-# `Gossip` it drives come from the host's transport via `sync_parts`, so this
-# stays decoupled from the `transport` crate), `p2panda-sync` its event types;
-# `rt` runs the drain task, `time` bounds the manual `resync` checkpoint,
-# `tokio-stream` reads the subscription.
-p2panda-net = "0.6.1"
-p2panda-sync = "0.6.1"
-tokio = { version = "1", features = ["rt", "time"] }
-tokio-stream = "0.1"
+# Sync is host-composed after the sibling-posture purity split: moothold owns no
+# p2panda-net. It provides the stores + folds + `verify`; the host builds the
+# `LogSync` + `transport::SyncedSpace` pump and publishes authored ops. So
+# p2panda-net / p2panda-sync / tokio-stream / tokio are dev-only (the in-crate
+# two-peer convergence tests + the `moot-peer` example play the host).
 
 [dev-dependencies]
-# `transport` (dev-only) builds the two real p2panda-net peers for the
-# convergence test + supplies `sync_overlay_topic` for their explicit bootstrap;
-# the library itself takes raw `Endpoint`/`Gossip`, not a `P2pandaTransport`.
-# `macros` + `rt-multi-thread` run the async / two-peer tests; tempfile backs the
-# persistent-store reopen test.
+# The two-peer convergence tests + the `moot-peer` example play the host: they
+# build the real p2panda-net peers and the `LogSync` + `SyncedSpace` pump.
+# `transport` supplies `P2pandaTransport` / `SyncedSpace` / `sync_overlay_topic`;
+# `p2panda-net` is the protocol, `p2panda-sync` its event types, `tokio-stream`
+# reads the subscription; `macros` + `rt-multi-thread` run the async tests;
+# tempfile backs the persistent-store reopen test.
 transport.workspace = true
+p2panda-net = "0.6.1"
+p2panda-sync = "0.6.1"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio-stream = "0.1"
 tempfile = "3"
