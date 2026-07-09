@@ -20,6 +20,10 @@
 
 #![doc(html_root_url = "https://docs.rs/mooting/0.0.1")]
 
+pub mod store;
+
+pub use store::MunimentStore;
+
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
