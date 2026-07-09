@@ -31,7 +31,7 @@ p2panda-store = { version = "0.6.1", default-features = false, features = ["sqli
 # implementing the three traits) over a muniment backend — an in-memory floor for
 # tests, redb on a device (redb is pulled through muniment's feature).
 mooting = { workspace = true }
-muniment = { path = "../../../../muniment", features = ["redb"] }
+muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
 redb = "2"
 thiserror = "1"
 # Sync is host-composed after the sibling-posture purity split: moothold owns no
