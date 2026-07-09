@@ -21,14 +21,17 @@ path = "src/lib.rs"
 serde = { version = "1", features = ["derive"] }
 p2panda-core = "0.6.1"
 identity.workspace = true
-# The tessera store. A moot's tessera log is the synced operation log; the store
-# persists `Operation<TesseraExt>` and exposes the two traits p2panda-net's
-# LogSync reconciles — `LogStore` (per-author append-only logs) + `TopicStore`
-# (which logs a moot holds) — over redb, exactly as murmuring's
-# `PersistentCabalStore`. The `sqlite` feature backs the *moot object* lane's
-# `MootStore` (the mesh-proven path: p2panda's own SQLite impls of all three
-# store traits); `macros` (OperationStore derive) stays off.
+# The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
+# plus `OperationStore`). The `sqlite` feature backs the *moot object* lane's
+# `MootStore` (p2panda's own SQLite impls); the *tessera* lane rides muniment
+# through the mooting adapter instead — the substrate convergence, so tessera,
+# murm and mesh share one store family. `macros` (OperationStore derive) stays off.
 p2panda-store = { version = "0.6.1", default-features = false, features = ["sqlite"] }
+# The tessera store's substrate: `mooting::MunimentStore` (the shared adapter
+# implementing the three traits) over a muniment backend — an in-memory floor for
+# tests, redb on a device (redb is pulled through muniment's feature).
+mooting = { workspace = true }
+muniment = { path = "../../../../muniment", features = ["redb"] }
 redb = "2"
 thiserror = "1"
 # Sync is host-composed after the sibling-posture purity split: moothold owns no

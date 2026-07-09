@@ -17,6 +17,8 @@
 use std::sync::Arc;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
+use mooting::MunimentStore;
+use muniment::MemoryBackend;
 use p2panda_core::{Operation, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
@@ -36,16 +38,21 @@ type TesseraHandle = SyncHandle<Operation<TesseraExt>, TopicLogSyncEvent<Tessera
 /// [`SyncedSpace`] drain, and the LogSync session + handle held for liveness.
 /// The tessera lane is receive-only, so nothing publishes on the handle.
 struct TesseraSession {
-    store: TesseraStore,
+    store: TesseraStore<MemoryBackend>,
     moot_id: [u8; 32],
     space: SyncedSpace,
-    _log_sync: LogSync<TesseraStore, u64, TesseraExt>,
+    _log_sync: LogSync<MunimentStore<MemoryBackend, TesseraExt>, u64, TesseraExt>,
     _handle: TesseraHandle,
 }
 
 impl TesseraSession {
-    async fn join(endpoint: Endpoint, gossip: Gossip, store: TesseraStore, moot_id: [u8; 32]) -> Self {
-        let log_sync = LogSync::builder(store.clone(), endpoint, gossip)
+    async fn join(
+        endpoint: Endpoint,
+        gossip: Gossip,
+        store: TesseraStore<MemoryBackend>,
+        moot_id: [u8; 32],
+    ) -> Self {
+        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
             .spawn()
             .await
             .expect("logsync spawn");
@@ -56,7 +63,8 @@ impl TesseraSession {
         let sub = handle.subscribe().await.expect("logsync subscribe");
         let accept_store = store.clone();
         let space = SyncedSpace::drive(sub, move |op: Operation<TesseraExt>| {
-            std::future::ready(verify(&op) && matches!(accept_store.insert(&op), Ok(true)))
+            let store = accept_store.clone();
+            async move { verify(&op) && matches!(store.insert(&op).await, Ok(true)) }
         });
         Self {
             store,
@@ -67,8 +75,8 @@ impl TesseraSession {
         }
     }
 
-    fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
-        self.store.fold_moot(self.moot_id, config)
+    async fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
+        self.store.fold_moot(self.moot_id, config).await
     }
 }
 
@@ -137,11 +145,11 @@ async fn two_moots_converge_on_the_same_scores() {
     bob_t.set_topics(alice_id, &[overlay]).await.unwrap();
 
     // Alice holds a 3-event tessera log before bob connects (offline catch-up).
-    let alice_store = TesseraStore::in_memory().unwrap();
+    let alice_store = TesseraStore::in_memory();
     for op in commit_fulfil_govern(&author) {
-        alice_store.insert(&op).unwrap();
+        alice_store.insert(&op).await.unwrap();
     }
-    let bob_store = TesseraStore::in_memory().unwrap();
+    let bob_store = TesseraStore::in_memory();
 
     let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
     let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
@@ -151,7 +159,7 @@ async fn two_moots_converge_on_the_same_scores() {
     // Bob catches up over LogSync and folds the synced log to score 11.
     let converged = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
-            let ledger = bob_moot.ledger(TesseraConfig::default()).unwrap();
+            let ledger = bob_moot.ledger(TesseraConfig::default()).await.unwrap();
             if ledger.score(&author_root, 5_000) == 11 {
                 break;
             }
@@ -167,10 +175,12 @@ async fn two_moots_converge_on_the_same_scores() {
     // Both peers compute the identical score from their own stores.
     let alice_score = alice_moot
         .ledger(TesseraConfig::default())
+        .await
         .unwrap()
         .score(&author_root, 5_000);
     let bob_score = bob_moot
         .ledger(TesseraConfig::default())
+        .await
         .unwrap()
         .score(&author_root, 5_000);
     assert_eq!(bob_score, alice_score, "both peers project the same score");
@@ -238,11 +248,11 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
         .await
         .unwrap();
 
-    let alice_store = TesseraStore::in_memory().unwrap();
+    let alice_store = TesseraStore::in_memory();
     for op in commit_fulfil_govern(&author) {
-        alice_store.insert(&op).unwrap();
+        alice_store.insert(&op).await.unwrap();
     }
-    let bob_store = TesseraStore::in_memory().unwrap();
+    let bob_store = TesseraStore::in_memory();
 
     let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
     let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
@@ -253,6 +263,7 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
         loop {
             let score = bob_moot
                 .ledger(TesseraConfig::default())
+                .await
                 .unwrap()
                 .score(&author_root, 5_000);
             if score == 11 {
@@ -268,10 +279,12 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
     );
     let alice_score = alice_moot
         .ledger(TesseraConfig::default())
+        .await
         .unwrap()
         .score(&author_root, 5_000);
     let bob_score = bob_moot
         .ledger(TesseraConfig::default())
+        .await
         .unwrap()
         .score(&author_root, 5_000);
     assert_eq!(

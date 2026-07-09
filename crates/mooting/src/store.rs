@@ -283,6 +283,16 @@ where
         self.backend.put(&log_key, &stripped).await?;
         Ok(true)
     }
+
+    /// The number of distinct operations stored (one `op/<hash>` pointer each).
+    pub async fn operation_count(&self) -> Result<usize, StoreError> {
+        Ok(self.backend.list("op/").await?.len())
+    }
+
+    /// Whether the store holds no operations.
+    pub async fn is_empty(&self) -> Result<bool, StoreError> {
+        Ok(self.operation_count().await? == 0)
+    }
 }
 
 // ── LogStore ──────────────────────────────────────────────────────────────────
