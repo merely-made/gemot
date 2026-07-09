@@ -15,14 +15,15 @@
 
 use std::collections::BTreeMap;
 
-use p2panda_core::{Operation, Topic, VerifyingKey};
+use identity::Ed25519Keypair;
+use p2panda_core::{Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::operations::OperationStore;
 use p2panda_store::topics::TopicStore;
 use p2panda_store::{SqliteError, SqliteStore, SqliteStoreBuilder, Transaction};
 
 use super::roster::MootRoster;
-use super::wire::MootExt;
+use super::wire::{MootEvent, MootExt, to_operation};
 
 /// A moot store failure (the underlying SQLite store).
 #[derive(Debug, thiserror::Error)]
@@ -82,6 +83,28 @@ impl MootStore {
         moot_id: [u8; 32],
     ) -> Result<Option<Operation<MootExt>>, MootStoreError> {
         Ok(self.sqlite.get_latest_entry(author, &moot_id).await?)
+    }
+
+    /// Sign `event` at `keypair`'s next log position on `moot_id`, persist it,
+    /// and return the operation. This is the sign-and-store half of authoring;
+    /// the **host** broadcasts the returned op on the live lane
+    /// (`SyncHandle::publish`), and LogSync reconciliation covers peers that were
+    /// away. One authoring path per device key (concurrent authors on one
+    /// keypair would race the log position).
+    pub async fn author(
+        &self,
+        keypair: &Ed25519Keypair,
+        moot_id: [u8; 32],
+        event: &MootEvent,
+    ) -> Result<Operation<MootExt>, MootStoreError> {
+        let author = SigningKey::from_bytes(&keypair.to_seed()).verifying_key();
+        let (seq_num, backlink) = match self.latest(&author, moot_id).await? {
+            Some(prev) => (prev.header.seq_num + 1, Some(*prev.hash.as_bytes())),
+            None => (0, None),
+        };
+        let op = to_operation(keypair, moot_id, event, seq_num, backlink);
+        self.insert(&op).await?;
+        Ok(op)
     }
 
     /// Every operation on `moot_id`, across all known authors' logs.

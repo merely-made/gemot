@@ -30,10 +30,12 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use moothold::moot::{MootEvent, MootRoster, MootStore, SyncedMootSpace};
-use p2panda_core::Hash;
+use moothold::moot::{MootEvent, MootExt, MootRoster, MootStore, verify};
+use p2panda_core::{Hash, Operation, Topic};
+use p2panda_net::LogSync;
+use p2panda_store::SqliteStore;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use transport::P2pandaTransport;
+use transport::{P2pandaTransport, SyncedSpace};
 
 fn now_ms() -> u64 {
     SystemTime::now()
@@ -228,15 +230,38 @@ async fn main() -> Result<(), String> {
     let (endpoint, gossip) = transport
         .sync_parts()
         .ok_or_else(|| "transport has no sync parts (gossip not enabled?)".to_string())?;
-    let space = SyncedMootSpace::join(endpoint, gossip, store, moot_id)
+    // Host-composed pump: build the moot-object LogSync session, drain it via
+    // the shared `SyncedSpace`, and keep the session + handle for liveness and
+    // live publish. moothold owns no p2panda-net; the host wires the pump.
+    let log_sync: LogSync<SqliteStore, [u8; 32], MootExt> =
+        LogSync::builder(store.sqlite(), endpoint, gossip)
+            .spawn()
+            .await
+            .map_err(|e| format!("logsync spawn: {e}"))?;
+    let handle = log_sync
+        .stream(Topic::from(moot_id), true)
         .await
-        .map_err(|e| format!("join moot: {e}"))?;
+        .map_err(|e| format!("logsync stream: {e}"))?;
+    let sub = handle
+        .subscribe()
+        .await
+        .map_err(|e| format!("logsync subscribe: {e}"))?;
+    let accept_store = store.clone();
+    let space = SyncedSpace::drive(sub, move |op: Operation<MootExt>| {
+        let store = accept_store.clone();
+        async move {
+            verify(&op)
+                && op.header.extensions.moot_id == moot_id
+                && matches!(store.insert(&op).await, Ok(true))
+        }
+    });
 
     match mode {
         Mode::Declare { name, charter } => {
-            space
+            let op = store
                 .author(
                     &author_kp,
+                    moot_id,
                     &MootEvent::Declared {
                         name,
                         charter,
@@ -245,12 +270,17 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("declare: {e}"))?;
+            handle
+                .publish(op)
+                .await
+                .map_err(|e| format!("publish: {e}"))?;
             println!("declared.");
         }
         Mode::Join { name } => {
-            space
+            let op = store
                 .author(
                     &author_kp,
+                    moot_id,
                     &MootEvent::Joined {
                         name,
                         at_ms: now_ms(),
@@ -258,6 +288,10 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("join: {e}"))?;
+            handle
+                .publish(op)
+                .await
+                .map_err(|e| format!("publish: {e}"))?;
             println!("joined.");
         }
         Mode::Share {
@@ -265,9 +299,10 @@ async fn main() -> Result<(), String> {
             schema_id,
             title,
         } => {
-            space
+            let op = store
                 .author(
                     &author_kp,
+                    moot_id,
                     &MootEvent::Shared {
                         manifest_id,
                         schema_id,
@@ -277,6 +312,10 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("share: {e}"))?;
+            handle
+                .publish(op)
+                .await
+                .map_err(|e| format!("publish: {e}"))?;
             println!("shared into the flora.");
         }
         Mode::Show => {}
@@ -286,7 +325,7 @@ async fn main() -> Result<(), String> {
     let mut last = String::new();
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let roster = space.roster().await.map_err(|e| format!("roster: {e}"))?;
+        let roster = store.roster(moot_id).await.map_err(|e| format!("roster: {e}"))?;
         let status = space.sync_status();
         let mut snapshot = String::new();
         {

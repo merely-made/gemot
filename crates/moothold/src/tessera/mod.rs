@@ -52,7 +52,8 @@ pub mod persona_chain;
 pub mod persona_vault;
 pub mod reciprocity;
 pub mod store;
-pub mod sync;
+#[cfg(test)]
+mod sync;
 pub mod wire;
 
 pub use crate::tessera::concord::{CompositionPolicy, MootId, RepLens};
@@ -64,5 +65,4 @@ pub use crate::tessera::ledger::{Ledger, TesseraConfig};
 pub use crate::tessera::persona_chain::{PersonaChains, PersonaId};
 pub use crate::tessera::reciprocity::Reciprocity;
 pub use crate::tessera::store::{TesseraStore, TesseraStoreError};
-pub use crate::tessera::sync::{MootSyncError, SyncRound, SyncStatus, SyncedMoot};
-pub use crate::tessera::wire::{TesseraExt, WireError, from_operation, to_operation};
+pub use crate::tessera::wire::{TesseraExt, WireError, from_operation, to_operation, verify};
