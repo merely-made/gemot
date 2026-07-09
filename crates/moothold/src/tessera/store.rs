@@ -1,16 +1,15 @@
-//! The tessera operation store, redb-backed.
+//! The tessera operation store, over the muniment substrate.
 //!
-//! [`TesseraStore`] persists a moot's tessera operations in a single redb file
-//! (or in memory). An operation is stored as its canonical form — the signed
-//! [`Header`] plus the CBOR body — keyed by hash; alongside it the store
-//! maintains the per-author-log and topic indexes (see
-//! [`log_store`](super::log_store)) so it doubles as the p2panda-net `LogStore` +
-//! `TopicStore` that LogSync reconciles. One store of record, one write path
-//! ([`insert`](TesseraStore::insert)), serving both the [projection]
-//! ([`fold_moot`](TesseraStore::fold_moot)) and sync. This is the shape
-//! murmuring's `PersistentCabalStore` gives the cabal post store.
+//! [`TesseraStore`] persists a moot's tessera operations through
+//! [`mooting::MunimentStore`], the shared p2panda-store adapter murm and mesh
+//! also ride: one operation store that doubles as the `LogStore` + `TopicStore`
+//! LogSync reconciles, keyed and folded the same way across all three. One store
+//! of record, one write path ([`insert`](TesseraStore::insert)), serving both the
+//! projection ([`fold_moot`](TesseraStore::fold_moot)) and sync.
 //!
-//! [projection]: super::ledger
+//! Backed by muniment: an in-memory floor for tests, redb on a device (the
+//! [`TesseraFileStore`] alias). When the browser backends land (OPFS + IndexedDB),
+//! a moot's reputation log rides them with no change here.
 //!
 //! ## Projection
 //!
@@ -18,186 +17,113 @@
 //! author's. [`fold_moot`](TesseraStore::fold_moot) resolves the moot's
 //! `(author, log)` pairs, reads each log's operations, decodes them to
 //! [`TesseraEvent`]s, orders them deterministically (by asserted time, then
-//! author, then log position — so every peer folds the same events the same
-//! way), and runs the [`Ledger`]. The clock stays the caller's: it returns a
-//! `Ledger`, and the host asks it for `scores(now_ms)`.
+//! author, then log position — so every peer folds the same events the same way),
+//! and runs the [`Ledger`]. The clock stays the caller's: it returns a `Ledger`,
+//! and the host asks it for `scores(now_ms)`.
 
+use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Arc;
 
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
-use p2panda_core::{Body, Hash, Header, Operation};
-use redb::{Database, ReadTransaction, ReadableTable, ReadableTableMetadata, TableDefinition};
-use serde::{Deserialize, Serialize};
+use mooting::MunimentStore;
+use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
+use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
+use p2panda_store::logs::LogStore;
+use p2panda_store::operations::OperationStore;
+use p2panda_store::topics::TopicStore;
 
 use crate::tessera::event::TesseraEvent;
 use crate::tessera::ledger::{Ledger, TesseraConfig};
-use crate::tessera::log_store::{
-    LOG_TOPICS, OPS_BY_LOG, create_index_tables, index_op_in_txn, log_prefix, seq_from_key,
-    with_seq,
-};
 use crate::tessera::wire::{TesseraExt, from_operation};
 
-/// `hash(32)` → stored operation (CBOR header + body). `pub(crate)` so the sync
-/// layer ([`log_store`](super::log_store)) can read operations back.
-pub(crate) const OPS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("tessera_ops");
+/// The single per-moot tessera log id: each author keeps one tessera log per moot,
+/// so the log id is a constant and the moot id is the topic.
+const LOG_ID: u64 = 0;
 
 /// A tessera store failure.
 #[derive(Debug, thiserror::Error)]
 pub enum TesseraStoreError {
-    /// The redb backend failed.
-    #[error("tessera store backend: {0}")]
-    Backend(String),
-    /// CBOR encode / decode of a stored operation failed.
-    #[error("tessera store cbor: {0}")]
-    Cbor(String),
-    /// A stored key was malformed (wrong length / not a valid key).
-    #[error("tessera store key: {0}")]
-    Key(String),
+    /// The muniment backend or the store adapter failed.
+    #[error(transparent)]
+    Store(#[from] StoreError),
     /// A stored operation did not decode to a valid tessera event.
     #[error("malformed tessera operation")]
     Malformed,
 }
 
-/// Map a redb (or other backend) error into [`TesseraStoreError::Backend`].
-pub(crate) fn be(e: impl std::fmt::Display) -> TesseraStoreError {
-    TesseraStoreError::Backend(e.to_string())
-}
-fn ce(e: impl std::fmt::Display) -> TesseraStoreError {
-    TesseraStoreError::Cbor(e.to_string())
-}
-
-/// The stored form of an operation: the signed header and the optional CBOR
-/// body. The hash is recomputed from the header on read (it is the header's
-/// hash), so it is not stored twice.
-#[derive(Serialize, Deserialize)]
-struct StoredOp {
-    header: Header<TesseraExt>,
-    body: Option<Vec<u8>>,
-}
-
-fn encode_op(op: &Operation<TesseraExt>) -> Result<Vec<u8>, TesseraStoreError> {
-    let stored = StoredOp {
-        header: op.header.clone(),
-        body: op.body.as_ref().map(|b| b.to_bytes()),
-    };
-    encode_cbor(&stored).map_err(ce)
-}
-
-fn decode_op(bytes: &[u8]) -> Result<Operation<TesseraExt>, TesseraStoreError> {
-    let stored: StoredOp = decode_cbor(bytes).map_err(ce)?;
-    let hash = stored.header.hash();
-    Ok(Operation {
-        hash,
-        header: stored.header,
-        body: stored.body.map(Body::from),
-    })
-}
-
-/// A redb-backed store for one moot's tessera operations.
+/// A tessera operation store over a muniment backend `B`.
 ///
-/// `Clone` shares the same underlying redb database (cheap `Arc` clone), so a
-/// clone handed to `LogSync::builder` reads and writes the same store.
+/// `Clone` shares the same backend handle, so a clone handed to `LogSync::builder`
+/// reads and writes the same store.
 #[derive(Clone)]
-pub struct TesseraStore {
-    pub(crate) db: Arc<Database>,
+pub struct TesseraStore<B> {
+    store: MunimentStore<B, TesseraExt>,
 }
 
-/// Touch the op + sync-index tables so they exist before the first read, even if
-/// nothing is inserted. Shared by [`open`](TesseraStore::open) and
-/// [`in_memory`](TesseraStore::in_memory).
-fn init_tables(db: &Database) -> Result<(), TesseraStoreError> {
-    let txn = db.begin_write().map_err(be)?;
-    {
-        txn.open_table(OPS).map_err(be)?;
-        create_index_tables(&txn)?;
+/// The durable, redb-backed tessera store — one moot's reputation log on disk.
+pub type TesseraFileStore = TesseraStore<RedbBackend>;
+
+impl TesseraStore<MemoryBackend> {
+    /// An in-memory tessera store (tests, rehearsals). Nothing persisted.
+    pub fn in_memory() -> Self {
+        Self {
+            store: MunimentStore::new(MemoryBackend::new()),
+        }
     }
-    txn.commit().map_err(be)?;
-    Ok(())
 }
 
-impl TesseraStore {
-    /// Open or create a redb file at `path`.
+impl TesseraStore<RedbBackend> {
+    /// Open or create a redb-backed tessera store at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, TesseraStoreError> {
-        let db = Database::create(path).map_err(be)?;
-        init_tables(&db)?;
-        Ok(Self { db: Arc::new(db) })
+        Ok(Self {
+            store: MunimentStore::new(RedbBackend::open(path)?),
+        })
     }
+}
 
-    /// Open an **in-memory** tessera store (redb's in-memory backend). Same
-    /// schema and trait impls as [`open`](Self::open), nothing persisted.
-    pub fn in_memory() -> Result<Self, TesseraStoreError> {
-        let db = Database::builder()
-            .create_with_backend(redb::backends::InMemoryBackend::new())
-            .map_err(be)?;
-        init_tables(&db)?;
-        Ok(Self { db: Arc::new(db) })
+impl<B: Backend + Clone> TesseraStore<B> {
+    /// A clone of the underlying store, for `LogSync::builder` (which takes the
+    /// store by value and reconciles through its trait surface).
+    pub fn sync_store(&self) -> MunimentStore<B, TesseraExt> {
+        self.store.clone()
     }
+}
 
-    /// Insert a tessera operation: the op row plus its per-author-log and topic
-    /// index rows, atomically. The moot id is the op's *signed* extension, so
-    /// authoring and receiving (over sync) share this one write path.
+impl<B: Backend> TesseraStore<B> {
+    /// Insert a tessera operation: associate the moot topic with the author's log,
+    /// then store the op with its log entry. The moot id is the op's *signed*
+    /// extension, so authoring and receiving (over sync) share this one write path.
     ///
-    /// Returns `Ok(true)` on first insert of a hash, `Ok(false)` if already
-    /// present (content addressing: same hash implies same bytes, no overwrite).
-    pub fn insert(&self, op: &Operation<TesseraExt>) -> Result<bool, TesseraStoreError> {
-        let id_bytes: [u8; 32] = *op.hash.as_bytes();
-        let wire = encode_op(op)?;
-        let txn = self.db.begin_write().map_err(be)?;
-        let inserted;
-        {
-            let mut ops = txn.open_table(OPS).map_err(be)?;
-            if ops.get(&id_bytes).map_err(be)?.is_some() {
-                inserted = false;
-            } else {
-                ops.insert(&id_bytes, wire.as_slice()).map_err(be)?;
-                inserted = true;
-            }
-        }
-        if inserted {
-            // Same txn, so op bytes and sync indexes commit together. This is
-            // what makes the store double as a p2panda LogStore / TopicStore.
-            index_op_in_txn(&txn, op)?;
-        }
-        txn.commit().map_err(be)?;
-        Ok(inserted)
+    /// Returns `Ok(true)` on first insert of a hash, `Ok(false)` if already present
+    /// (content addressing: same hash implies same bytes, no overwrite).
+    pub async fn insert(&self, op: &Operation<TesseraExt>) -> Result<bool, TesseraStoreError> {
+        let moot_id = op.header.extensions.moot_id;
+        self.store
+            .associate(&Topic::from(moot_id), &op.header.verifying_key, &LOG_ID)
+            .await?;
+        Ok(self.store.insert_operation(&op.hash, op, &LOG_ID).await?)
     }
 
     /// Look up an operation by hash.
-    pub fn get(&self, hash: &Hash) -> Result<Option<Operation<TesseraExt>>, TesseraStoreError> {
-        let read = self.db.begin_read().map_err(be)?;
-        self.operation_by_hash(&read, hash.as_bytes())
+    pub async fn get(
+        &self,
+        hash: &Hash,
+    ) -> Result<Option<Operation<TesseraExt>>, TesseraStoreError> {
+        Ok(self.store.get_operation(hash).await?)
     }
 
     /// Whether the store holds an operation with this hash.
-    pub fn has(&self, hash: &Hash) -> Result<bool, TesseraStoreError> {
-        Ok(self.get(hash)?.is_some())
+    pub async fn has(&self, hash: &Hash) -> Result<bool, TesseraStoreError> {
+        Ok(self.store.has_operation(hash).await?)
     }
 
     /// Total operation count.
-    pub fn len(&self) -> Result<usize, TesseraStoreError> {
-        let read = self.db.begin_read().map_err(be)?;
-        let ops = read.open_table(OPS).map_err(be)?;
-        Ok(ops.len().map_err(be)? as usize)
+    pub async fn len(&self) -> Result<usize, TesseraStoreError> {
+        Ok(self.store.operation_count().await?)
     }
 
     /// Whether the store holds no operations.
-    pub fn is_empty(&self) -> Result<bool, TesseraStoreError> {
-        Ok(self.len()? == 0)
-    }
-
-    /// Load the [`Operation`] for a stored hash (via the [`OPS`] table). Shared
-    /// by the `LogStore` read methods and the projection.
-    pub(crate) fn operation_by_hash(
-        &self,
-        read: &ReadTransaction,
-        hash: &[u8; 32],
-    ) -> Result<Option<Operation<TesseraExt>>, TesseraStoreError> {
-        let ops = read.open_table(OPS).map_err(be)?;
-        match ops.get(hash).map_err(be)? {
-            None => Ok(None),
-            Some(v) => Ok(Some(decode_op(v.value())?)),
-        }
+    pub async fn is_empty(&self) -> Result<bool, TesseraStoreError> {
+        Ok(self.store.is_empty().await?)
     }
 
     /// Fold every member's tessera log in `moot_id` into the moot's [`Ledger`].
@@ -205,71 +131,38 @@ impl TesseraStore {
     /// Reputation is the projection over the whole moot, not one author: this
     /// resolves the moot's `(author, log)` pairs, reads each log, decodes the
     /// operations to events, orders them deterministically (asserted time, then
-    /// author, then log position — so every peer folds identically), and runs
-    /// the ledger. Ask the returned ledger for `scores(now_ms)`.
-    pub fn fold_moot(
+    /// author, then log position — so every peer folds identically), and runs the
+    /// ledger. Ask the returned ledger for `scores(now_ms)`.
+    pub async fn fold_moot(
         &self,
         moot_id: [u8; 32],
         config: TesseraConfig,
     ) -> Result<Ledger, TesseraStoreError> {
-        let read = self.db.begin_read().map_err(be)?;
+        let logs: BTreeMap<VerifyingKey, Vec<u64>> =
+            self.store.resolve(&Topic::from(moot_id)).await?;
 
-        // 1. The (author, log) pairs the moot holds.
-        let mut logs: Vec<([u8; 32], u64)> = Vec::new();
-        {
-            let topics = read.open_table(LOG_TOPICS).map_err(be)?;
-            for entry in topics.range(moot_id.as_slice()..).map_err(be)? {
-                let (k, _v) = entry.map_err(be)?;
-                let key = k.value();
-                if !key.starts_with(moot_id.as_slice()) {
-                    break;
-                }
-                let author: [u8; 32] = key[32..64]
-                    .try_into()
-                    .map_err(|_| TesseraStoreError::Key("topic author".into()))?;
-                let log_id = u64::from_be_bytes(
-                    key[64..72]
-                        .try_into()
-                        .map_err(|_| TesseraStoreError::Key("topic log_id".into()))?,
-                );
-                logs.push((author, log_id));
-            }
-        }
-
-        // 2a. Collect (author, seq, hash) across those logs (hashes first, so the
-        // OPS lookups don't overlap the range scan).
-        let mut refs: Vec<([u8; 32], u64, [u8; 32])> = Vec::new();
-        {
-            let by_log = read.open_table(OPS_BY_LOG).map_err(be)?;
-            for (author, log_id) in &logs {
-                let prefix = log_prefix(author, *log_id);
-                let lo = with_seq(&prefix, 0);
-                let hi = with_seq(&prefix, u64::MAX);
-                for entry in by_log.range(lo.as_slice()..=hi.as_slice()).map_err(be)? {
-                    let (k, v) = entry.map_err(be)?;
-                    let seq = seq_from_key(k.value());
-                    let hash: [u8; 32] = v
-                        .value()
-                        .try_into()
-                        .map_err(|_| TesseraStoreError::Key("log entry hash".into()))?;
-                    refs.push((*author, seq, hash));
-                }
-            }
-        }
-
-        // 2b. Resolve each to its tessera event.
-        let ops = read.open_table(OPS).map_err(be)?;
+        // Collect (asserted time, author, log position, event) across every log.
         let mut tagged: Vec<(u64, [u8; 32], u64, TesseraEvent)> = Vec::new();
-        for (author, seq, hash) in refs {
-            if let Some(stored) = ops.get(&hash).map_err(be)? {
-                let op = decode_op(stored.value())?;
-                let (_moot, event) =
-                    from_operation(&op).map_err(|_| TesseraStoreError::Malformed)?;
-                tagged.push((event.at_ms(), author, seq, event));
+        for (author, log_ids) in logs {
+            let author_bytes = *author.as_bytes();
+            for log_id in log_ids {
+                let Some(entries) = self
+                    .store
+                    .get_log_entries(&author, &log_id, None, None)
+                    .await?
+                else {
+                    continue;
+                };
+                for (op, _header) in entries {
+                    let seq = op.header.seq_num;
+                    let (_moot, event) =
+                        from_operation(&op).map_err(|_| TesseraStoreError::Malformed)?;
+                    tagged.push((event.at_ms(), author_bytes, seq, event));
+                }
             }
         }
 
-        // 3. Deterministic order, then fold.
+        // Deterministic order, then fold.
         tagged.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
         let mut ledger = Ledger::new(config);
         for (_, _, _, event) in &tagged {
@@ -324,44 +217,44 @@ mod tests {
         [op0, op1, op2]
     }
 
-    #[test]
-    fn insert_then_get_round_trips_and_is_idempotent() {
-        let store = TesseraStore::in_memory().unwrap();
+    #[tokio::test]
+    async fn insert_then_get_round_trips_and_is_idempotent() {
+        let store = TesseraStore::in_memory();
         let [op0, op1, op2] = commit_fulfil_govern(&keypair(1));
-        assert!(store.insert(&op0).unwrap());
-        assert!(store.insert(&op1).unwrap());
-        assert!(store.insert(&op2).unwrap());
+        assert!(store.insert(&op0).await.unwrap());
+        assert!(store.insert(&op1).await.unwrap());
+        assert!(store.insert(&op2).await.unwrap());
         assert!(
-            !store.insert(&op2).unwrap(),
+            !store.insert(&op2).await.unwrap(),
             "re-insert is idempotent on the hash"
         );
-        assert_eq!(store.len().unwrap(), 3);
+        assert_eq!(store.len().await.unwrap(), 3);
 
-        let got = store.get(&op1.hash).unwrap().expect("op stored");
+        let got = store.get(&op1.hash).await.unwrap().expect("op stored");
         assert_eq!(got.hash, op1.hash);
-        assert!(store.has(&op0.hash).unwrap());
+        assert!(store.has(&op0.hash).await.unwrap());
     }
 
-    #[test]
-    fn fold_moot_projects_a_single_authors_score() {
-        let store = TesseraStore::in_memory().unwrap();
+    #[tokio::test]
+    async fn fold_moot_projects_a_single_authors_score() {
+        let store = TesseraStore::in_memory();
         let kp = keypair(1);
         for op in commit_fulfil_govern(&kp) {
-            store.insert(&op).unwrap();
+            store.insert(&op).await.unwrap();
         }
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).unwrap();
+        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
         // +10 fulfil, +1 govern = 11; the commitment is closed, so no lapse.
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 11);
     }
 
-    #[test]
-    fn fold_moot_merges_every_members_log() {
-        let store = TesseraStore::in_memory().unwrap();
+    #[tokio::test]
+    async fn fold_moot_merges_every_members_log() {
+        let store = TesseraStore::in_memory();
         let alice = keypair(1);
         let bob = keypair(2);
         // Alice: commit -> fulfil -> govern = 11. Bob: one governance = 1.
         for op in commit_fulfil_govern(&alice) {
-            store.insert(&op).unwrap();
+            store.insert(&op).await.unwrap();
         }
         let bob_govern = TesseraEvent::GovernanceParticipation {
             by: root_of(&bob),
@@ -369,29 +262,31 @@ mod tests {
         };
         store
             .insert(&to_operation(&bob, MOOT, &bob_govern, 0, None))
+            .await
             .unwrap();
 
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).unwrap();
+        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
         assert_eq!(ledger.score(&root_of(&alice), 5_000), 11);
         assert_eq!(ledger.score(&root_of(&bob), 5_000), 1);
     }
 
-    #[test]
-    fn fold_moot_ignores_a_foreign_moot() {
-        let store = TesseraStore::in_memory().unwrap();
+    #[tokio::test]
+    async fn fold_moot_ignores_a_foreign_moot() {
+        let store = TesseraStore::in_memory();
         let kp = keypair(1);
         for op in commit_fulfil_govern(&kp) {
-            store.insert(&op).unwrap();
+            store.insert(&op).await.unwrap();
         }
         // A different moot id resolves to no logs, so the fold is empty.
         let ledger = store
             .fold_moot([0xee; 32], TesseraConfig::default())
+            .await
             .unwrap();
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 0);
     }
 
-    #[test]
-    fn operations_persist_across_reopen() {
+    #[tokio::test]
+    async fn operations_persist_across_reopen() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("moot.redb");
         let kp = keypair(1);
@@ -399,14 +294,14 @@ mod tests {
         {
             let store = TesseraStore::open(&path).unwrap();
             for op in &ops {
-                store.insert(op).unwrap();
+                store.insert(op).await.unwrap();
             }
-            assert_eq!(store.len().unwrap(), 3);
+            assert_eq!(store.len().await.unwrap(), 3);
         }
         // Reopen: the log and its projection survive.
         let store = TesseraStore::open(&path).unwrap();
-        assert_eq!(store.len().unwrap(), 3);
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).unwrap();
+        assert_eq!(store.len().await.unwrap(), 3);
+        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 11);
     }
 }
