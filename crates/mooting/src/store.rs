@@ -231,6 +231,26 @@ where
     B: Backend,
     E: Extensions,
 {
+    /// Associate an author's log with a topic, then insert one operation.
+    ///
+    /// The ordering is deliberate for backends without a transaction spanning
+    /// the two p2panda traits: interruption can leave an empty topic/log index,
+    /// which reconciliation safely ignores, but never an operation that sync
+    /// cannot discover. Domain stores should prefer this helper over manually
+    /// composing [`TopicStore::associate`] and
+    /// [`OperationStore::insert_operation`].
+    pub async fn insert_indexed_operation<L: LogId>(
+        &self,
+        topic: &Topic,
+        operation: &Operation<E>,
+        log_id: &L,
+    ) -> Result<bool, StoreError> {
+        self.associate(topic, &operation.header.verifying_key, log_id)
+            .await?;
+        self.insert_operation(&operation.hash, operation, log_id)
+            .await
+    }
+
     /// Resolve an operation id to its `log/...` key via the `op/<hash>` pointer.
     async fn log_key_for(&self, id: &Hash) -> Result<Option<String>, StoreError> {
         match self.backend.get(&op_ptr(id)).await? {
@@ -278,7 +298,8 @@ where
         let Some(blob) = self.backend.get(&log_key).await? else {
             return Ok(false);
         };
-        let (header, _body): (Header<E>, Option<Vec<u8>>) = decode_cbor(&blob[..]).map_err(codec)?;
+        let (header, _body): (Header<E>, Option<Vec<u8>>) =
+            decode_cbor(&blob[..]).map_err(codec)?;
         let stripped = encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?;
         self.backend.put(&log_key, &stripped).await?;
         Ok(true)
@@ -481,7 +502,8 @@ where
                 .ok_or_else(|| StoreError::Codec("malformed topic key".into()))?;
             let author = VerifyingKey::try_from(hex::decode(author_hex).map_err(codec)?.as_slice())
                 .map_err(codec)?;
-            let log_id: L = decode_cbor(&hex::decode(log_hex).map_err(codec)?[..]).map_err(codec)?;
+            let log_id: L =
+                decode_cbor(&hex::decode(log_hex).map_err(codec)?[..]).map_err(codec)?;
             out.entry(author).or_default().push(log_id);
         }
         Ok(out)
@@ -515,7 +537,12 @@ mod tests {
     }
 
     /// A signed operation for one author's log at `seq`, chained onto `backlink`.
-    fn make_op(sk: &SigningKey, seq: u64, backlink: Option<Hash>, payload: &[u8]) -> Operation<Ext> {
+    fn make_op(
+        sk: &SigningKey,
+        seq: u64,
+        backlink: Option<Hash>,
+        payload: &[u8],
+    ) -> Operation<Ext> {
         let body = Body::new(payload);
         let mut header = Header::<Ext> {
             version: 1,
@@ -548,9 +575,24 @@ mod tests {
             let op1 = make_op(&sk, 1, Some(op0.hash), b"one");
 
             // Insert-or-ignore: the first insert takes, the repeat is a no-op.
-            assert!(store.insert_operation(&op0.hash, &op0, &log_id).await.unwrap());
-            assert!(!store.insert_operation(&op0.hash, &op0, &log_id).await.unwrap());
-            assert!(store.insert_operation(&op1.hash, &op1, &log_id).await.unwrap());
+            assert!(
+                store
+                    .insert_operation(&op0.hash, &op0, &log_id)
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                !store
+                    .insert_operation(&op0.hash, &op0, &log_id)
+                    .await
+                    .unwrap()
+            );
+            assert!(
+                store
+                    .insert_operation(&op1.hash, &op1, &log_id)
+                    .await
+                    .unwrap()
+            );
 
             // OperationStore: fetch by id round-trips header and body.
             let got = store.get_operation(&op0.hash).await.unwrap().unwrap();
@@ -560,7 +602,11 @@ mod tests {
             assert!(!store.has_operation(&Hash::digest(b"absent")).await.unwrap());
 
             // LogStore: latest is the highest seq; entries return in seq order.
-            let latest = store.get_latest_entry(&author, &log_id).await.unwrap().unwrap();
+            let latest = store
+                .get_latest_entry(&author, &log_id)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(latest.hash, op1.hash);
 
             let entries = store
@@ -574,7 +620,11 @@ mod tests {
             // The second tuple element is the encoded header.
             assert_eq!(entries[0].1, op0.header.to_bytes());
 
-            let heights = store.get_log_heights(&author, &[log_id]).await.unwrap().unwrap();
+            let heights = store
+                .get_log_heights(&author, &[log_id])
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(heights.get(&log_id), Some(&1));
 
             let (count, _bytes) = store
