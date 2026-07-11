@@ -74,7 +74,20 @@ pub fn to_operation(
     seq_num: u64,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
-    let signing_key = SigningKey::from_bytes(&keypair.to_seed());
+    to_operation_seed(keypair.to_seed(), moot_id, event, seq_num, backlink)
+}
+
+/// Provider-neutral form of [`to_operation`]. Personae and other external
+/// identity providers can supply a protocol-scoped Ed25519 seed without
+/// depending on Mere's identity crate.
+pub fn to_operation_seed(
+    signing_seed: [u8; 32],
+    moot_id: [u8; 32],
+    event: &MootEvent,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+) -> Operation<MootExt> {
+    let signing_key = SigningKey::from_bytes(&signing_seed);
     let body_bytes = encode_cbor(event).expect("a MootEvent always CBOR-encodes");
     let body = Body::new(&body_bytes);
     let mut header = Header {
@@ -141,6 +154,16 @@ mod tests {
         assert_eq!(moot_id, MOOT);
         assert_eq!(decoded, event);
         assert!(verify(&op));
+    }
+
+    #[test]
+    fn raw_seed_and_identity_keypair_produce_the_same_operation() {
+        let kp = keypair(8);
+        let event = declared();
+        assert_eq!(
+            to_operation(&kp, MOOT, &event, 0, None),
+            to_operation_seed(kp.to_seed(), MOOT, &event, 0, None)
+        );
     }
 
     #[test]

@@ -28,6 +28,8 @@ p2panda-store = { version = "0.6.1", default-features = false }
 # String-safe keys: authors, hashes and CBOR log ids hex-encode into the flat key
 # space muniment exposes.
 hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
 
 [dev-dependencies]
 # Block on the store's async backend in tests without pulling a runtime (matches

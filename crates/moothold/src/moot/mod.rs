@@ -29,4 +29,6 @@ pub mod wire;
 
 pub use roster::{Declaration, FloraEntry, Member, MootRoster};
 pub use store::{MootStore, MootStoreError};
-pub use wire::{MootEvent, MootExt, WireError, from_operation, to_operation, verify};
+pub use wire::{
+    MootEvent, MootExt, WireError, from_operation, to_operation, to_operation_seed, verify,
+};
