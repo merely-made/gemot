@@ -8,9 +8,9 @@
 //! tessera (trust-token) validation across communities.
 //!
 //! Inside `moothold`, the [`mooting`](https://crates.io/crates/mooting)
-//! crate is the protocol-core layer that handles selection between social
-//! protocols (Matrix, Nostr, IRC, ATproto, ActivityPub, and Mere-native
-//! moot infrastructure), with each protocol pluggable.
+//! crate supplies backend-neutral p2panda storage and recognition-policy
+//! plumbing. `moothold` keeps the actual Moot event grammar, roster, trust
+//! folds, and social meaning.
 //!
 //! ## Naming note
 //!
@@ -21,9 +21,9 @@
 //!
 //! ## Status
 //!
-//! Pre-1.0. This 0.0.x release reserves the crate name and documents intent;
-//! implementation is in progress within the
-//! [Mere workspace](https://crates.io/crates/mere).
+//! Pre-1.0. Signed Moot declarations, membership, flora, deterministic roster
+//! folds, trust records, and host-composed sync tests are implemented. Broader
+//! governance and capability grants remain in progress.
 
 #![doc(html_root_url = "https://docs.rs/moothold/0.0.1")]
 

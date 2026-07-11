@@ -23,7 +23,7 @@ use p2panda_store::topics::TopicStore;
 use p2panda_store::{SqliteError, SqliteStore, SqliteStoreBuilder, Transaction};
 
 use super::roster::MootRoster;
-use super::wire::{MootEvent, MootExt, to_operation};
+use super::wire::{MootEvent, MootExt, to_operation_seed};
 
 /// A moot store failure (the underlying SQLite store).
 #[derive(Debug, thiserror::Error)]
@@ -97,12 +97,22 @@ impl MootStore {
         moot_id: [u8; 32],
         event: &MootEvent,
     ) -> Result<Operation<MootExt>, MootStoreError> {
-        let author = SigningKey::from_bytes(&keypair.to_seed()).verifying_key();
+        self.author_seed(keypair.to_seed(), moot_id, event).await
+    }
+
+    /// Provider-neutral authoring for Personae and other identity sources.
+    pub async fn author_seed(
+        &self,
+        signing_seed: [u8; 32],
+        moot_id: [u8; 32],
+        event: &MootEvent,
+    ) -> Result<Operation<MootExt>, MootStoreError> {
+        let author = SigningKey::from_bytes(&signing_seed).verifying_key();
         let (seq_num, backlink) = match self.latest(&author, moot_id).await? {
             Some(prev) => (prev.header.seq_num + 1, Some(*prev.hash.as_bytes())),
             None => (0, None),
         };
-        let op = to_operation(keypair, moot_id, event, seq_num, backlink);
+        let op = to_operation_seed(signing_seed, moot_id, event, seq_num, backlink);
         self.insert(&op).await?;
         Ok(op)
     }

@@ -242,7 +242,10 @@ mod tests {
         for op in commit_fulfil_govern(&kp) {
             store.insert(&op).await.unwrap();
         }
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
+        let ledger = store
+            .fold_moot(MOOT, TesseraConfig::default())
+            .await
+            .unwrap();
         // +10 fulfil, +1 govern = 11; the commitment is closed, so no lapse.
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 11);
     }
@@ -265,7 +268,10 @@ mod tests {
             .await
             .unwrap();
 
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
+        let ledger = store
+            .fold_moot(MOOT, TesseraConfig::default())
+            .await
+            .unwrap();
         assert_eq!(ledger.score(&root_of(&alice), 5_000), 11);
         assert_eq!(ledger.score(&root_of(&bob), 5_000), 1);
     }
@@ -301,7 +307,10 @@ mod tests {
         // Reopen: the log and its projection survive.
         let store = TesseraStore::open(&path).unwrap();
         assert_eq!(store.len().await.unwrap(), 3);
-        let ledger = store.fold_moot(MOOT, TesseraConfig::default()).await.unwrap();
+        let ledger = store
+            .fold_moot(MOOT, TesseraConfig::default())
+            .await
+            .unwrap();
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 11);
     }
 }

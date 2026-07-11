@@ -17,7 +17,8 @@
 
 use std::collections::BTreeMap;
 
-use p2panda_core::Operation;
+use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
+use p2panda_core::{Hash, Operation};
 
 use super::wire::{MootEvent, MootExt, from_operation, verify};
 
@@ -53,16 +54,36 @@ pub struct FloraEntry {
 }
 
 /// The folded moot: founding, membership, flora.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MootRoster {
     pub declaration: Option<Declaration>,
     /// Members keyed by author (verifying-key bytes), iteration-stable.
     pub members: BTreeMap<[u8; 32], Member>,
+    /// Commitment over the winning signed membership operations only.
+    pub membership_revision: [u8; 32],
     /// Flora entries in `(at_ms, op_hash)` order.
     pub flora: Vec<FloraEntry>,
 }
 
 impl MootRoster {
+    /// Freeze this roster's members for a recognition decision.
+    pub fn electorate_snapshot(&self, moot_id: [u8; 32]) -> ElectorateSnapshot {
+        ElectorateSnapshot::new(
+            moot_id,
+            self.membership_revision,
+            self.members.keys().copied(),
+        )
+    }
+
+    /// Bind a configured policy to this roster at one signed revision.
+    pub fn recognition_context(
+        &self,
+        moot_id: [u8; 32],
+        policy: RecognitionPolicy,
+    ) -> RecognitionContext {
+        RecognitionContext::new(policy, self.electorate_snapshot(moot_id))
+    }
+
     /// Fold a set of operations into a roster. Order-independent; ops that
     /// fail signature verification, decode, or address a different moot are
     /// skipped (defence in depth behind the sync drain's checks).
@@ -138,6 +159,7 @@ impl MootRoster {
 
         // Resolve.
         let declaration = declarations.into_iter().next().map(|(_, d)| d);
+        let membership_revision = membership_revision(&joins);
         let members = joins
             .into_iter()
             .map(|(author, (joined_at_ms, _, name))| (author, Member { name, joined_at_ms }))
@@ -147,9 +169,30 @@ impl MootRoster {
         Self {
             declaration,
             members,
+            membership_revision,
             flora,
         }
     }
+}
+
+impl Default for MootRoster {
+    fn default() -> Self {
+        Self {
+            declaration: None,
+            members: BTreeMap::new(),
+            membership_revision: membership_revision(&BTreeMap::new()),
+            flora: Vec::new(),
+        }
+    }
+}
+
+fn membership_revision(joins: &BTreeMap<[u8; 32], (u64, [u8; 32], String)>) -> [u8; 32] {
+    let mut bytes = b"moothold/moot-membership/v1\0".to_vec();
+    for (author, (_, operation, _)) in joins {
+        bytes.extend_from_slice(author);
+        bytes.extend_from_slice(operation);
+    }
+    *Hash::digest(bytes).as_bytes()
 }
 
 #[cfg(test)]
@@ -228,6 +271,11 @@ mod tests {
         assert_eq!(roster.flora.len(), 1);
         assert_eq!(roster.flora[0].schema_id, "eidetic.SearchIndexSpec/v1");
         assert_eq!(roster.flora[0].shared_by, author(&friend));
+        let without_flora = MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join]);
+        assert_eq!(
+            roster.membership_revision, without_flora.membership_revision,
+            "non-membership events do not invalidate policy contexts"
+        );
     }
 
     #[test]
@@ -267,6 +315,38 @@ mod tests {
             "b's founding"
         };
         assert_eq!(one.declaration.unwrap().name, expected);
+    }
+
+    #[test]
+    fn roster_freezes_members_into_a_recognition_context() {
+        let founder = keypair(1);
+        let friend = keypair(2);
+        let founder_join = to_operation(
+            &founder,
+            MOOT,
+            &MootEvent::Joined {
+                name: "mark".into(),
+                at_ms: 1,
+            },
+            0,
+            None,
+        );
+        let friend_join = to_operation(
+            &friend,
+            MOOT,
+            &MootEvent::Joined {
+                name: "alex".into(),
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let roster = MootRoster::fold(MOOT, [&founder_join, &friend_join]);
+        let context =
+            roster.recognition_context(MOOT, RecognitionPolicy::Threshold { required: 2 });
+        assert_eq!(context.electorate.group_id, MOOT);
+        assert_eq!(context.electorate.revision, roster.membership_revision);
+        assert_eq!(context.electorate.members.len(), 2);
     }
 
     #[test]

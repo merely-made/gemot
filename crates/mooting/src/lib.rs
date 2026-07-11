@@ -6,7 +6,9 @@
 //! plumbing; the singular noun (*moot* = a single community) is the user-facing
 //! object. [`MunimentStore`] is intentionally generic enough for non-Moot
 //! domains: consumers provide their operation extension, log id, backend,
-//! validation, and materializer.
+//! validation, and materializer. [`RecognitionContext`] supplies a second
+//! reusable primitive: deterministic policy evaluation against a membership
+//! set frozen at one signed revision.
 //!
 //! ## Status
 //!
@@ -16,8 +18,13 @@
 
 #![doc(html_root_url = "https://docs.rs/mooting/0.0.1")]
 
+pub mod recognition;
 pub mod store;
 
+pub use recognition::{
+    ElectorateSnapshot, MemberKey, RecognitionContext, RecognitionDecision, RecognitionPolicy,
+    RecognitionPolicyError,
+};
 pub use store::MunimentStore;
 
 /// Crate version.

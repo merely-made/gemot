@@ -17,6 +17,10 @@ reuse it without adopting Moot's social model.
   associate the topic/log first, then insert the operation. An interrupted
   write can leave a harmless empty index, never an operation LogSync cannot
   discover.
+- `RecognitionPolicy` and `RecognitionContext`, which evaluate endorsements
+  against a membership set frozen at a signed Moot revision and scoped to that
+  Moot's ID. Fixed thresholds, fractional thresholds, unanimity, and one-member
+  acceptance share one deterministic, inspectable result shape.
 
 ## What it does not own
 
@@ -25,7 +29,9 @@ reuse it without adopting Moot's social model.
 - Identity-provider types.
 
 Moot, Isometry, mesh, and other consumers define their own signed extension and
-materializer. The host composes the store with p2panda LogSync and Mere's
+materializer. Recognition policy evaluation is generic plumbing; choosing or
+changing a policy is still the domain's signed governance act. The host
+composes the store with p2panda LogSync and Mere's
 `transport::SyncedSpace`. Signing keys may come from Mere identity, Personae,
 or another provider through raw Ed25519 seed material at the transport/wire
 boundary.
