@@ -2,11 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The moot object — declare it, join it, share into its flora.
+//! The moot object — declare it, join it, share into its fauna.
 //!
 //! The tessera lane ([`crate::tessera`]) carries a moot's trust receipts;
 //! this lane carries the moot *itself*: the founding declaration (name +
-//! charter), visible membership, and the **flora** — engram references
+//! charter), visible membership, and the **fauna** — engram references
 //! shared into the community (the hand-off eidetic's deferred consume half
 //! picks up from). Same proven recipe, third lap: signed operations on the
 //! event-DAG ([`wire`]), a deterministic order-independent fold
@@ -18,8 +18,13 @@
 //!
 //! M1 trust is the ring rule: holding the moot id is membership
 //! eligibility (the kith ring's definition). Invitations, capability
-//! gating, and flora blob transfer are later milestones — the plan names
+//! gating, and fauna blob transfer are later milestones — the plan names
 //! them rather than half-building them.
+//!
+//! External identity providers author through raw protocol-scoped Ed25519
+//! seeds. The folded roster exposes a membership revision committed only to the
+//! winning signed join operations, so unrelated fauna does not invalidate
+//! recognition contexts.
 
 pub mod roster;
 pub mod store;
@@ -27,7 +32,7 @@ pub mod store;
 mod sync;
 pub mod wire;
 
-pub use roster::{Declaration, FloraEntry, Member, MootRoster};
+pub use roster::{Declaration, FaunaEntry, Member, MootRoster};
 pub use store::{MootStore, MootStoreError};
 pub use wire::{
     MootEvent, MootExt, WireError, from_operation, to_operation, to_operation_seed, verify,
