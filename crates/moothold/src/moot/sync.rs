@@ -146,7 +146,7 @@ async fn wait_for_roster(space: &MootSession, pred: impl Fn(&MootRoster) -> bool
 }
 
 /// The M1 shape, in process: founder declares + joins + shares; a friend joins
-/// live; both rosters agree on founding, members, flora.
+/// live; both rosters agree on founding, members, fauna.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn declare_join_share_converges_on_both_peers() {
     let (founder_t, friend_t) = two_peers().await;
@@ -215,8 +215,8 @@ async fn declare_join_share_converges_on_both_peers() {
             |r| {
                 r.declaration.as_ref().map(|d| d.name.as_str()) == Some("printing circle")
                     && r.members.len() == 2
-                    && r.flora.len() == 1
-                    && r.flora[0].title == "my trail index"
+                    && r.fauna.len() == 1
+                    && r.fauna[0].title == "my trail index"
             },
             &format!("{who} converges on the full roster"),
         )

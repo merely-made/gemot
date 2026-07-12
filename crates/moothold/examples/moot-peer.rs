@@ -4,7 +4,7 @@
 
 //! moot-peer — the moot-object M1 rehearsal bin.
 //!
-//! Declare a moot, join it, share an engram reference into its flora, and
+//! Declare a moot, join it, share an engram reference into its fauna, and
 //! watch the roster converge across devices — the moot-tier mirror of
 //! `mesh-peer`. Both modes print the live roster and real sync status.
 //!
@@ -153,8 +153,8 @@ fn print_roster(roster: &MootRoster) {
     for (author, member) in &roster.members {
         println!("    {}  {}", hex8(author), member.name);
     }
-    println!("  flora ({}):", roster.flora.len());
-    for entry in &roster.flora {
+    println!("  fauna ({}):", roster.fauna.len());
+    for entry in &roster.fauna {
         println!(
             "    {}  [{}] {}  (shared by {})",
             hex8(&entry.manifest_id),
@@ -316,7 +316,7 @@ async fn main() -> Result<(), String> {
                 .publish(op)
                 .await
                 .map_err(|e| format!("publish: {e}"))?;
-            println!("shared into the flora.");
+            println!("shared into the fauna.");
         }
         Mode::Show => {}
     }
@@ -325,7 +325,10 @@ async fn main() -> Result<(), String> {
     let mut last = String::new();
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let roster = store.roster(moot_id).await.map_err(|e| format!("roster: {e}"))?;
+        let roster = store
+            .roster(moot_id)
+            .await
+            .map_err(|e| format!("roster: {e}"))?;
         let status = space.sync_status();
         let mut snapshot = String::new();
         {
@@ -335,7 +338,7 @@ async fn main() -> Result<(), String> {
                 "{:?}|{}|{}|{}|{}",
                 roster.declaration.as_ref().map(|d| &d.name),
                 roster.members.len(),
-                roster.flora.len(),
+                roster.fauna.len(),
                 status.sync_rounds,
                 status.ops_received
             );

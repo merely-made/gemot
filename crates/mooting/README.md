@@ -18,9 +18,10 @@ reuse it without adopting Moot's social model.
   write can leave a harmless empty index, never an operation LogSync cannot
   discover.
 - `RecognitionPolicy` and `RecognitionContext`, which evaluate endorsements
-  against a membership set frozen at a signed Moot revision and scoped to that
-  Moot's ID. Fixed thresholds, fractional thresholds, unanimity, and one-member
-  acceptance share one deterministic, inspectable result shape.
+  against a membership set frozen at a commitment over the winning signed Moot
+  membership operations and scoped to that Moot's ID. Fixed thresholds,
+  fractional thresholds, unanimity, and one-member acceptance share one
+  deterministic, inspectable result shape.
 
 ## What it does not own
 

@@ -40,9 +40,9 @@ pub struct Member {
     pub joined_at_ms: u64,
 }
 
-/// One engram reference in the flora.
+/// One engram reference in the fauna.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FloraEntry {
+pub struct FaunaEntry {
     pub manifest_id: [u8; 32],
     pub schema_id: String,
     pub title: String,
@@ -53,7 +53,7 @@ pub struct FloraEntry {
     pub op_hash: [u8; 32],
 }
 
-/// The folded moot: founding, membership, flora.
+/// The folded moot: founding, membership, fauna.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MootRoster {
     pub declaration: Option<Declaration>,
@@ -61,8 +61,8 @@ pub struct MootRoster {
     pub members: BTreeMap<[u8; 32], Member>,
     /// Commitment over the winning signed membership operations only.
     pub membership_revision: [u8; 32],
-    /// Flora entries in `(at_ms, op_hash)` order.
-    pub flora: Vec<FloraEntry>,
+    /// Fauna entries in `(at_ms, op_hash)` order.
+    pub fauna: Vec<FaunaEntry>,
 }
 
 impl MootRoster {
@@ -98,7 +98,7 @@ impl MootRoster {
         // author → (joined_at_ms, op hash, name); earliest join wins, hash
         // breaks at_ms ties deterministically.
         let mut joins: BTreeMap<[u8; 32], (u64, [u8; 32], String)> = BTreeMap::new();
-        let mut flora: Vec<FloraEntry> = Vec::new();
+        let mut fauna: Vec<FaunaEntry> = Vec::new();
 
         for op in ops {
             if !verify(op) {
@@ -145,7 +145,7 @@ impl MootRoster {
                     title,
                     at_ms,
                 } => {
-                    flora.push(FloraEntry {
+                    fauna.push(FaunaEntry {
                         manifest_id,
                         schema_id,
                         title,
@@ -164,13 +164,13 @@ impl MootRoster {
             .into_iter()
             .map(|(author, (joined_at_ms, _, name))| (author, Member { name, joined_at_ms }))
             .collect();
-        flora.sort_by(|a, b| (a.at_ms, a.op_hash).cmp(&(b.at_ms, b.op_hash)));
+        fauna.sort_by(|a, b| (a.at_ms, a.op_hash).cmp(&(b.at_ms, b.op_hash)));
 
         Self {
             declaration,
             members,
             membership_revision,
-            flora,
+            fauna,
         }
     }
 }
@@ -181,7 +181,7 @@ impl Default for MootRoster {
             declaration: None,
             members: BTreeMap::new(),
             membership_revision: membership_revision(&BTreeMap::new()),
-            flora: Vec::new(),
+            fauna: Vec::new(),
         }
     }
 }
@@ -268,12 +268,12 @@ mod tests {
         assert_eq!(declaration.by, author(&founder));
         assert_eq!(roster.members.len(), 2);
         assert_eq!(roster.members[&author(&friend)].name, "alex");
-        assert_eq!(roster.flora.len(), 1);
-        assert_eq!(roster.flora[0].schema_id, "eidetic.SearchIndexSpec/v1");
-        assert_eq!(roster.flora[0].shared_by, author(&friend));
-        let without_flora = MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join]);
+        assert_eq!(roster.fauna.len(), 1);
+        assert_eq!(roster.fauna[0].schema_id, "eidetic.SearchIndexSpec/v1");
+        assert_eq!(roster.fauna[0].shared_by, author(&friend));
+        let without_fauna = MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join]);
         assert_eq!(
-            roster.membership_revision, without_flora.membership_revision,
+            roster.membership_revision, without_fauna.membership_revision,
             "non-membership events do not invalidate policy contexts"
         );
     }
@@ -380,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn flora_order_is_stable_and_foreign_moot_ops_are_skipped() {
+    fn fauna_order_is_stable_and_foreign_moot_ops_are_skipped() {
         let kp = keypair(4);
         let here_late = to_operation(
             &kp,
@@ -420,8 +420,8 @@ mod tests {
         );
 
         let roster = MootRoster::fold(MOOT, [&here_late, &here_early, &elsewhere]);
-        assert_eq!(roster.flora.len(), 2, "foreign-moot share skipped");
-        assert_eq!(roster.flora[0].title, "early");
-        assert_eq!(roster.flora[1].title, "late");
+        assert_eq!(roster.fauna.len(), 2, "foreign-moot share skipped");
+        assert_eq!(roster.fauna[0].title, "early");
+        assert_eq!(roster.fauna[1].title, "late");
     }
 }

@@ -21,7 +21,7 @@
 //!
 //! ## Status
 //!
-//! Pre-1.0. Signed Moot declarations, membership, flora, deterministic roster
+//! Pre-1.0. Signed Moot declarations, membership, fauna, deterministic roster
 //! folds, trust records, and host-composed sync tests are implemented. Broader
 //! governance and capability grants remain in progress.
 

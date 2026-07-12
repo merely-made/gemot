@@ -38,7 +38,7 @@ themselves and members reach them via thin clients.
 - **Hosting commitments** — signed events naming who's running which
   service, with heartbeats and successor chains. **Voluntary; never
   imposed.** Tessera rewards follow-through and penalizes ghosting.
-- **Engram flora** — durable contributions accumulated over time,
+- **Engram fauna** — durable contributions accumulated over time,
   forming the moot's culture / geist.
 - **Tier transitions** — moot → moothold (federation), moothold →
   coalition. Each transition is a first-class governance
@@ -134,7 +134,7 @@ it back up.
                         moothold
               (this crate; tier 1–3 lifecycle,
                graph view, pins, tessera, capabilities,
-               flora, federation, forking)
+               fauna, federation, forking)
                             │
         ┌───────────────────┼─────────────────────┐
         ▼                   ▼                     ▼
