@@ -14,24 +14,9 @@ categories = ["network-programming"]
 path = "src/lib.rs"
 
 [dependencies]
-# The portable byte-backend seam. mooting's store rides muniment so a moot's log
-# lands on redb (desktop) or IndexedDB + OPFS (browser) without the adapter
-# knowing which.
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main" }
-# A moot event IS a p2panda-core Operation on the wire; the store speaks the same
-# Header/Body/Hash types murm's cable does.
+# Compatibility re-export while consumers move `MunimentStore` to its new home.
+murm-replication = { workspace = true }
+# Recognition fingerprints use p2panda's native BLAKE3 hash and CBOR.
 p2panda-core = "0.6.1"
-# The storage-agnostic sync traits (LogStore, OperationStore, TopicStore) that
-# p2panda-net's LogSync reconciles against. Default features off drops the bundled
-# SQLite backend; mooting brings muniment instead.
-p2panda-store = { version = "0.6.1", default-features = false }
-# String-safe keys: authors, hashes and CBOR log ids hex-encode into the flat key
-# space muniment exposes.
-hex = "0.4"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
-
-[dev-dependencies]
-# Block on the store's async backend in tests without pulling a runtime (matches
-# muniment's own test floor).
-pollster = "0.4"

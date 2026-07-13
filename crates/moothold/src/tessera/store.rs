@@ -1,7 +1,7 @@
 //! The tessera operation store, over the muniment substrate.
 //!
 //! [`TesseraStore`] persists a moot's tessera operations through
-//! [`mooting::MunimentStore`], the shared p2panda-store adapter murm and mesh
+//! [`murm_replication::MunimentStore`], the shared p2panda-store adapter murm and mesh
 //! also ride: one operation store that doubles as the `LogStore` + `TopicStore`
 //! LogSync reconciles, keyed and folded the same way across all three. One store
 //! of record, one write path ([`insert`](TesseraStore::insert)), serving both the
@@ -24,8 +24,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use mooting::MunimentStore;
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
+use murm_replication::{
+    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    StoreTarget,
+};
 use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::operations::OperationStore;
@@ -45,9 +48,49 @@ pub enum TesseraStoreError {
     /// The muniment backend or the store adapter failed.
     #[error(transparent)]
     Store(#[from] StoreError),
+    /// The shared policy-before-insert processor rejected or could not store
+    /// the operation.
+    #[error(transparent)]
+    Process(#[from] ProcessError),
     /// A stored operation did not decode to a valid tessera event.
     #[error("malformed tessera operation")]
     Malformed,
+}
+
+/// Tessera's current wire-level admission policy.
+///
+/// It binds every operation to the expected Moot, requires a decodable
+/// [`TesseraEvent`], and selects the one per-author Tessera log. The shared
+/// processor performs signature, payload, continuity, idempotence, and atomic
+/// indexed-write checks before this policy runs. Moot membership, constitution,
+/// and moderation authorization deliberately remain a later Moot-domain policy
+/// rather than being inferred from reputation events.
+#[derive(Clone, Copy)]
+struct TesseraPolicy {
+    moot_id: [u8; 32],
+}
+
+impl OperationPolicy<TesseraExt> for TesseraPolicy {
+    type LogId = u64;
+
+    fn admit(&self, operation: &Operation<TesseraExt>) -> Result<Admission<Self::LogId>, Reject> {
+        if operation.header.extensions.moot_id != self.moot_id {
+            return Err(Reject::new(
+                "wrong-moot",
+                "operation addresses a different moot",
+            ));
+        }
+        from_operation(operation).map_err(|_| {
+            Reject::new(
+                "invalid-tessera-event",
+                "operation body is not a Tessera event",
+            )
+        })?;
+        Ok(Admission::keep(StoreTarget::new(
+            Topic::from(self.moot_id),
+            LOG_ID,
+        )))
+    }
 }
 
 /// A tessera operation store over a muniment backend `B`.
@@ -88,19 +131,29 @@ impl<B: Backend + Clone> TesseraStore<B> {
     }
 }
 
-impl<B: Backend> TesseraStore<B> {
-    /// Insert a tessera operation: associate the moot topic with the author's log,
-    /// then store the op with its log entry. The moot id is the op's *signed*
-    /// extension, so authoring and receiving (over sync) share this one write path.
+impl<B: Backend + Clone> TesseraStore<B> {
+    /// Validate and store a tessera operation under its signed Moot address.
     ///
-    /// Returns `Ok(true)` on first insert of a hash, `Ok(false)` if already present
-    /// (content addressing: same hash implies same bytes, no overwrite).
+    /// Prefer [`accept`](Self::accept) at a session boundary, where an expected
+    /// Moot prevents cross-space replay before mutation. This convenience keeps
+    /// direct authoring on the same processor path by taking the Moot from the
+    /// signed extension.
     pub async fn insert(&self, op: &Operation<TesseraExt>) -> Result<bool, TesseraStoreError> {
-        let moot_id = op.header.extensions.moot_id;
-        self.store
-            .associate(&Topic::from(moot_id), &op.header.verifying_key, &LOG_ID)
-            .await?;
-        Ok(self.store.insert_operation(&op.hash, op, &LOG_ID).await?)
+        self.accept(op.header.extensions.moot_id, op).await
+    }
+
+    /// Run the shared policy-before-insert path for `moot_id`.
+    ///
+    /// Returns `true` for a newly admitted operation and `false` for an accepted
+    /// duplicate. A wrong-Moot, malformed, invalid, or discontinuous operation
+    /// is rejected before the shared store changes.
+    pub async fn accept(
+        &self,
+        moot_id: [u8; 32],
+        op: &Operation<TesseraExt>,
+    ) -> Result<bool, TesseraStoreError> {
+        let processor = OperationProcessor::new(self.store.clone(), TesseraPolicy { moot_id });
+        Ok(processor.process(op).await?.inserted())
     }
 
     /// Look up an operation by hash.
@@ -233,6 +286,31 @@ mod tests {
         let got = store.get(&op1.hash).await.unwrap().expect("op stored");
         assert_eq!(got.hash, op1.hash);
         assert!(store.has(&op0.hash).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn expected_moot_rejects_cross_space_replay_before_mutation() {
+        let store = TesseraStore::in_memory();
+        let kp = keypair(1);
+        let foreign = to_operation(
+            &kp,
+            [0xee; 32],
+            &TesseraEvent::GovernanceParticipation {
+                by: root_of(&kp),
+                at_ms: 1_000,
+            },
+            0,
+            None,
+        );
+
+        assert!(matches!(
+            store.accept(MOOT, &foreign).await,
+            Err(TesseraStoreError::Process(ProcessError::Rejected(Reject {
+                code: "wrong-moot",
+                ..
+            })))
+        ));
+        assert!(store.is_empty().await.unwrap());
     }
 
     #[tokio::test]

@@ -21,29 +21,31 @@ path = "src/lib.rs"
 serde = { version = "1", features = ["derive"] }
 p2panda-core = "0.6.1"
 identity.workspace = true
+murm-replication = { workspace = true }
+proofs.workspace = true
 # The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
 # plus `OperationStore`). The `sqlite` feature backs the *moot object* lane's
 # `MootStore` (p2panda's own SQLite impls); the *tessera* lane rides muniment
 # through the mooting adapter instead — the substrate convergence, so tessera,
 # murm and mesh share one store family. `macros` (OperationStore derive) stays off.
 p2panda-store = { version = "0.6.1", default-features = false, features = ["sqlite"] }
-# The tessera store's substrate: `mooting::MunimentStore` (the shared adapter
-# implementing the three traits) over a muniment backend — an in-memory floor for
-# tests, redb on a device (redb is pulled through muniment's feature).
+# Recognition policy remains in mooting. The generic store moved to
+# murm-replication.
 mooting = { workspace = true }
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
 redb = "2"
 thiserror = "1"
 # Sync is host-composed after the sibling-posture purity split: moothold owns no
 # p2panda-net. It provides the stores + folds + `verify`; the host builds the
-# `LogSync` + `transport::SyncedSpace` pump and publishes authored ops. So
+# `LogSync` + `murm-replication::SyncedSpace` pump and publishes authored ops. So
 # p2panda-net / p2panda-sync / tokio-stream / tokio are dev-only (the in-crate
 # two-peer convergence tests + the `moot-peer` example play the host).
 
 [dev-dependencies]
 # The two-peer convergence tests + the `moot-peer` example play the host: they
 # build the real p2panda-net peers and the `LogSync` + `SyncedSpace` pump.
-# `transport` supplies `P2pandaTransport` / `SyncedSpace` / `sync_overlay_topic`;
+# `transport` supplies `P2pandaTransport` / `sync_overlay_topic`;
+# `murm-replication` supplies `SyncedSpace` and the shared store;
 # `p2panda-net` is the protocol, `p2panda-sync` its event types, `tokio-stream`
 # reads the subscription; `macros` + `rt-multi-thread` run the async tests;
 # tempfile backs the persistent-store reopen test.

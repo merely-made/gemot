@@ -12,7 +12,8 @@
 //! event-DAG ([`wire`]), a deterministic order-independent fold
 //! ([`roster`]), one transactional store write path ([`store`]) with a
 //! sign-and-store [`author`](store::MootStore::author) helper. The LogSync
-//! catch-up + live session is **host-composed** over [`transport::SyncedSpace`]:
+//! catch-up + live session is currently host-composed over
+//! [`murm_replication::SyncedSpace`]:
 //! after the sibling-posture purity split moot owns no p2panda-net, so the host
 //! builds the pump (endpoint injected) and publishes authored ops.
 //!
@@ -26,12 +27,14 @@
 //! winning signed join operations, so unrelated fauna does not invalidate
 //! recognition contexts.
 
+pub mod retention;
 pub mod roster;
 pub mod store;
 #[cfg(test)]
 mod sync;
 pub mod wire;
 
+pub use retention::GovernedCheckpointAuthority;
 pub use roster::{Declaration, FaunaEntry, Member, MootRoster};
 pub use store::{MootStore, MootStoreError};
 pub use wire::{
