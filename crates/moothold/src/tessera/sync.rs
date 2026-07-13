@@ -5,9 +5,9 @@
 //! Two-peer convergence for the tessera lane.
 //!
 //! After the sibling-posture purity split, moothold no longer owns p2panda-net:
-//! the pump (the LogSync session + the [`transport::SyncedSpace`] drain) is
-//! **host-composed**, and tessera keeps only the store, `verify`, and the
-//! ledger fold. The tessera lane is receive-only (authoring is a direct
+//! the pump (the LogSync session + the [`murm_replication::SyncedSpace`] drain) is
+//! **host-composed**, and tessera keeps only the store, wire-level admission,
+//! and ledger fold. The tessera lane is receive-only (authoring is a direct
 //! `store.insert`, no live publish), so the host just builds the session, drives
 //! it, and folds. These tests play the host so the lane's convergence stays
 //! covered without a production `SyncedMoot` type.
@@ -17,18 +17,18 @@
 use std::sync::Arc;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use mooting::MunimentStore;
 use muniment::MemoryBackend;
+use murm_replication::{MunimentStore, SyncedSpace};
 use p2panda_core::{Operation, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
 use p2panda_sync::protocols::TopicLogSyncEvent;
-use transport::{P2pandaTransport, PeerID, SyncedSpace};
+use transport::{P2pandaTransport, PeerID};
 
 use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
 use crate::tessera::ledger::{Ledger, TesseraConfig};
 use crate::tessera::store::{TesseraStore, TesseraStoreError};
-use crate::tessera::wire::{TesseraExt, to_operation, verify};
+use crate::tessera::wire::{TesseraExt, to_operation};
 
 const MOOT: [u8; 32] = [0x33; 32];
 
@@ -64,7 +64,7 @@ impl TesseraSession {
         let accept_store = store.clone();
         let space = SyncedSpace::drive(sub, move |op: Operation<TesseraExt>| {
             let store = accept_store.clone();
-            async move { verify(&op) && matches!(store.insert(&op).await, Ok(true)) }
+            async move { matches!(store.accept(moot_id, &op).await, Ok(true)) }
         });
         Self {
             store,

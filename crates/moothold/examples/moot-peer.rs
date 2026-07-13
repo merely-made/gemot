@@ -31,11 +31,12 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use moothold::moot::{MootEvent, MootExt, MootRoster, MootStore, verify};
+use murm_replication::SyncedSpace;
 use p2panda_core::{Hash, Operation, Topic};
 use p2panda_net::LogSync;
 use p2panda_store::SqliteStore;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use transport::{P2pandaTransport, SyncedSpace};
+use transport::P2pandaTransport;
 
 fn now_ms() -> u64 {
     SystemTime::now()

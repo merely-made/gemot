@@ -5,7 +5,7 @@
 //! Two-peer convergence for the moot-object lane.
 //!
 //! After the sibling-posture purity split, moothold no longer owns p2panda-net:
-//! the pump (the LogSync session + the [`transport::SyncedSpace`] drain) is
+//! the pump (the LogSync session + the [`murm_replication::SyncedSpace`] drain) is
 //! **host-composed**, and moot keeps only the store + fold + [`author`]
 //! (sign-and-store; the host publishes). These tests play the host — build the
 //! session over a [`MootStore`], drive it via `SyncedSpace`, and author via
@@ -20,12 +20,13 @@ use std::sync::Arc as StdArc;
 use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
+use murm_replication::SyncedSpace;
 use p2panda_core::{Operation, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
 use p2panda_store::SqliteStore;
 use p2panda_sync::protocols::TopicLogSyncEvent;
-use transport::{P2pandaTransport, SyncedSpace};
+use transport::P2pandaTransport;
 
 use super::roster::MootRoster;
 use super::store::MootStore;

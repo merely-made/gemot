@@ -1,20 +1,15 @@
 //! # Mooting
 //!
-//! Backend-neutral p2panda storage primitives for signed multi-writer spaces.
+//! Recognition policy for governed Moot spaces.
 //!
-//! The gerund form (*mooting* = the act of holding a moot) names the protocol
-//! plumbing; the singular noun (*moot* = a single community) is the user-facing
-//! object. [`MunimentStore`] is intentionally generic enough for non-Moot
-//! domains: consumers provide their operation extension, log id, backend,
-//! validation, and materializer. [`RecognitionContext`] supplies a second
-//! reusable primitive: deterministic policy evaluation against a membership
-//! set frozen at one signed revision.
+//! [`RecognitionContext`] evaluates a recognition policy against a membership
+//! set frozen at one signed revision. The generic [`MunimentStore`] moved to
+//! `murm-replication`; this crate temporarily re-exports it for compatibility.
 //!
 //! ## Status
 //!
-//! Pre-1.0. The p2panda `OperationStore`, `LogStore`, and `TopicStore` adapter
-//! over Muniment is implemented and exercised by multiple domains. Network
-//! pumps and domain folds stay outside this crate.
+//! Pre-1.0. Recognition policy is implemented. Generic replicated storage now
+//! lives in `murm-replication`; domain folds stay in Moot.
 
 #![doc(html_root_url = "https://docs.rs/mooting/0.0.1")]
 
