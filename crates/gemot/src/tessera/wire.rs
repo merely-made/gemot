@@ -1,6 +1,6 @@
 //! Tessera operation-wire bridge — tessera events as signed p2panda operations.
 //!
-//! Mirrors murmuring's `Post` ↔ `Operation<CabalExt>` split: a [`TesseraEvent`]
+//! Mirrors Murm's `Post` ↔ `Operation<CabalExt>` split: a [`TesseraEvent`]
 //! (the logical form the [ledger](super::ledger) folds) rides the synced
 //! event-DAG as a signed `Operation<TesseraExt>`, so peers replicate the tessera
 //! event log over the same LogSync substrate murm posts use and each computes the
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::tessera::event::TesseraEvent;
 
 /// The signed addressing extension on a tessera operation: which moot's event-DAG
-/// the event belongs to (like murmuring's `cabal_id`). Signed into the header, so
+/// the event belongs to (like Murm's `cabal_id`). Signed into the header, so
 /// an event cannot be replayed into a different moot.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TesseraExt {

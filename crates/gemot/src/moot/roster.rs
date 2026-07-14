@@ -187,7 +187,7 @@ impl Default for MootRoster {
 }
 
 fn membership_revision(joins: &BTreeMap<[u8; 32], (u64, [u8; 32], String)>) -> [u8; 32] {
-    let mut bytes = b"moothold/moot-membership/v1\0".to_vec();
+    let mut bytes = b"gemot/moot-membership/v1\0".to_vec();
     for (author, (_, operation, _)) in joins {
         bytes.extend_from_slice(author);
         bytes.extend_from_slice(operation);

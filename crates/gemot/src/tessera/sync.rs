@@ -4,7 +4,7 @@
 
 //! Two-peer convergence for the tessera lane.
 //!
-//! After the sibling-posture purity split, moothold no longer owns p2panda-net:
+//! After the sibling-posture purity split, gemot no longer owns p2panda-net:
 //! the pump (the LogSync session + the [`murm_replication::SyncedSpace`] drain) is
 //! **host-composed**, and tessera keeps only the store, wire-level admission,
 //! and ledger fold. The tessera lane is receive-only (authoring is a direct
