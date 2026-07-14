@@ -31,7 +31,6 @@ use murm_replication::{
 };
 use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
-use p2panda_store::operations::OperationStore;
 use p2panda_store::topics::TopicStore;
 
 use crate::tessera::event::TesseraEvent;

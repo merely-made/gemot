@@ -1,10 +1,17 @@
-# moothold
+# gemot
 
-`moothold` is the federation-of-moots crate for the
-[mere](https://crates.io/crates/mere) browser. It implements **Tier 3** in
-mere's social-graph scale, and currently also hosts the lower-tier logic
-(orrery / moot) until the workspace decides whether to split that into
-sibling crates.
+`gemot` is the assembly crate for the [mere](https://crates.io/crates/mere)
+browser: the community and federation layer, across every tier of mere's
+social-graph scale.
+
+*Gemot* is the Old English word for the assembly itself (as in *witena-gemot*,
+the meeting of the wise), and it is the word *moot* descends from. The crate is
+the gemot; the groups it convenes are moots.
+
+Renamed from `moothold` (2026-07-14). That name was a tier, not a layer: this
+crate implements **all four** tiers (orrery, moot, moothold, coalition), so
+naming it after the third one described a part as the whole. The tier keeps its
+name; the crate no longer borrows it.
 
 A *moot* is a single persistent themed federatable graph-view community
 (t2). A *moothold* is a federation of moots (t3) — *a holding of moots*,
@@ -17,7 +24,7 @@ decentralized communities to take root in and interoperate across.**
 Communities should outlive any single host, span protocols, and travel
 with their members.
 
-## What `moothold` owns
+## What `gemot` owns
 
 Moots are **graph views that link to and store** community resources —
 *not* protocol-translation layers. The crate's job is coordination,
@@ -49,7 +56,7 @@ themselves and members reach them via thin clients.
 
 ## Naming
 
-The crate is called `moothold`. The product term *moothold* now refers
+The crate is called `gemot`. The product term *moothold* refers
 specifically to **Tier 3** (federation of moots) per the
 [2026-05-07 moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md).
 Earlier docs may use *moothold* as an umbrella term — that's the older
@@ -131,7 +138,7 @@ it back up.
                 graphshell moot/coalition UI
                             │
                             ▼
-                        moothold
+                          gemot
               (this crate; tier 1–3 lifecycle,
                graph view, pins, tessera, capabilities,
                fauna, federation, forking)
@@ -167,7 +174,7 @@ it back up.
   pinning. Optional Veilid backend activates when a moot declares a
   privacy-required transport policy.
 - [`murm`](https://crates.io/crates/murm) — bilateral / small-group
-  conversations. moothold handles many-to-many federation. A moot may
+  conversations. gemot handles many-to-many federation. A moot may
   use murm-style cabals for private sub-channels.
 - [`eidetic`](https://crates.io/crates/eidetic) — owner-private memory
   substrate. Pinned content and engrams cached locally via eidetic's

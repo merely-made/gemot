@@ -3,7 +3,7 @@
 //! Tessera-affecting events are signed operations on the event-DAG (the same
 //! wire as murm posts, addressed by space). This module is the *logical* event
 //! form — the decoded shape the [ledger](super::ledger) folds — decoupled from
-//! the operation wire, which a later phase bridges exactly as murmuring's
+//! the operation wire, which a later phase bridges exactly as Murm's
 //! `Post` ↔ `Operation`.
 //!
 //! **No negative is ever self-issued.** A lapse (silent disappearance past a

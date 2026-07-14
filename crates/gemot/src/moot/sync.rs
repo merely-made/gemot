@@ -4,7 +4,7 @@
 
 //! Two-peer convergence for the moot-object lane.
 //!
-//! After the sibling-posture purity split, moothold no longer owns p2panda-net:
+//! After the sibling-posture purity split, gemot no longer owns p2panda-net:
 //! the pump (the LogSync session + the [`murm_replication::SyncedSpace`] drain) is
 //! **host-composed**, and moot keeps only the store + fold + [`author`]
 //! (sign-and-store; the host publishes). These tests play the host — build the

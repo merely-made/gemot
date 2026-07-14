@@ -27,6 +27,7 @@
 //! winning signed join operations, so unrelated fauna does not invalidate
 //! recognition contexts.
 
+mod governance;
 pub mod retention;
 pub mod roster;
 pub mod store;
@@ -34,6 +35,9 @@ pub mod store;
 mod sync;
 pub mod wire;
 
+pub use governance::{
+    MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
+};
 pub use retention::GovernedCheckpointAuthority;
 pub use roster::{Declaration, FaunaEntry, Member, MootRoster};
 pub use store::{MootStore, MootStoreError};

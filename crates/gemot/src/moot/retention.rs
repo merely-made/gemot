@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 use murm_replication::CheckpointAuthority;
 use proofs::Digest;
 
+use crate::constitution::Constitution;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GovernedCheckpointAuthority {
     authority_revision: Digest,
@@ -24,6 +26,14 @@ impl GovernedCheckpointAuthority {
             authority_revision,
             signers: signers.into_iter().collect(),
         }
+    }
+
+    /// Resolve checkpoint authority from one accepted constitution fold.
+    pub fn from_state(constitution: &Constitution) -> Self {
+        Self::from_constitution(
+            constitution.revision.clone(),
+            constitution.rules.checkpoint_signers.iter().copied(),
+        )
     }
 
     pub fn signers(&self) -> impl Iterator<Item = &[u8; 32]> {

@@ -1,11 +1,11 @@
 [package]
-name = "moothold"
+name = "gemot"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Community and federation supercrate for the Mere browser — moots, coalitions, social primitives across protocols."
-documentation = "https://docs.rs/moothold"
+documentation = "https://docs.rs/gemot"
 readme = "README.md"
 keywords = ["federation", "community", "social", "p2p", "browser"]
 categories = ["network-programming"]
@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Tessera events are wire-ready (they become signed operation extensions on the
-# event-DAG, like murmuring's `CabalExt`). serde sets the event types up for that
+# event-DAG, like Murm's `CabalExt`). serde sets the event types up for that
 # wire bridge; p2panda-core is the operation/signing substrate the bridge rides
 # (same as murm posts); identity supplies the Ed25519 signing keypair.
 serde = { version = "1", features = ["derive"] }
@@ -35,7 +35,7 @@ mooting = { workspace = true }
 muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
 redb = "2"
 thiserror = "1"
-# Sync is host-composed after the sibling-posture purity split: moothold owns no
+# Sync is host-composed after the sibling-posture purity split: gemot owns no
 # p2panda-net. It provides the stores + folds + `verify`; the host builds the
 # `LogSync` + `murm-replication::SyncedSpace` pump and publishes authored ops. So
 # p2panda-net / p2panda-sync / tokio-stream / tokio are dev-only (the in-crate

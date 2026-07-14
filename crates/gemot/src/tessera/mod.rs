@@ -12,7 +12,7 @@
 //!
 //! - [`event`] — the event grammar (the authoritative layer): the logical
 //!   tessera events, decoupled from the operation wire (a later phase bridges
-//!   them to signed operations, exactly as murmuring's `Post` ↔ `Operation`).
+//!   them to signed operations, exactly as Murm's `Post` ↔ `Operation`).
 //! - [`ledger`] — the projection: folds an event sequence into a per-chain-root
 //!   score, deriving lapse from missing heartbeats. Deterministic integer math,
 //!   so every peer computing it over the same events + clock agrees.
@@ -21,7 +21,7 @@
 //!   tessera operations, exposes the `LogStore` + `TopicStore` LogSync reconciles,
 //!   and folds the moot-wide projection ([`fold_moot`](store::TesseraStore::fold_moot),
 //!   every member's log into one ledger). Sync is host-composed after the
-//!   sibling-posture purity split: moothold provides the store, wire-level
+//!   sibling-posture purity split: gemot provides the store, wire-level
 //!   admission, and fold, and the host builds the `LogSync` +
 //!   `murm_replication::SyncedSpace` pump (the test-only `sync` module plays
 //!   that host for the two-peer convergence tests).

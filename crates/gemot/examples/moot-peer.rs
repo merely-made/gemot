@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use moothold::moot::{MootEvent, MootExt, MootRoster, MootStore, verify};
+use gemot::moot::{MootEvent, MootExt, MootRoster, MootStore, verify};
 use murm_replication::SyncedSpace;
 use p2panda_core::{Hash, Operation, Topic};
 use p2panda_net::LogSync;
@@ -233,7 +233,7 @@ async fn main() -> Result<(), String> {
         .ok_or_else(|| "transport has no sync parts (gossip not enabled?)".to_string())?;
     // Host-composed pump: build the moot-object LogSync session, drain it via
     // the shared `SyncedSpace`, and keep the session + handle for liveness and
-    // live publish. moothold owns no p2panda-net; the host wires the pump.
+    // live publish. gemot owns no p2panda-net; the host wires the pump.
     let log_sync: LogSync<SqliteStore, [u8; 32], MootExt> =
         LogSync::builder(store.sqlite(), endpoint, gossip)
             .spawn()
