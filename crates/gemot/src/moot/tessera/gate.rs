@@ -16,8 +16,10 @@
 //! user's escape hatch. The fresh-chain flood is thrown out here: zero standing
 //! sits below any threshold, and the rate limit caps a burst.
 
+use serde::{Deserialize, Serialize};
+
 /// A moot's policy parameters for the gate. Per-moot configurable.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GateConfig {
     /// Minimum effective / composite tessera a persona needs to act (post, pin).
     pub posting_threshold: i64,
@@ -80,7 +82,7 @@ pub enum GateDecision {
 /// and rate-limit checks; they are the accessible front end of the eventual
 /// Biscuit policy language (a preset compiles to a Biscuit policy, with raw
 /// Datalog as the power user's escape hatch).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Policy {
     /// Admit anyone whose standing clears the threshold. The open-but-floored moot.
     OpenWithFloor(GateConfig),

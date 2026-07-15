@@ -6,6 +6,8 @@ use p2panda_core::cbor::encode_cbor;
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
 
+use crate::moot::tessera::Policy;
+
 /// The rule controlling amendments to the shared constitution.
 ///
 /// The first rung is intentionally small. Tessera thresholds and quorum rules
@@ -23,6 +25,9 @@ pub struct ConstitutionRules {
     pub amendment: AmendmentRule,
     /// Keys allowed to author governed retention checkpoints.
     pub checkpoint_signers: BTreeSet<[u8; 32]>,
+    /// The signed admission rule evaluated from Tessera facts plus a host- or
+    /// group-state supplied membership/capability provider.
+    pub admission: Policy,
 }
 
 impl ConstitutionRules {
@@ -31,6 +36,7 @@ impl ConstitutionRules {
         Self {
             amendment: AmendmentRule::FounderSigned,
             checkpoint_signers: [founder].into_iter().collect(),
+            admission: Policy::OpenWithFloor(Default::default()),
         }
     }
 
