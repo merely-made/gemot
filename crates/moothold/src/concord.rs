@@ -25,19 +25,17 @@
 
 use std::collections::HashMap;
 
-use crate::tessera::event::BASIS_POINTS;
-use crate::tessera::ledger::Ledger;
-use crate::tessera::persona_chain::{PersonaChains, PersonaId};
-
-/// A moot's identity (the community key). Opaque in Phase 5, like [`PersonaId`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MootId(pub [u8; 32]);
+pub use gemot::moot::MootId;
+use gemot::moot::tessera::event::BASIS_POINTS;
+use gemot::moot::tessera::ledger::Ledger;
+use gemot::moot::tessera::persona_chain::{PersonaChains, PersonaId};
+use serde::{Deserialize, Serialize};
 
 /// How a viewer moot folds concorded moots' reputations into its own view.
 ///
 /// The choice belongs to the people running the moot — how trusting or cautious
 /// the community is — not to a project default. The set is extensible.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CompositionPolicy {
     /// Local only; concords are ignored. "I judge behaviour in my house."
     Insular,
@@ -138,8 +136,8 @@ impl RepLens {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-    use crate::tessera::ledger::TesseraConfig;
+    use gemot::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
+    use gemot::moot::tessera::ledger::TesseraConfig;
 
     fn moot(n: u8) -> MootId {
         MootId([n; 32])

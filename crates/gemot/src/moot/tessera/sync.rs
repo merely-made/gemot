@@ -25,10 +25,10 @@ use p2panda_net::{Endpoint, Gossip, LogSync};
 use p2panda_sync::protocols::TopicLogSyncEvent;
 use transport::{P2pandaTransport, PeerID};
 
-use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-use crate::tessera::ledger::{Ledger, TesseraConfig};
-use crate::tessera::store::{TesseraStore, TesseraStoreError};
-use crate::tessera::wire::{TesseraExt, to_operation};
+use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
+use crate::moot::tessera::ledger::{Ledger, TesseraConfig};
+use crate::moot::tessera::store::{TesseraStore, TesseraStoreError};
+use crate::moot::tessera::wire::{TesseraExt, to_operation};
 
 const MOOT: [u8; 32] = [0x33; 32];
 

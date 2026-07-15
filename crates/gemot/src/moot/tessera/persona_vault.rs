@@ -6,7 +6,7 @@
 //! This adapter is the bridge: it derives a persona's signing keypair from the
 //! vault, maps it to the tessera [`PersonaId`] (the derived public key), and
 //! builds a [`PersonaChains`] forest from the persona model's parent links — so
-//! tessera operations are signed by the right persona ([`crate::tessera::wire`])
+//! tessera operations are signed by the right persona ([`crate::moot::tessera::wire`])
 //! and the depreciation chain resolves to real chain roots.
 //!
 //! `persona_id` here is a persona's *logical* id (e.g. a UUID's bytes), distinct
@@ -18,7 +18,7 @@
 use identity::{Ed25519Keypair, IdentityError, IdentityProvider};
 use p2panda_core::Hash;
 
-use crate::tessera::persona_chain::{PersonaChains, PersonaId};
+use crate::moot::tessera::persona_chain::{PersonaChains, PersonaId};
 
 /// The vault salt for a persona's keypair: `BLAKE3("persona" || persona_id)`,
 /// where `persona_id` is the persona's logical id.
@@ -68,7 +68,7 @@ pub fn build_chains<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tessera::ChainRoot;
+    use crate::moot::tessera::ChainRoot;
     use identity::InMemoryProvider;
 
     fn provider() -> InMemoryProvider {
@@ -105,8 +105,8 @@ mod tests {
 
     #[test]
     fn the_derived_keypair_signs_a_verifiable_tessera_operation() {
-        use crate::tessera::event::{ChainRoot, TesseraEvent};
-        use crate::tessera::wire::{to_operation, verify};
+        use crate::moot::tessera::event::{ChainRoot, TesseraEvent};
+        use crate::moot::tessera::wire::{to_operation, verify};
         let p = provider();
         let kp = persona_keypair(&p, b"work").unwrap();
         let event = TesseraEvent::GovernanceParticipation {

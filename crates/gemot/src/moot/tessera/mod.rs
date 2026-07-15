@@ -29,12 +29,8 @@
 //!   resolves a leaf persona to its chain root + depth, and presents a
 //!   depreciated *effective* score (the Sybil cost of a fresh face), while debt
 //!   carries fully to forks (no laundering).
-//! - [`concord`] (Phase 5) — the federation layer: reputation is per-moot
-//!   primary, and a viewer moot's *composite* reputation folds its concorded
-//!   moots' standings (one hop, weighted, schema-gated) under a moot-operator-
-//!   chosen composition policy.
-//! - [`reciprocity`] (Phase 5) — the t3 ILL facet: inter-moot give-and-take
-//!   credits, where a freeloader moot runs up debt and is cut off.
+//! Federation-level concord and reciprocity consume these facts from the
+//! separate `moothold` crate; they are not per-Moot Tessera state.
 //! - [`gate`] (Phase 4) — the §8.8 policy slot: tessera [facts](gate::TesseraFacts)
 //!   plus a reference gate that allows an action only when a structural cap covers
 //!   it *and* the facts clear the moot's threshold + rate limit.
@@ -43,25 +39,23 @@
 //! (the score / freshness / role a policy engine reads); it is deliberately not
 //! the policy *engine* (the Biscuit candidate) itself.
 
-pub mod concord;
 pub mod event;
 pub mod gate;
 pub mod ledger;
 pub mod persona_chain;
 pub mod persona_vault;
-pub mod reciprocity;
 pub mod store;
 #[cfg(test)]
 mod sync;
 pub mod wire;
 
-pub use crate::tessera::concord::{CompositionPolicy, MootId, RepLens};
-pub use crate::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-pub use crate::tessera::gate::{
+pub use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
+pub use crate::moot::tessera::gate::{
     DenyReason, GateConfig, GateDecision, Policy, TesseraFacts, authorize, may_act,
 };
-pub use crate::tessera::ledger::{Ledger, TesseraConfig};
-pub use crate::tessera::persona_chain::{PersonaChains, PersonaId};
-pub use crate::tessera::reciprocity::Reciprocity;
-pub use crate::tessera::store::{TesseraFileStore, TesseraStore, TesseraStoreError};
-pub use crate::tessera::wire::{TesseraExt, WireError, from_operation, to_operation, verify};
+pub use crate::moot::tessera::ledger::{Ledger, TesseraConfig};
+pub use crate::moot::tessera::persona_chain::{PersonaChains, PersonaId};
+pub use crate::moot::tessera::store::{TesseraFileStore, TesseraStore, TesseraStoreError};
+pub use crate::moot::tessera::wire::{
+    TesseraExt, WireError, from_operation, to_operation, to_operation_seed, verify,
+};

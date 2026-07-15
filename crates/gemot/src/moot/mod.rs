@@ -2,20 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! The moot object — declare it, join it, share into its fauna.
+//! A Moot community and its bounded record lanes.
 //!
-//! The tessera lane ([`crate::tessera`]) carries a moot's trust receipts;
-//! this lane carries the moot *itself*: the founding declaration (name +
-//! charter), visible membership, and the **fauna** — engram references
-//! shared into the community (the hand-off eidetic's deferred consume half
-//! picks up from). Same proven recipe, third lap: signed operations on the
-//! event-DAG ([`wire`]), a deterministic order-independent fold
-//! ([`roster`]), one transactional store write path ([`store`]) with a
-//! sign-and-store [`author`](store::MootStore::author) helper. The LogSync
-//! catch-up + live session is currently host-composed over
-//! [`murm_replication::SyncedSpace`]:
-//! after the sibling-posture purity split moot owns no p2panda-net, so the host
-//! builds the pump (endpoint injected) and publishes authored ops.
+//! [`Moot`] is the command and snapshot boundary. Its three lanes are
+//! [`constitution`], [`records`], and [`tessera`]. Hosts may adapt the signed
+//! wire/store types for LogSync, but Gemot owns neither a network session nor a
+//! UI runtime.
 //!
 //! M1 trust is the ring rule: holding the moot id is membership
 //! eligibility (the kith ring's definition). Invitations, capability
@@ -27,20 +19,24 @@
 //! winning signed join operations, so unrelated fauna does not invalidate
 //! recognition contexts.
 
-mod governance;
-pub mod retention;
-pub mod roster;
-pub mod store;
-#[cfg(test)]
-mod sync;
-pub mod wire;
+pub mod constitution;
+mod id;
+pub mod records;
+mod service;
+pub mod tessera;
 
-pub use governance::{
+pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
 };
-pub use retention::GovernedCheckpointAuthority;
-pub use roster::{Declaration, FaunaEntry, Member, MootRoster};
-pub use store::{MootStore, MootStoreError};
-pub use wire::{
-    MootEvent, MootExt, WireError, from_operation, to_operation, to_operation_seed, verify,
+pub use id::MootId;
+pub use records::{
+    AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry,
+    GovernedCheckpointAuthority, KeepBound, LogFrontier, Member, MootEvent, MootExt, MootLogId,
+    MootRetentionPolicy, MootRoster, MootRosterSnapshot, MootStore, MootStoreError, MootStoreFile,
+    PolicyRevision, RetentionCheckpoint, StoredCheckpoint, WireError, from_operation, to_operation,
+    to_operation_seed, to_prune_operation, to_prune_operation_seed, verify,
+};
+pub use service::{
+    Moot, MootCheckpointSnapshot, MootCommandReceipt, MootDropImportReceipt, MootDropSelector,
+    MootError, MootFile, MootLane, MootOutboundOperation, MootRetentionSettings, MootSnapshot,
 };
