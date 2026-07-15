@@ -8,14 +8,18 @@
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend};
-use murm_replication::CheckpointAuthority;
+use murm_replication::{
+    CheckpointAuthority, DropExportProfile, DropRecord, decode_operation_record,
+    export_topic_operations,
+};
+use p2panda_core::Topic;
 use proofs::Digest;
 
-use crate::constitution::{
+use crate::moot::constitution::{
     Constitution, ConstitutionRules, ConstitutionStore, ConstitutionStoreError,
 };
 
-use super::GovernedCheckpointAuthority;
+use super::super::records::GovernedCheckpointAuthority;
 
 /// Readable accepted constitutional state for one Moot.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,6 +63,9 @@ pub enum MootGovernanceError {
     /// The named constitution does not authorize this checkpoint signer.
     #[error("checkpoint is not authorized by the named constitution revision")]
     CheckpointDenied,
+    /// Native-drop evidence was malformed or could not be selected.
+    #[error("constitution drop evidence: {0}")]
+    Drop(String),
 }
 
 /// Constitutional command and query service for one Moot.
@@ -148,6 +155,72 @@ impl<B: Backend + Clone> MootGovernance<B> {
         Ok(GovernedCheckpointAuthority::from_state(&state))
     }
 
+    /// Every accepted authority revision, oldest first. A native drop carries
+    /// this evidence so checkpoints signed before a rotation remain verifiable
+    /// when a new device starts from the drop alone.
+    pub async fn checkpoint_authority_history(
+        &self,
+    ) -> Result<Vec<GovernedCheckpointAuthority>, MootGovernanceError> {
+        let mut operations = self.store.operations().await?;
+        operations.sort_by_key(|operation| operation.header.seq_num);
+        let mut history = Vec::new();
+        for end in 1..=operations.len() {
+            if let Some(state) = Constitution::fold(
+                self.store.moot_id(),
+                self.store.founder(),
+                operations[..end].iter(),
+            ) {
+                let authority = GovernedCheckpointAuthority::from_state(&state);
+                if history.last() != Some(&authority) {
+                    history.push(authority);
+                }
+            }
+        }
+        if history.is_empty() {
+            return Err(MootGovernanceError::NotFounded);
+        }
+        Ok(history)
+    }
+
+    /// Full constitution operations, encoded as native-drop records. Aggregate
+    /// Moot drops carry these as critical authority evidence before object
+    /// operations are admitted.
+    pub(crate) async fn drop_records(&self) -> Result<Vec<DropRecord>, MootGovernanceError> {
+        export_topic_operations::<B, crate::moot::constitution::ConstitutionExt, u64>(
+            &self.store.sync_store(),
+            &Topic::from(self.store.moot_id()),
+            DropExportProfile::default(),
+        )
+        .await
+        .map_err(|error| MootGovernanceError::Drop(error.to_string()))
+    }
+
+    /// Admit constitution operations decoded from verified critical drop
+    /// evidence. Header-only evidence is deliberately refused: authority is
+    /// meaningful only when the signed rule body is present.
+    pub(crate) async fn accept_drop_records(
+        &self,
+        records: &[DropRecord],
+    ) -> Result<u64, MootGovernanceError> {
+        let mut accepted = 0;
+        for record in records {
+            let Some(operation) = decode_operation_record(record)
+                .map_err(|error| MootGovernanceError::Drop(error.to_string()))?
+            else {
+                continue;
+            };
+            if operation.body.is_none() {
+                return Err(MootGovernanceError::Constitution(
+                    ConstitutionStoreError::Constitution(
+                        crate::moot::constitution::ConstitutionError::Malformed,
+                    ),
+                ));
+            }
+            accepted += u64::from(self.store.accept(&operation).await?);
+        }
+        Ok(accepted)
+    }
+
     /// Require the accepted revision to authorize one checkpoint signer.
     pub async fn authorize_checkpoint(
         &self,
@@ -194,6 +267,7 @@ mod tests {
             .unwrap();
 
         let mut amended = ConstitutionRules::founder_only(founder_id);
+        amended.checkpoint_signers.clear();
         amended.checkpoint_signers.insert([9; 32]);
         let snapshot = governance
             .amend(founder.to_seed(), amended.clone(), 2)

@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use crate::tessera::event::{BASIS_POINTS, ChainRoot, CommitmentId, TesseraEvent};
+use crate::moot::tessera::event::{BASIS_POINTS, ChainRoot, CommitmentId, TesseraEvent};
 
 /// Tunable weights and curves for the score. Per-moot configurable — the plan
 /// keeps no global hardcoded reputation economy — these are the defaults.
@@ -28,7 +28,7 @@ pub struct TesseraConfig {
     pub governance_reward: i64,
     /// Fraction (basis points) of a chain root's *positive* standing a forked
     /// persona presents, applied once per generation from the root — the Sybil
-    /// cost of a fresh face. See [`crate::tessera::persona_chain`].
+    /// cost of a fresh face. See [`crate::moot::tessera::persona_chain`].
     pub depreciation_bp: u16,
     /// Fraction (basis points) of a censure that loops back onto each persona who
     /// vouched for the censured one — the accountability cost of vouching. Phase 3.
@@ -277,7 +277,7 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tessera::event::Scope;
+    use crate::moot::tessera::event::Scope;
 
     fn root(n: u8) -> ChainRoot {
         ChainRoot([n; 32])

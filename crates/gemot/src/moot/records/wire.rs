@@ -12,14 +12,31 @@
 
 use identity::Ed25519Keypair;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
 use serde::{Deserialize, Serialize};
+
+use super::retention::RetentionCheckpoint;
+
+/// Separate logs keep checkpoint authority available after event pruning.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum MootLogId {
+    Events,
+    Checkpoints,
+}
 
 /// The signed addressing extension on a moot operation: which moot the
 /// event belongs to.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MootExt {
     pub moot_id: [u8; 32],
+    /// Upstream-compatible signal that this operation retires its event prefix.
+    #[serde(
+        rename = "p",
+        skip_serializing_if = "PruneFlag::is_not_set",
+        default = "PruneFlag::default"
+    )]
+    pub prune_flag: PruneFlag,
 }
 
 /// A moot object event — the records the roster folds.
@@ -44,6 +61,13 @@ pub enum MootEvent {
         title: String,
         at_ms: u64,
     },
+    /// Constitution-authorized current state and retained event frontiers.
+    RetentionCheckpoint {
+        checkpoint: Box<RetentionCheckpoint>,
+    },
+    /// An author's event-log prune point. Its checkpoint remains in the
+    /// separate checkpoint log.
+    HistoryPruned { checkpoint: [u8; 32], at_ms: u64 },
 }
 
 impl MootEvent {
@@ -51,7 +75,16 @@ impl MootEvent {
         match self {
             MootEvent::Declared { at_ms, .. }
             | MootEvent::Joined { at_ms, .. }
-            | MootEvent::Shared { at_ms, .. } => *at_ms,
+            | MootEvent::Shared { at_ms, .. }
+            | MootEvent::HistoryPruned { at_ms, .. } => *at_ms,
+            MootEvent::RetentionCheckpoint { checkpoint } => checkpoint.at_ms,
+        }
+    }
+
+    pub(crate) fn log_id(&self) -> MootLogId {
+        match self {
+            Self::RetentionCheckpoint { .. } => MootLogId::Checkpoints,
+            _ => MootLogId::Events,
         }
     }
 }
@@ -77,6 +110,44 @@ pub fn to_operation(
     to_operation_seed(keypair.to_seed(), moot_id, event, seq_num, backlink)
 }
 
+/// Sign a `HistoryPruned` event with p2panda's prune flag set.
+pub fn to_prune_operation(
+    keypair: &Ed25519Keypair,
+    moot_id: [u8; 32],
+    checkpoint: [u8; 32],
+    at_ms: u64,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+) -> Operation<MootExt> {
+    to_prune_operation_seed(
+        keypair.to_seed(),
+        moot_id,
+        checkpoint,
+        at_ms,
+        seq_num,
+        backlink,
+    )
+}
+
+/// Provider-neutral form of [`to_prune_operation`].
+pub fn to_prune_operation_seed(
+    signing_seed: [u8; 32],
+    moot_id: [u8; 32],
+    checkpoint: [u8; 32],
+    at_ms: u64,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+) -> Operation<MootExt> {
+    to_operation_seed_with_prune(
+        signing_seed,
+        moot_id,
+        &MootEvent::HistoryPruned { checkpoint, at_ms },
+        seq_num,
+        backlink,
+        true,
+    )
+}
+
 /// Provider-neutral form of [`to_operation`]. Personae and other external
 /// identity providers can supply a protocol-scoped Ed25519 seed without
 /// depending on Mere's identity crate.
@@ -86,6 +157,17 @@ pub fn to_operation_seed(
     event: &MootEvent,
     seq_num: u64,
     backlink: Option<[u8; 32]>,
+) -> Operation<MootExt> {
+    to_operation_seed_with_prune(signing_seed, moot_id, event, seq_num, backlink, false)
+}
+
+fn to_operation_seed_with_prune(
+    signing_seed: [u8; 32],
+    moot_id: [u8; 32],
+    event: &MootEvent,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+    prune: bool,
 ) -> Operation<MootExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let body_bytes = encode_cbor(event).expect("a MootEvent always CBOR-encodes");
@@ -99,7 +181,10 @@ pub fn to_operation_seed(
         timestamp: Timestamp::from(event.at_ms()),
         seq_num,
         backlink: backlink.map(Hash::from),
-        extensions: MootExt { moot_id },
+        extensions: MootExt {
+            moot_id,
+            prune_flag: PruneFlag::new(prune),
+        },
     };
     header.sign(&signing_key);
     let hash = header.hash();

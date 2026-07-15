@@ -20,17 +20,17 @@ use std::sync::Arc as StdArc;
 use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use murm_replication::SyncedSpace;
+use muniment::MemoryBackend;
+use murm_replication::{MunimentStore, SyncedSpace};
 use p2panda_core::{Operation, Topic};
 use p2panda_net::sync::SyncHandle;
 use p2panda_net::{Endpoint, Gossip, LogSync};
-use p2panda_store::SqliteStore;
 use p2panda_sync::protocols::TopicLogSyncEvent;
 use transport::P2pandaTransport;
 
 use super::roster::MootRoster;
 use super::store::MootStore;
-use super::wire::{MootEvent, MootExt, verify};
+use super::wire::{MootEvent, MootExt, MootLogId, verify};
 
 const MOOT: [u8; 32] = [0x6e; 32];
 
@@ -44,12 +44,12 @@ struct MootSession {
     store: MootStore,
     handle: MootHandle,
     space: SyncedSpace,
-    _log_sync: LogSync<SqliteStore, [u8; 32], MootExt>,
+    _log_sync: LogSync<MunimentStore<MemoryBackend, MootExt>, MootLogId, MootExt>,
 }
 
 impl MootSession {
     async fn join(endpoint: Endpoint, gossip: Gossip, store: MootStore) -> Self {
-        let log_sync = LogSync::builder(store.sqlite(), endpoint, gossip)
+        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
             .spawn()
             .await
             .expect("logsync spawn");
@@ -129,7 +129,7 @@ async fn two_peers() -> (P2pandaTransport, P2pandaTransport) {
 
 async fn join(t: &P2pandaTransport) -> MootSession {
     let (ep, gossip) = t.sync_parts().expect("sync parts");
-    let store = MootStore::in_memory().await.expect("store");
+    let store = MootStore::in_memory();
     MootSession::join(ep, gossip, store).await
 }
 
@@ -239,7 +239,7 @@ async fn a_late_joiner_catches_up_on_an_existing_moot() {
     let founder_kp = InMemoryProvider::from_seed([70; 32])
         .derive_keypair(b"moot-author")
         .unwrap();
-    let store = MootStore::in_memory().await.unwrap();
+    let store = MootStore::in_memory();
     // Author into the store before joining (no live peer yet); the friend
     // catches up over RBSR.
     store

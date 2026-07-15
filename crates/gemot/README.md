@@ -24,6 +24,24 @@ decentralized communities to take root in and interoperate across.**
 Communities should outlive any single host, span protocols, and travel
 with their members.
 
+## Moot layout
+
+`Moot` is the public community aggregate and owns the namespace below. The
+modules make the three persistence lanes explicit without making callers
+assemble them themselves:
+
+```text
+gemot::moot
+├── constitution  signed governance law, folds, checkpoints, and sync
+├── records       the public community object and retention lane
+└── tessera       trust facts, persona lineage, storage, and sync
+```
+
+`moot::Moot` composes those lanes at the command, snapshot, and native-drop
+boundary. `records` retains compatibility re-exports for the raw object lane;
+new code should enter through the aggregate unless it is deliberately working
+at a lane boundary.
+
 ## What `gemot` owns
 
 Moots are **graph views that link to and store** community resources —
@@ -135,7 +153,7 @@ it back up.
 ## How it relates to other workspace crates
 
 ```text
-                graphshell moot/coalition UI
+                 Merecat community UI
                             │
                             ▼
                           gemot
@@ -187,17 +205,27 @@ it back up.
 - **`mere-bridge-*` crates** (planned) — outbound-only Pattern B
   bridges, distinct from `mooting-*` adapters. For systems that can't
   host moot semantics or where mere only wants to publish.
-- [`mere`](https://crates.io/crates/mere) — composes moothold into the
-  product.
+- [`moothold`](https://crates.io/crates/moothold) — Tier 3 federation:
+  direct concords, reciprocity, and cross-Moot resource coordination.
+- [`mere`](https://crates.io/crates/mere) — supplies the reusable graph-browser
+  library; Merecat composes Gemot and Moothold into the product.
 
 ## Status
 
-Pre-1.0 placeholder. Currently exposes only `VERSION` and `STAGE`
-constants. The first concrete slices land per the
+Pre-1.0. Signed Moot declarations, membership, fauna, deterministic roster
+folds, Tessera, constitutional governance, shared muniment stores,
+constitution-bound retention checkpoints, prefix pruning, and host-composed
+sync proofs are implemented. The aggregate `Moot` service composes governance,
+object and Tessera commands, snapshots, checkpointing, pruning, and authority
+rotation without exposing p2panda types. Plain and protected aggregate drops
+carry critical constitution evidence, bootstrap a rotated checkpoint chain on a
+fresh recipient, and refresh the materialized view through the shared atomic
+importer. A receipt resolves to an explicit typed outbound operation for the
+host to publish. Quorum rules and capability grants remain. The next slices land per the
 [moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 
-- **T1 milestone**: orrery as a one-member moothold-of-self with local
+- **T1 milestone**: orrery as a one-member moot-of-self with local
   pin tracking, public node sharing.
 - **T2 milestone**: two-member moot; signed stake + agreement; engram
   authoring + pinning; live-service hosting commitments with

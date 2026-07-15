@@ -1,10 +1,10 @@
 [package]
 name = "gemot"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Community and federation supercrate for the Mere browser — moots, coalitions, social primitives across protocols."
+description = "Community domain and assembly layer for Moot lifecycle, governance, replication, and Tessera."
 documentation = "https://docs.rs/gemot"
 readme = "README.md"
 keywords = ["federation", "community", "social", "p2p", "browser"]
@@ -23,16 +23,13 @@ p2panda-core = "0.6.1"
 identity.workspace = true
 murm-replication = { workspace = true }
 proofs.workspace = true
-# The three sync traits LogSync reconciles against (`LogStore` + `TopicStore`,
-# plus `OperationStore`). The `sqlite` feature backs the *moot object* lane's
-# `MootStore` (p2panda's own SQLite impls); the *tessera* lane rides muniment
-# through the mooting adapter instead — the substrate convergence, so tessera,
-# murm and mesh share one store family. `macros` (OperationStore derive) stays off.
-p2panda-store = { version = "0.6.1", default-features = false, features = ["sqlite"] }
+# The sync traits implemented by the shared muniment adapter. `macros` and
+# p2panda-store's own SQLite backend stay off.
+p2panda-store = { version = "0.6.1", default-features = false }
 # Recognition policy remains in mooting. The generic store moved to
 # murm-replication.
 mooting = { workspace = true }
-muniment = { git = "https://github.com/mark-ik/muniment.git", branch = "main", features = ["redb"] }
+muniment = { workspace = true, features = ["redb"] }
 redb = "2"
 thiserror = "1"
 # Sync is host-composed after the sibling-posture purity split: gemot owns no

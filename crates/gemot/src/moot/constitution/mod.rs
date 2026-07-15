@@ -7,6 +7,7 @@
 
 mod event;
 mod fold;
+mod governance;
 mod store;
 mod wire;
 
@@ -15,6 +16,9 @@ mod sync;
 
 pub use event::{AmendmentRule, ConstitutionEvent, ConstitutionRules};
 pub use fold::{Constitution, ConstitutionError, GovernedAction, authorize_governed};
+pub use governance::{
+    MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
+};
 pub use store::{ConstitutionFileStore, ConstitutionStore, ConstitutionStoreError};
 pub use wire::{
     ConstitutionExt, ConstitutionWireError, from_operation, to_operation, to_operation_seed, verify,

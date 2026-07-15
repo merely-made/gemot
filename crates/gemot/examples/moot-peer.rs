@@ -18,7 +18,7 @@
 //!   MOOT_SPACE  shared passphrase naming the moot (hashed to the moot id);
 //!               every participating device sets the same value
 //!   MOOT_SEED   this device's identity seed string; distinct per device
-//!   MOOT_DB     optional sqlite URL for a durable store (default in-memory)
+//!   MOOT_DB     optional redb path for a durable store (default temporary)
 //! ```
 //!
 //! Each mode prints this device's ticket; paste a peer's ticket on stdin
@@ -29,12 +29,12 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use gemot::moot::{MootEvent, MootExt, MootLogId, MootRoster, MootStoreFile, verify};
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use gemot::moot::{MootEvent, MootExt, MootRoster, MootStore, verify};
-use murm_replication::SyncedSpace;
+use muniment::RedbBackend;
+use murm_replication::{MunimentStore, SyncedSpace};
 use p2panda_core::{Hash, Operation, Topic};
 use p2panda_net::LogSync;
-use p2panda_store::SqliteStore;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;
 
@@ -222,11 +222,14 @@ async fn main() -> Result<(), String> {
         }
     });
 
-    let store = match std::env::var("MOOT_DB") {
-        Ok(url) => MootStore::at_url(&url).await,
-        Err(_) => MootStore::in_memory().await,
-    }
-    .map_err(|e| format!("store: {e}"))?;
+    let temporary = std::env::var_os("MOOT_DB")
+        .is_none()
+        .then(|| tempfile::tempdir().map_err(|error| format!("temporary store: {error}")))
+        .transpose()?;
+    let store_path = std::env::var_os("MOOT_DB")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| temporary.as_ref().unwrap().path().join("moot.redb"));
+    let store = MootStoreFile::at_path(store_path).map_err(|e| format!("store: {e}"))?;
 
     let (endpoint, gossip) = transport
         .sync_parts()
@@ -234,8 +237,8 @@ async fn main() -> Result<(), String> {
     // Host-composed pump: build the moot-object LogSync session, drain it via
     // the shared `SyncedSpace`, and keep the session + handle for liveness and
     // live publish. gemot owns no p2panda-net; the host wires the pump.
-    let log_sync: LogSync<SqliteStore, [u8; 32], MootExt> =
-        LogSync::builder(store.sqlite(), endpoint, gossip)
+    let log_sync: LogSync<MunimentStore<RedbBackend, MootExt>, MootLogId, MootExt> =
+        LogSync::builder(store.sync_store(), endpoint, gossip)
             .spawn()
             .await
             .map_err(|e| format!("logsync spawn: {e}"))?;

@@ -1,6 +1,6 @@
 [package]
 name = "mooting"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -14,8 +14,6 @@ categories = ["network-programming"]
 path = "src/lib.rs"
 
 [dependencies]
-# Compatibility re-export while consumers move `MunimentStore` to its new home.
-murm-replication = { workspace = true }
 # Recognition fingerprints use p2panda's native BLAKE3 hash and CBOR.
 p2panda-core = "0.6.1"
 serde = { version = "1", features = ["derive"] }

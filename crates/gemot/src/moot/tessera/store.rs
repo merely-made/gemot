@@ -33,9 +33,9 @@ use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 
-use crate::tessera::event::TesseraEvent;
-use crate::tessera::ledger::{Ledger, TesseraConfig};
-use crate::tessera::wire::{TesseraExt, from_operation};
+use crate::moot::tessera::event::TesseraEvent;
+use crate::moot::tessera::ledger::{Ledger, TesseraConfig};
+use crate::moot::tessera::wire::{TesseraExt, from_operation, to_operation_seed};
 
 /// The single per-moot tessera log id: each author keeps one tessera log per moot,
 /// so the log id is a constant and the moot id is the topic.
@@ -123,6 +123,28 @@ impl TesseraStore<RedbBackend> {
 }
 
 impl<B: Backend + Clone> TesseraStore<B> {
+    /// Sign and store the next event in this author's per-Moot Tessera log.
+    /// The returned operation is the explicit host-publication seam.
+    pub async fn author_seed(
+        &self,
+        signing_seed: [u8; 32],
+        moot_id: [u8; 32],
+        event: &TesseraEvent,
+    ) -> Result<Operation<TesseraExt>, TesseraStoreError> {
+        let author = p2panda_core::SigningKey::from_bytes(&signing_seed).verifying_key();
+        let previous = self.store.get_latest_entry(&author, &LOG_ID).await?;
+        let (seq_num, backlink) = match previous {
+            Some(operation) => (
+                operation.header.seq_num + 1,
+                Some(*operation.hash.as_bytes()),
+            ),
+            None => (0, None),
+        };
+        let operation = to_operation_seed(signing_seed, moot_id, event, seq_num, backlink);
+        self.accept(moot_id, &operation).await?;
+        Ok(operation)
+    }
+
     /// A clone of the underlying store, for `LogSync::builder` (which takes the
     /// store by value and reconciles through its trait surface).
     pub fn sync_store(&self) -> MunimentStore<B, TesseraExt> {
@@ -227,8 +249,8 @@ impl<B: Backend + Clone> TesseraStore<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tessera::event::{ChainRoot, CommitmentId, Scope};
-    use crate::tessera::wire::to_operation;
+    use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope};
+    use crate::moot::tessera::wire::to_operation;
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
     use tempfile::tempdir;
 

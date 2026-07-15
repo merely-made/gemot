@@ -19,29 +19,35 @@ use std::collections::BTreeMap;
 
 use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
 use p2panda_core::{Hash, Operation};
+use serde::{Deserialize, Serialize};
 
+use super::retention::MootRosterSnapshot;
 use super::wire::{MootEvent, MootExt, from_operation, verify};
 
 /// The founding statement, as resolved by the fold.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Declaration {
     pub name: String,
     pub charter: String,
     /// The declaring author's verifying-key bytes.
     pub by: [u8; 32],
     pub at_ms: u64,
+    /// Winning declaration operation, retained as checkpoint fold evidence.
+    pub op_hash: [u8; 32],
 }
 
 /// One visible member.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {
     /// Display label from the member's first `Joined`.
     pub name: String,
     pub joined_at_ms: u64,
+    /// Winning join operation, retained as checkpoint fold evidence.
+    pub join_op_hash: [u8; 32],
 }
 
 /// One engram reference in the fauna.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FaunaEntry {
     pub manifest_id: [u8; 32],
     pub schema_id: String,
@@ -54,7 +60,7 @@ pub struct FaunaEntry {
 }
 
 /// The folded moot: founding, membership, fauna.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MootRoster {
     pub declaration: Option<Declaration>,
     /// Members keyed by author (verifying-key bytes), iteration-stable.
@@ -91,6 +97,18 @@ impl MootRoster {
     where
         I: IntoIterator<Item = &'a Operation<MootExt>>,
     {
+        Self::fold_from_snapshot(moot_id, &MootRosterSnapshot::default(), ops)
+    }
+
+    /// Replay a retained checkpoint plus operations after its frontier.
+    pub fn fold_from_snapshot<'a, I>(
+        moot_id: [u8; 32],
+        snapshot: &MootRosterSnapshot,
+        ops: I,
+    ) -> Self
+    where
+        I: IntoIterator<Item = &'a Operation<MootExt>>,
+    {
         // Gather.
         // declaring-op hash → declaration; BTreeMap gives the lowest-hash
         // winner for free.
@@ -99,6 +117,21 @@ impl MootRoster {
         // breaks at_ms ties deterministically.
         let mut joins: BTreeMap<[u8; 32], (u64, [u8; 32], String)> = BTreeMap::new();
         let mut fauna: Vec<FaunaEntry> = Vec::new();
+
+        if let Some(declaration) = &snapshot.roster.declaration {
+            declarations.insert(declaration.op_hash, declaration.clone());
+        }
+        for (author, member) in &snapshot.roster.members {
+            joins.insert(
+                *author,
+                (
+                    member.joined_at_ms,
+                    member.join_op_hash,
+                    member.name.clone(),
+                ),
+            );
+        }
+        fauna.extend(snapshot.roster.fauna.iter().cloned());
 
         for op in ops {
             if !verify(op) {
@@ -125,6 +158,7 @@ impl MootRoster {
                             charter,
                             by: author,
                             at_ms,
+                            op_hash,
                         },
                     );
                 }
@@ -154,6 +188,7 @@ impl MootRoster {
                         op_hash,
                     });
                 }
+                MootEvent::RetentionCheckpoint { .. } | MootEvent::HistoryPruned { .. } => {}
             }
         }
 
@@ -162,7 +197,16 @@ impl MootRoster {
         let membership_revision = membership_revision(&joins);
         let members = joins
             .into_iter()
-            .map(|(author, (joined_at_ms, _, name))| (author, Member { name, joined_at_ms }))
+            .map(|(author, (joined_at_ms, join_op_hash, name))| {
+                (
+                    author,
+                    Member {
+                        name,
+                        joined_at_ms,
+                        join_op_hash,
+                    },
+                )
+            })
             .collect();
         fauna.sort_by(|a, b| (a.at_ms, a.op_hash).cmp(&(b.at_ms, b.op_hash)));
 
@@ -198,7 +242,7 @@ fn membership_revision(joins: &BTreeMap<[u8; 32], (u64, [u8; 32], String)>) -> [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::wire::to_operation;
+    use crate::moot::records::wire::to_operation;
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [0x6d; 32];

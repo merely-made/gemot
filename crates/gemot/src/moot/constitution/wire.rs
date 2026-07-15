@@ -87,7 +87,7 @@ pub fn verify(operation: &Operation<ConstitutionExt>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constitution::ConstitutionRules;
+    use crate::moot::constitution::ConstitutionRules;
     use identity::{IdentityProvider, InMemoryProvider};
 
     #[test]

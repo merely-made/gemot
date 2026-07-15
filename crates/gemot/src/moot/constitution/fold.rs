@@ -183,7 +183,7 @@ impl Constitution {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constitution::{ConstitutionEvent, ConstitutionRules, to_operation};
+    use crate::moot::constitution::{ConstitutionEvent, ConstitutionRules, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [0x63; 32];

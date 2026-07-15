@@ -1,0 +1,928 @@
+//! Aggregate domain service for one Moot.
+//!
+//! This is the application boundary above constitutional governance and the
+//! replicated Moot object store. Commands take seeds and domain values, persist
+//! through the shared processor, and return plain receipts and snapshots.
+
+use std::io::{Read, Write};
+use std::path::Path;
+
+use muniment::{Backend, MemoryBackend, RedbBackend};
+use murm_replication::{
+    DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropId,
+    DropImportReport, DropLimits, DropProtector, DropRecord, DropWriteReceipt, EvidenceKind,
+    NativeDropError, read_plain_drop, read_protected_drop, write_plain_drop, write_protected_drop,
+};
+use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use proofs::Digest;
+use serde::{Deserialize, Serialize};
+
+use super::constitution::{
+    ConstitutionRules, MootGovernance, MootGovernanceError, MootGovernanceSnapshot,
+};
+
+use super::MootId;
+use super::records::{
+    AvailabilityPolicy, ErasurePolicy, MootEvent, MootRetentionPolicy, MootRoster, MootStore,
+    MootStoreError, PolicyRevision,
+};
+use super::tessera::{TesseraEvent, TesseraExt, TesseraFileStore, TesseraStore, TesseraStoreError};
+
+const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
+
+/// Stable privacy and radio-budget priorities for an importable Moot drop.
+/// Every selected record remains full-bodied because a signed log with a
+/// missing body cannot safely reconstruct governance or roster state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MootDropSelector {
+    pub checkpoint_priority: u32,
+    pub roster_priority: u32,
+    pub fauna_priority: u32,
+}
+
+impl Default for MootDropSelector {
+    fn default() -> Self {
+        Self {
+            checkpoint_priority: 100,
+            roster_priority: 80,
+            fauna_priority: 40,
+        }
+    }
+}
+
+impl DropExportSelector<super::MootExt> for MootDropSelector {
+    fn select(&self, operation: &p2panda_core::Operation<super::MootExt>) -> DropExportDecision {
+        let priority = match super::from_operation(operation) {
+            Ok((_, MootEvent::RetentionCheckpoint { .. })) => self.checkpoint_priority,
+            Ok((_, MootEvent::Declared { .. } | MootEvent::Joined { .. })) => self.roster_priority,
+            Ok((_, MootEvent::Shared { .. } | MootEvent::HistoryPruned { .. })) => {
+                self.fauna_priority
+            }
+            Err(_) => return DropExportDecision::Omit,
+        };
+        DropExportDecision::Full { priority }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct ConstitutionEvidence {
+    version: u16,
+    operations: Vec<DropRecord>,
+}
+
+/// Retention settings supplied by the Moot's governed configuration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootRetentionSettings {
+    pub revision: PolicyRevision,
+    pub availability: AvailabilityPolicy,
+    pub erasure: ErasurePolicy,
+}
+
+impl MootRetentionSettings {
+    fn resolve(
+        &self,
+        checkpoint_authority: super::GovernedCheckpointAuthority,
+        checkpoint_authority_history: Vec<super::GovernedCheckpointAuthority>,
+    ) -> MootRetentionPolicy {
+        MootRetentionPolicy {
+            revision: self.revision.clone(),
+            checkpoint_authority,
+            checkpoint_authority_history,
+            availability: self.availability,
+            erasure: self.erasure,
+        }
+    }
+}
+
+/// Latest accepted checkpoint, presented without wire-operation types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootCheckpointSnapshot {
+    pub operation: [u8; 32],
+    pub policy_revision: PolicyRevision,
+    pub authority_revision: Digest,
+    pub previous_checkpoint: Option<[u8; 32]>,
+    pub frontier_count: usize,
+    pub at_ms: u64,
+}
+
+/// Readable current state of one Moot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootSnapshot {
+    pub moot_id: MootId,
+    pub governance: MootGovernanceSnapshot,
+    pub roster: MootRoster,
+    pub checkpoint: Option<MootCheckpointSnapshot>,
+}
+
+/// Result of an object command. The operation id is enough for citations and
+/// outbox tracking while the p2panda operation remains inside the store.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootCommandReceipt {
+    pub operation: [u8; 32],
+    pub lane: MootLane,
+    pub snapshot: MootSnapshot,
+}
+
+/// The replicated lane an authored command must be published on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MootLane {
+    Objects,
+    Tessera,
+}
+
+/// A signed operation recovered from a command receipt for host-side live
+/// publication. Gemot stays transport-neutral; the host owns the typed handle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MootOutboundOperation {
+    Object(p2panda_core::Operation<super::MootExt>),
+    Tessera(p2panda_core::Operation<TesseraExt>),
+}
+
+/// Native-drop import result plus the refreshed materialized view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootDropImportReceipt {
+    pub import: DropImportReport,
+    pub constitution_operations: u64,
+    pub snapshot: MootSnapshot,
+}
+
+/// Aggregate Moot service failure.
+#[derive(Debug, thiserror::Error)]
+pub enum MootError {
+    #[error(transparent)]
+    Governance(#[from] MootGovernanceError),
+    #[error(transparent)]
+    Store(#[from] MootStoreError),
+    #[error(transparent)]
+    Tessera(#[from] TesseraStoreError),
+    #[error("moot has no accepted retention checkpoint")]
+    CheckpointMissing,
+    #[error("moot storage directory: {0}")]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Drop(#[from] NativeDropError),
+    #[error("Moot drop needs full operation bodies")]
+    HeaderOnlyDrop,
+    #[error("Moot drop selection omitted {0} retained records; increase its byte budget")]
+    IncompleteDropBudget(u64),
+    #[error("Moot drop is missing critical constitution authority evidence")]
+    ConstitutionEvidenceMissing,
+    #[error("Moot drop carries malformed constitution authority evidence")]
+    ConstitutionEvidenceMalformed,
+    #[error("authored operation is absent from its retained lane")]
+    OutboundMissing,
+}
+
+/// One Moot's constitutional and replicated object services.
+#[derive(Clone)]
+pub struct Moot<B> {
+    moot_id: MootId,
+    governance: MootGovernance<B>,
+    objects: MootStore<B>,
+    tessera: TesseraStore<B>,
+    retention: MootRetentionSettings,
+}
+
+/// Durable redb-backed aggregate Moot service.
+pub type MootFile = Moot<RedbBackend>;
+
+impl Moot<MemoryBackend> {
+    pub fn in_memory(moot_id: MootId, founder: [u8; 32], retention: MootRetentionSettings) -> Self {
+        Self {
+            moot_id,
+            governance: MootGovernance::in_memory(moot_id.0, founder),
+            objects: MootStore::in_memory(),
+            tessera: TesseraStore::in_memory(),
+            retention,
+        }
+    }
+}
+
+impl Moot<RedbBackend> {
+    /// Open one Moot beneath `directory`. Governance and object data use
+    /// separate redb files while presenting one domain service.
+    pub async fn open(
+        directory: impl AsRef<Path>,
+        moot_id: MootId,
+        founder: [u8; 32],
+        retention: MootRetentionSettings,
+    ) -> Result<Self, MootError> {
+        std::fs::create_dir_all(directory.as_ref())?;
+        let service = Self {
+            moot_id,
+            governance: MootGovernance::open(
+                directory.as_ref().join("constitution.redb"),
+                moot_id.0,
+                founder,
+            )?,
+            objects: MootStore::at_path(directory.as_ref().join("objects.redb"))?,
+            tessera: TesseraFileStore::open(directory.as_ref().join("tessera.redb"))?,
+            retention,
+        };
+        match service.governance.snapshot().await {
+            Ok(_) => service.refresh_retention_authority().await?,
+            Err(MootGovernanceError::NotFounded) => {}
+            Err(error) => return Err(error.into()),
+        }
+        Ok(service)
+    }
+}
+
+impl<B: Backend + Clone> Moot<B> {
+    pub fn moot_id(&self) -> MootId {
+        self.moot_id
+    }
+
+    /// Lower store boundary for host-composed LogSync and native-drop adapters.
+    pub fn object_store(&self) -> &MootStore<B> {
+        &self.objects
+    }
+
+    /// Lower store boundary for a host-composed Tessera LogSync session.
+    pub fn tessera_store(&self) -> &TesseraStore<B> {
+        &self.tessera
+    }
+
+    async fn refresh_retention_authority(&self) -> Result<(), MootError> {
+        let authority = self.governance.checkpoint_authority().await?;
+        let history = self.governance.checkpoint_authority_history().await?;
+        self.objects
+            .set_retention_policy(Some(self.retention.resolve(authority, history)));
+        Ok(())
+    }
+
+    /// Establish this Moot's first constitution and activate its checkpoint
+    /// authority for subsequent object commands.
+    pub async fn found(
+        &self,
+        founder_seed: [u8; 32],
+        parent_constitution: Option<Digest>,
+        divergence_point: Option<Digest>,
+        rules: ConstitutionRules,
+        at_ms: u64,
+    ) -> Result<MootSnapshot, MootError> {
+        self.governance
+            .found(
+                founder_seed,
+                parent_constitution,
+                divergence_point,
+                rules,
+                at_ms,
+            )
+            .await?;
+        self.refresh_retention_authority().await?;
+        self.snapshot().await
+    }
+
+    /// Amend the constitution and atomically switch future checkpoint
+    /// admission to the accepted authority revision.
+    pub async fn amend(
+        &self,
+        actor_seed: [u8; 32],
+        rules: ConstitutionRules,
+        at_ms: u64,
+    ) -> Result<MootSnapshot, MootError> {
+        self.governance.amend(actor_seed, rules, at_ms).await?;
+        self.refresh_retention_authority().await?;
+        self.snapshot().await
+    }
+
+    pub async fn declare(
+        &self,
+        actor_seed: [u8; 32],
+        name: String,
+        charter: String,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        self.author_object(
+            actor_seed,
+            MootEvent::Declared {
+                name,
+                charter,
+                at_ms,
+            },
+        )
+        .await
+    }
+
+    pub async fn join(
+        &self,
+        actor_seed: [u8; 32],
+        name: String,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        self.author_object(actor_seed, MootEvent::Joined { name, at_ms })
+            .await
+    }
+
+    pub async fn share(
+        &self,
+        actor_seed: [u8; 32],
+        manifest_id: [u8; 32],
+        schema_id: String,
+        title: String,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        self.author_object(
+            actor_seed,
+            MootEvent::Shared {
+                manifest_id,
+                schema_id,
+                title,
+                at_ms,
+            },
+        )
+        .await
+    }
+
+    async fn author_object(
+        &self,
+        actor_seed: [u8; 32],
+        event: MootEvent,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let operation = self
+            .objects
+            .author_seed(actor_seed, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Objects,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Record one Tessera fact through the same aggregate command surface.
+    /// The receipt can be resolved with [`outbound`](Self::outbound) and
+    /// published by the host on its Tessera LogSync handle.
+    pub async fn record_tessera(
+        &self,
+        actor_seed: [u8; 32],
+        event: TesseraEvent,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self
+            .tessera
+            .author_seed(actor_seed, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Tessera,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Recover an authored operation for host-side publication. This is the
+    /// only operation-typed aggregate API: transport ownership stays outside
+    /// Gemot while commands and receipts stay plain.
+    pub async fn outbound(
+        &self,
+        receipt: &MootCommandReceipt,
+    ) -> Result<MootOutboundOperation, MootError> {
+        let hash = p2panda_core::Hash::from_bytes(receipt.operation);
+        match receipt.lane {
+            MootLane::Objects => self
+                .objects
+                .operation(&hash)
+                .await?
+                .map(MootOutboundOperation::Object)
+                .ok_or(MootError::OutboundMissing),
+            MootLane::Tessera => self
+                .tessera
+                .get(&hash)
+                .await?
+                .map(MootOutboundOperation::Tessera)
+                .ok_or(MootError::OutboundMissing),
+        }
+    }
+
+    /// Author the next checkpoint under the currently accepted constitution.
+    pub async fn checkpoint(
+        &self,
+        actor_seed: [u8; 32],
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.refresh_retention_authority().await?;
+        let checkpoint = self.objects.build_checkpoint(self.moot_id.0, at_ms).await?;
+        self.author_object(
+            actor_seed,
+            MootEvent::RetentionCheckpoint {
+                checkpoint: Box::new(checkpoint),
+            },
+        )
+        .await
+    }
+
+    /// Retire this actor's event prefix at the latest accepted checkpoint.
+    pub async fn prune_current(
+        &self,
+        actor_seed: [u8; 32],
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let checkpoint = self
+            .objects
+            .latest_checkpoint(self.moot_id.0)
+            .await?
+            .ok_or(MootError::CheckpointMissing)?;
+        let operation = self
+            .objects
+            .author_prune_seed(actor_seed, self.moot_id.0, checkpoint.operation, at_ms)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Objects,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    async fn aggregate_drop_records(
+        &self,
+        selector: &MootDropSelector,
+        budget: DropExportBudget,
+    ) -> Result<Vec<DropRecord>, MootError> {
+        let evidence = ConstitutionEvidence {
+            version: CONSTITUTION_EVIDENCE_VERSION,
+            operations: self.governance.drop_records().await?,
+        };
+        let evidence_bytes =
+            encode_cbor(&evidence).map_err(|_| MootError::ConstitutionEvidenceMalformed)?;
+        let mut records = vec![DropRecord::Evidence {
+            kind: EvidenceKind::CheckpointAuthorization,
+            subject: self.moot_id.0,
+            bytes: evidence_bytes,
+            critical: true,
+        }];
+        let (objects, selection) = self
+            .objects
+            .export_selected_drop_records(self.moot_id.0, selector, budget)
+            .await?;
+        if selection.budget_omitted != 0 || selection.policy_omitted != 0 {
+            return Err(MootError::IncompleteDropBudget(
+                selection.budget_omitted + selection.policy_omitted,
+            ));
+        }
+        records.extend(objects);
+        Ok(records)
+    }
+
+    fn constitution_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
+        let mut found = None;
+        for record in records {
+            let DropRecord::Evidence {
+                kind: EvidenceKind::CheckpointAuthorization,
+                subject,
+                bytes,
+                critical: true,
+            } = record
+            else {
+                continue;
+            };
+            if *subject != self.moot_id.0 || found.is_some() {
+                return Err(MootError::ConstitutionEvidenceMalformed);
+            }
+            let evidence: ConstitutionEvidence =
+                decode_cbor(&bytes[..]).map_err(|_| MootError::ConstitutionEvidenceMalformed)?;
+            if evidence.version != CONSTITUTION_EVIDENCE_VERSION
+                || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
+            {
+                return Err(MootError::ConstitutionEvidenceMalformed);
+            }
+            found = Some(evidence.operations);
+        }
+        found.ok_or(MootError::ConstitutionEvidenceMissing)
+    }
+
+    async fn import_aggregate_records(
+        &self,
+        drop_id: DropId,
+        records: Vec<DropRecord>,
+    ) -> Result<MootDropImportReceipt, MootError> {
+        let evidence = self.constitution_evidence(&records)?;
+        let constitution_operations = self.governance.accept_drop_records(&evidence).await?;
+        // The evidence becomes active before the object lane examines its
+        // checkpoint chain. This is the dependency order a fresh device needs
+        // after a signer rotation.
+        self.refresh_retention_authority().await?;
+        let import = self
+            .objects
+            .import_drop_records(self.moot_id.0, drop_id, records)
+            .await?;
+        Ok(MootDropImportReceipt {
+            import,
+            constitution_operations,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Export public or explicitly local Moot state as a self-contained native
+    /// drop. The carrier includes critical constitution authority evidence.
+    pub async fn export_plain_drop<W: Write>(
+        &self,
+        writer: &mut W,
+        profile: DropExportProfile,
+        limits: DropLimits,
+    ) -> Result<DropWriteReceipt, MootError> {
+        if !profile.include_operation_bodies {
+            return Err(MootError::HeaderOnlyDrop);
+        }
+        let records = self
+            .aggregate_drop_records(&MootDropSelector::default(), DropExportBudget::default())
+            .await?;
+        Ok(write_plain_drop(writer, &records, limits)?)
+    }
+
+    /// Export a protected, importable Moot drop. A caller supplies its group
+    /// protection suite; Gemot never picks keys or silently falls back to
+    /// plaintext.
+    pub async fn export_protected_drop<W: Write, D: DropProtector>(
+        &self,
+        writer: &mut W,
+        selector: &MootDropSelector,
+        budget: DropExportBudget,
+        limits: DropLimits,
+        protector: &D,
+    ) -> Result<DropWriteReceipt, MootError> {
+        let records = self.aggregate_drop_records(selector, budget).await?;
+        Ok(write_protected_drop(writer, &records, limits, protector)?)
+    }
+
+    /// Import a self-contained plaintext/public Moot drop. Critical
+    /// constitution evidence is admitted before the checkpoint chain.
+    pub async fn import_plain_drop<R: Read>(
+        &self,
+        reader: R,
+        limits: DropLimits,
+    ) -> Result<MootDropImportReceipt, MootError> {
+        let (read, records) = read_plain_drop(reader, limits)?;
+        self.import_aggregate_records(read.id, records).await
+    }
+
+    /// Import a protected Moot drop through the caller's group-key suite.
+    pub async fn import_protected_drop<R: Read, D: DropProtector>(
+        &self,
+        reader: R,
+        limits: DropLimits,
+        protector: &D,
+    ) -> Result<MootDropImportReceipt, MootError> {
+        let (read, records) = read_protected_drop(reader, limits, protector)?;
+        self.import_aggregate_records(read.id, records).await
+    }
+
+    pub async fn snapshot(&self) -> Result<MootSnapshot, MootError> {
+        let governance = self.governance.snapshot().await?;
+        let roster = self.objects.roster(self.moot_id.0).await?;
+        let checkpoint = self
+            .objects
+            .latest_checkpoint(self.moot_id.0)
+            .await?
+            .map(|stored| MootCheckpointSnapshot {
+                operation: stored.operation,
+                policy_revision: stored.checkpoint.policy_revision,
+                authority_revision: stored.checkpoint.authority_revision,
+                previous_checkpoint: stored.checkpoint.previous_checkpoint,
+                frontier_count: stored.checkpoint.frontier.len(),
+                at_ms: stored.checkpoint.at_ms,
+            });
+        Ok(MootSnapshot {
+            moot_id: self.moot_id,
+            governance,
+            roster,
+            checkpoint,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::moot::tessera::{ChainRoot, TesseraEvent};
+    use crate::moot::{KeepBound, MootStoreError};
+    use identity::{IdentityProvider, InMemoryProvider};
+    use murm_replication::NativeDropError;
+    use std::io::Cursor;
+
+    const ID: MootId = MootId([0x6d; 32]);
+
+    fn keypair(seed: u8) -> identity::Ed25519Keypair {
+        InMemoryProvider::from_seed([seed; 32])
+            .derive_keypair(b"moot-service")
+            .unwrap()
+    }
+
+    fn retention() -> MootRetentionSettings {
+        MootRetentionSettings {
+            revision: PolicyRevision(Digest::blake3(b"moot retention settings")),
+            availability: AvailabilityPolicy {
+                promised_floor: KeepBound::Forever,
+            },
+            erasure: ErasurePolicy {
+                history_ceiling: KeepBound::UntilCheckpoint,
+            },
+        }
+    }
+
+    struct TestProtector;
+
+    impl DropProtector for TestProtector {
+        fn suite_id(&self) -> u16 {
+            77
+        }
+
+        fn protect(&self, plaintext: &[u8], aad: &[u8]) -> Result<Vec<u8>, NativeDropError> {
+            Ok(plaintext
+                .iter()
+                .enumerate()
+                .map(|(index, byte)| byte ^ aad[index % aad.len()])
+                .collect())
+        }
+
+        fn unprotect(
+            &self,
+            protected: &[u8],
+            aad: &[u8],
+            max_plaintext_bytes: u64,
+        ) -> Result<Vec<u8>, NativeDropError> {
+            if protected.len() as u64 > max_plaintext_bytes {
+                return Err(NativeDropError::Limit {
+                    limit: "test plaintext bytes",
+                    actual: protected.len() as u64,
+                    maximum: max_plaintext_bytes,
+                });
+            }
+            self.protect(protected, aad)
+        }
+    }
+
+    #[tokio::test]
+    async fn one_service_runs_governance_roster_checkpoint_and_rotation() {
+        let founder = keypair(1);
+        let successor = keypair(2);
+        let service = Moot::in_memory(ID, founder.public_key().to_bytes(), retention());
+        service
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder.public_key().to_bytes()),
+                1,
+            )
+            .await
+            .unwrap();
+        service
+            .declare(
+                founder.to_seed(),
+                "printing circle".into(),
+                "shared type".into(),
+                2,
+            )
+            .await
+            .unwrap();
+        service
+            .join(founder.to_seed(), "mark".into(), 3)
+            .await
+            .unwrap();
+        let first = service.checkpoint(founder.to_seed(), 10).await.unwrap();
+
+        let mut rotated = ConstitutionRules::founder_only(founder.public_key().to_bytes());
+        rotated.checkpoint_signers.clear();
+        rotated
+            .checkpoint_signers
+            .insert(successor.public_key().to_bytes());
+        service.amend(founder.to_seed(), rotated, 11).await.unwrap();
+        assert!(matches!(
+            service.checkpoint(founder.to_seed(), 12).await,
+            Err(MootError::Store(MootStoreError::Process(_)))
+        ));
+        let second = service.checkpoint(successor.to_seed(), 13).await.unwrap();
+        assert_eq!(
+            second
+                .snapshot
+                .checkpoint
+                .as_ref()
+                .unwrap()
+                .previous_checkpoint,
+            Some(first.operation)
+        );
+
+        service.prune_current(founder.to_seed(), 14).await.unwrap();
+        let snapshot = service.snapshot().await.unwrap();
+        assert_eq!(snapshot.roster.declaration.unwrap().name, "printing circle");
+        assert_eq!(snapshot.roster.members.len(), 1);
+        assert_eq!(snapshot.checkpoint.unwrap().operation, second.operation);
+    }
+
+    #[tokio::test]
+    async fn durable_service_reopens_both_governance_and_roster() {
+        let directory = tempfile::tempdir().unwrap();
+        let founder = keypair(3);
+        let founder_id = founder.public_key().to_bytes();
+        let service = MootFile::open(directory.path(), ID, founder_id, retention())
+            .await
+            .unwrap();
+        service
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+        service
+            .join(founder.to_seed(), "mark".into(), 2)
+            .await
+            .unwrap();
+        drop(service);
+
+        let reopened = MootFile::open(directory.path(), ID, founder_id, retention())
+            .await
+            .unwrap();
+        assert_eq!(reopened.snapshot().await.unwrap().roster.members.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn native_drop_bootstraps_checkpoint_and_roster_then_is_idempotent() {
+        let founder = keypair(4);
+        let founder_id = founder.public_key().to_bytes();
+        let source = Moot::in_memory(ID, founder_id, retention());
+        let destination = Moot::in_memory(ID, founder_id, retention());
+        for service in [&source, &destination] {
+            service
+                .found(
+                    founder.to_seed(),
+                    None,
+                    None,
+                    ConstitutionRules::founder_only(founder_id),
+                    1,
+                )
+                .await
+                .unwrap();
+        }
+        source
+            .declare(
+                founder.to_seed(),
+                "drop circle".into(),
+                "travels by file".into(),
+                2,
+            )
+            .await
+            .unwrap();
+        source
+            .join(founder.to_seed(), "mark".into(), 3)
+            .await
+            .unwrap();
+        source.checkpoint(founder.to_seed(), 4).await.unwrap();
+
+        let mut bytes = Vec::new();
+        source
+            .export_plain_drop(
+                &mut bytes,
+                DropExportProfile::default(),
+                DropLimits::default(),
+            )
+            .await
+            .unwrap();
+        let first = destination
+            .import_plain_drop(Cursor::new(bytes.clone()), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(first.snapshot.roster.members.len(), 1);
+        assert_eq!(
+            first.snapshot.roster.declaration.unwrap().name,
+            "drop circle"
+        );
+        assert!(first.snapshot.checkpoint.is_some());
+
+        let repeated = destination
+            .import_plain_drop(Cursor::new(bytes), DropLimits::default())
+            .await
+            .unwrap();
+        assert!(repeated.import.receipt_hit);
+    }
+
+    #[tokio::test]
+    async fn aggregate_drop_bootstraps_rotated_checkpoint_authority() {
+        let founder = keypair(5);
+        let successor = keypair(6);
+        let founder_id = founder.public_key().to_bytes();
+        let source = Moot::in_memory(ID, founder_id, retention());
+        let destination = Moot::in_memory(ID, founder_id, retention());
+        source
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+        source
+            .join(founder.to_seed(), "mark".into(), 2)
+            .await
+            .unwrap();
+        source.checkpoint(founder.to_seed(), 3).await.unwrap();
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.checkpoint_signers.clear();
+        rules
+            .checkpoint_signers
+            .insert(successor.public_key().to_bytes());
+        source.amend(founder.to_seed(), rules, 4).await.unwrap();
+        let rotated = source.checkpoint(successor.to_seed(), 5).await.unwrap();
+
+        let mut bytes = Vec::new();
+        source
+            .export_plain_drop(
+                &mut bytes,
+                DropExportProfile::default(),
+                DropLimits::default(),
+            )
+            .await
+            .unwrap();
+        let imported = destination
+            .import_plain_drop(Cursor::new(bytes), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(imported.constitution_operations, 2);
+        assert_eq!(
+            imported.snapshot.checkpoint.unwrap().operation,
+            rotated.operation
+        );
+        assert_eq!(imported.snapshot.roster.members.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn protected_drop_and_tessera_command_expose_publishable_operations() {
+        let founder = keypair(7);
+        let founder_id = founder.public_key().to_bytes();
+        let source = Moot::in_memory(ID, founder_id, retention());
+        let destination = Moot::in_memory(ID, founder_id, retention());
+        source
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+        destination
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+        source
+            .declare(
+                founder.to_seed(),
+                "private circle".into(),
+                "sealed".into(),
+                2,
+            )
+            .await
+            .unwrap();
+        let mut bytes = Vec::new();
+        source
+            .export_protected_drop(
+                &mut bytes,
+                &MootDropSelector::default(),
+                DropExportBudget::default(),
+                DropLimits::default(),
+                &TestProtector,
+            )
+            .await
+            .unwrap();
+        let imported = destination
+            .import_protected_drop(Cursor::new(bytes), DropLimits::default(), &TestProtector)
+            .await
+            .unwrap();
+        assert_eq!(
+            imported.snapshot.roster.declaration.unwrap().name,
+            "private circle"
+        );
+
+        let receipt = source
+            .record_tessera(
+                founder.to_seed(),
+                TesseraEvent::GovernanceParticipation {
+                    by: ChainRoot(founder_id),
+                    at_ms: 3,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(receipt.lane, MootLane::Tessera);
+        assert!(matches!(
+            source.outbound(&receipt).await.unwrap(),
+            MootOutboundOperation::Tessera(_)
+        ));
+    }
+}

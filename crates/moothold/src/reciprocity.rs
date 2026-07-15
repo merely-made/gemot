@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use crate::tessera::concord::MootId;
+use crate::concord::MootId;
 
 /// The directed give-and-take ledger between moots: how much each moot has
 /// provided to each other moot.

@@ -133,6 +133,14 @@ impl ConstitutionStore<RedbBackend> {
 }
 
 impl<B: Backend + Clone> ConstitutionStore<B> {
+    pub(crate) fn moot_id(&self) -> [u8; 32] {
+        self.moot_id
+    }
+
+    pub(crate) fn founder(&self) -> [u8; 32] {
+        self.founder
+    }
+
     /// Shared LogSync store surface.
     pub fn sync_store(&self) -> MunimentStore<B, ConstitutionExt> {
         self.store.clone()
@@ -258,7 +266,11 @@ impl<B: Backend + Clone> ConstitutionStore<B> {
         Ok(self.store.get_latest_entry(author, &LOG_ID).await?)
     }
 
-    async fn operations(&self) -> Result<Vec<Operation<ConstitutionExt>>, ConstitutionStoreError> {
+    /// Retained accepted-operation corpus. Aggregate carriers use this to bind
+    /// checkpoint authority evidence beside Moot object records.
+    pub(crate) async fn operations(
+        &self,
+    ) -> Result<Vec<Operation<ConstitutionExt>>, ConstitutionStoreError> {
         let logs: BTreeMap<VerifyingKey, Vec<u64>> =
             self.store.resolve(&Topic::from(self.moot_id)).await?;
         let mut operations = Vec::new();

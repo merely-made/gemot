@@ -16,7 +16,7 @@ use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
 use serde::{Deserialize, Serialize};
 
-use crate::tessera::event::TesseraEvent;
+use crate::moot::tessera::event::TesseraEvent;
 
 /// The signed addressing extension on a tessera operation: which moot's event-DAG
 /// the event belongs to (like Murm's `cabal_id`). Signed into the header, so
@@ -46,7 +46,18 @@ pub fn to_operation(
     seq_num: u64,
     backlink: Option<[u8; 32]>,
 ) -> Operation<TesseraExt> {
-    let signing_key = SigningKey::from_bytes(&keypair.to_seed());
+    to_operation_seed(keypair.to_seed(), moot_id, event, seq_num, backlink)
+}
+
+/// Provider-neutral form of [`to_operation`].
+pub fn to_operation_seed(
+    signing_seed: [u8; 32],
+    moot_id: [u8; 32],
+    event: &TesseraEvent,
+    seq_num: u64,
+    backlink: Option<[u8; 32]>,
+) -> Operation<TesseraExt> {
+    let signing_key = SigningKey::from_bytes(&signing_seed);
     let body_bytes = encode_cbor(event).expect("a TesseraEvent always CBOR-encodes");
     let body = Body::new(&body_bytes);
     let mut header = Header {
@@ -86,7 +97,7 @@ pub fn verify(op: &Operation<TesseraExt>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tessera::event::{ChainRoot, CommitmentId, Scope};
+    use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope};
     use identity::{IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [0x30; 32];
