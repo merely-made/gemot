@@ -26,7 +26,10 @@ use super::records::{
     AvailabilityPolicy, ErasurePolicy, MootEvent, MootRetentionPolicy, MootRoster, MootStore,
     MootStoreError, PolicyRevision,
 };
-use super::tessera::{TesseraEvent, TesseraExt, TesseraFileStore, TesseraStore, TesseraStoreError};
+use super::tessera::{
+    GateDecision, TesseraEvent, TesseraExt, TesseraFacts, TesseraFileStore, TesseraStore,
+    TesseraStoreError, authorize,
+};
 
 const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
 
@@ -112,6 +115,43 @@ pub struct MootSnapshot {
     pub governance: MootGovernanceSnapshot,
     pub roster: MootRoster,
     pub checkpoint: Option<MootCheckpointSnapshot>,
+}
+
+/// A request to evaluate one capability-scoped community action.
+///
+/// `subject` is the stable persona-chain root, not the signing key of a single
+/// device or session. The capability path remains opaque to Gemot: Meadowcap,
+/// a p2panda group-state adapter, or a local policy provider may each give it
+/// its own structural meaning.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootAuthorizationRequest {
+    pub subject: [u8; 32],
+    pub capability_path: String,
+    pub at_ms: u64,
+}
+
+/// Inputs supplied by the Moot's membership and capability authority.
+///
+/// The provider answers structural access and supplies the current Tessera
+/// facts. Its `facts.is_member` field is the single membership input for a
+/// members-only constitution; `capability_covers` is the corresponding scoped
+/// grant decision. Key material never crosses this API: a group-key engine may
+/// back the provider later without putting decryption authority in Gemot.
+#[derive(Clone, Debug, Default)]
+pub struct MootAuthorizationInputs {
+    pub capability_covers: bool,
+    pub facts: TesseraFacts,
+}
+
+/// Supplies membership, scoped-capability, and reputation facts at the Moot
+/// authorization seam.
+///
+/// This is deliberately an injected read boundary. The signed constitution
+/// chooses the admission policy; the provider is the replaceable source of
+/// current group membership and grants. A future p2panda group-state/key
+/// adapter belongs here, rather than in the constitution fold or Tessera log.
+pub trait MootAuthorizationProvider {
+    fn inputs(&self, request: &MootAuthorizationRequest) -> MootAuthorizationInputs;
 }
 
 /// Result of an object command. The operation id is enough for citations and
@@ -285,6 +325,28 @@ impl<B: Backend + Clone> Moot<B> {
         self.governance.amend(actor_seed, rules, at_ms).await?;
         self.refresh_retention_authority().await?;
         self.snapshot().await
+    }
+
+    /// Evaluate a capability-scoped action under the currently accepted,
+    /// signed admission rule.
+    ///
+    /// The provider supplies mutable membership/capability facts; the rule it
+    /// is evaluated against comes only from the accepted constitution. This
+    /// prevents a host from quietly changing a Moot from open to members-only
+    /// or weakening its standing floor outside the replicated law.
+    pub async fn authorize<P: MootAuthorizationProvider>(
+        &self,
+        provider: &P,
+        request: &MootAuthorizationRequest,
+    ) -> Result<GateDecision, MootError> {
+        let policy = self.governance.snapshot().await?.rules.admission;
+        let inputs = provider.inputs(request);
+        Ok(authorize(
+            &policy,
+            inputs.capability_covers,
+            &inputs.facts,
+            request.at_ms,
+        ))
     }
 
     pub async fn declare(
@@ -597,7 +659,9 @@ impl<B: Backend + Clone> Moot<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::tessera::{ChainRoot, TesseraEvent};
+    use crate::moot::tessera::{
+        ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
+    };
     use crate::moot::{KeepBound, MootStoreError};
     use identity::{IdentityProvider, InMemoryProvider};
     use murm_replication::NativeDropError;
@@ -620,6 +684,20 @@ mod tests {
             erasure: ErasurePolicy {
                 history_ceiling: KeepBound::UntilCheckpoint,
             },
+        }
+    }
+
+    struct Access {
+        capability_covers: bool,
+        facts: TesseraFacts,
+    }
+
+    impl MootAuthorizationProvider for Access {
+        fn inputs(&self, _: &MootAuthorizationRequest) -> MootAuthorizationInputs {
+            MootAuthorizationInputs {
+                capability_covers: self.capability_covers,
+                facts: self.facts.clone(),
+            }
         }
     }
 
@@ -711,6 +789,98 @@ mod tests {
         assert_eq!(snapshot.roster.declaration.unwrap().name, "printing circle");
         assert_eq!(snapshot.roster.members.len(), 1);
         assert_eq!(snapshot.checkpoint.unwrap().operation, second.operation);
+    }
+
+    #[tokio::test]
+    async fn signed_admission_rule_uses_the_injected_membership_and_capability_inputs() {
+        let founder = keypair(8);
+        let founder_id = founder.public_key().to_bytes();
+        let service = Moot::in_memory(ID, founder_id, retention());
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.admission = Policy::MembersOnly {
+            rate_limit: 20,
+            rate_window_ms: 60_000,
+        };
+        service
+            .found(founder.to_seed(), None, None, rules, 1)
+            .await
+            .unwrap();
+        let request = MootAuthorizationRequest {
+            subject: [9; 32],
+            capability_path: "moot/fauna/write".into(),
+            at_ms: 10,
+        };
+
+        assert_eq!(
+            service
+                .authorize(
+                    &Access {
+                        capability_covers: false,
+                        facts: TesseraFacts {
+                            is_member: true,
+                            ..Default::default()
+                        },
+                    },
+                    &request,
+                )
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+        assert_eq!(
+            service
+                .authorize(
+                    &Access {
+                        capability_covers: true,
+                        facts: TesseraFacts::default(),
+                    },
+                    &request,
+                )
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NotAMember)
+        );
+        assert_eq!(
+            service
+                .authorize(
+                    &Access {
+                        capability_covers: true,
+                        facts: TesseraFacts {
+                            is_member: true,
+                            ..Default::default()
+                        },
+                    },
+                    &request,
+                )
+                .await
+                .unwrap(),
+            GateDecision::Allow
+        );
+
+        let mut amended = ConstitutionRules::founder_only(founder_id);
+        amended.admission = Policy::OpenWithFloor(GateConfig {
+            posting_threshold: 2,
+            rate_limit: 20,
+            rate_window_ms: 60_000,
+        });
+        service.amend(founder.to_seed(), amended, 11).await.unwrap();
+        assert_eq!(
+            service
+                .authorize(
+                    &Access {
+                        capability_covers: true,
+                        facts: TesseraFacts {
+                            score: 1,
+                            is_member: true,
+                            ..Default::default()
+                        },
+                    },
+                    &request,
+                )
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::BelowThreshold)
+        );
     }
 
     #[tokio::test]

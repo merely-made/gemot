@@ -37,6 +37,7 @@ pub use records::{
     to_operation_seed, to_prune_operation, to_prune_operation_seed, verify,
 };
 pub use service::{
-    Moot, MootCheckpointSnapshot, MootCommandReceipt, MootDropImportReceipt, MootDropSelector,
-    MootError, MootFile, MootLane, MootOutboundOperation, MootRetentionSettings, MootSnapshot,
+    Moot, MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,
+    MootCheckpointSnapshot, MootCommandReceipt, MootDropImportReceipt, MootDropSelector, MootError,
+    MootFile, MootLane, MootOutboundOperation, MootRetentionSettings, MootSnapshot,
 };

@@ -30,7 +30,9 @@
 //! constitution evidence before object records, so a fresh recipient can
 //! verify a rotated checkpoint chain. Protected drops take an injected group
 //! protector, and Tessera commands return an explicit host-publication seam.
-//! Quorum rules and capability grants remain.
+//! The signed admission policy now evaluates an injected membership/capability
+//! provider; quorum rules, a durable grant ledger, and a group-key adapter
+//! remain.
 
 #![doc(html_root_url = "https://docs.rs/gemot/0.1.0")]
 

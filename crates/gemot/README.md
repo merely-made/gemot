@@ -221,7 +221,9 @@ rotation without exposing p2panda types. Plain and protected aggregate drops
 carry critical constitution evidence, bootstrap a rotated checkpoint chain on a
 fresh recipient, and refresh the materialized view through the shared atomic
 importer. A receipt resolves to an explicit typed outbound operation for the
-host to publish. Quorum rules and capability grants remain. The next slices land per the
+host to publish. The signed admission rule evaluates an injected
+membership/capability provider; quorum rules, durable grants, and a group-key
+adapter remain. The next slices land per the
 [moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 
