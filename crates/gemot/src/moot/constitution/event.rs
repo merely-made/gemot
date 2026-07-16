@@ -1,6 +1,6 @@
 //! Logical constitution events and the minimal native rule vocabulary.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use p2panda_core::cbor::encode_cbor;
 use proofs::Digest;
@@ -18,6 +18,47 @@ pub enum AmendmentRule {
     FounderSigned,
 }
 
+/// A founder-governed capability grant carried by the signed constitution.
+///
+/// This is deliberately a current-state grant, not an independently delegated
+/// token. The accepted constitutional revision supplies its authority and an
+/// amendment revokes it by removing it. A later quorum/delegation rule can move
+/// grants to their own signed log without changing the Moot authorization seam.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapabilityGrant {
+    /// Stable identifier chosen by the constitutional author.
+    pub id: [u8; 32],
+    /// Persona-chain root this grant belongs to.
+    pub subject: [u8; 32],
+    /// Inclusive structural path prefix, such as `moot/fauna`.
+    pub path_prefix: String,
+    /// The first millisecond at which the grant is usable.
+    pub not_before_ms: u64,
+    /// Optional expiry. Expiry preserves the historical constitution evidence.
+    pub expires_at_ms: Option<u64>,
+}
+
+impl CapabilityGrant {
+    /// Whether this grant covers `path` at `at_ms`.
+    ///
+    /// Path matching stops on a segment boundary, so `moot/fauna` does not
+    /// cover `moot/faunarium`. Empty prefixes and invalid time intervals are
+    /// denied defensively even if malformed historical rules are encountered.
+    pub fn covers(&self, subject: [u8; 32], path: &str, at_ms: u64) -> bool {
+        self.subject == subject
+            && !self.path_prefix.is_empty()
+            && at_ms >= self.not_before_ms
+            && match self.expires_at_ms {
+                None => true,
+                Some(expires) => expires >= self.not_before_ms && at_ms <= expires,
+            }
+            && (path == self.path_prefix
+                || path
+                    .strip_prefix(&self.path_prefix)
+                    .is_some_and(|suffix| suffix.starts_with('/')))
+    }
+}
+
 /// Constitutional clauses needed by the first governed-retention slice.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstitutionRules {
@@ -28,6 +69,9 @@ pub struct ConstitutionRules {
     /// The signed admission rule evaluated from Tessera facts plus a host- or
     /// group-state supplied membership/capability provider.
     pub admission: Policy,
+    /// Current founder-governed capability grants. Removing an entry in an
+    /// accepted amendment revokes it for future authorization decisions.
+    pub capability_grants: BTreeMap<[u8; 32], CapabilityGrant>,
 }
 
 impl ConstitutionRules {
@@ -37,7 +81,25 @@ impl ConstitutionRules {
             amendment: AmendmentRule::FounderSigned,
             checkpoint_signers: [founder].into_iter().collect(),
             admission: Policy::OpenWithFloor(Default::default()),
+            capability_grants: BTreeMap::new(),
         }
+    }
+
+    /// Insert or replace one grant by its stable id.
+    pub fn grant(&mut self, grant: CapabilityGrant) {
+        self.capability_grants.insert(grant.id, grant);
+    }
+
+    /// Revoke one grant in the next signed constitutional revision.
+    pub fn revoke_grant(&mut self, grant_id: &[u8; 32]) -> Option<CapabilityGrant> {
+        self.capability_grants.remove(grant_id)
+    }
+
+    /// Whether any current grant covers this subject/path/time tuple.
+    pub fn grant_covers(&self, subject: [u8; 32], path: &str, at_ms: u64) -> bool {
+        self.capability_grants
+            .values()
+            .any(|grant| grant.covers(subject, path, at_ms))
     }
 
     /// Canonical digest committed by a constitution event.
