@@ -14,7 +14,7 @@ mod wire;
 #[cfg(test)]
 mod sync;
 
-pub use event::{AmendmentRule, ConstitutionEvent, ConstitutionRules};
+pub use event::{AmendmentRule, CapabilityGrant, ConstitutionEvent, ConstitutionRules};
 pub use fold::{Constitution, ConstitutionError, GovernedAction, authorize_governed};
 pub use governance::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,

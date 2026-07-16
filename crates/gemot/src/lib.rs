@@ -31,8 +31,8 @@
 //! verify a rotated checkpoint chain. Protected drops take an injected group
 //! protector, and Tessera commands return an explicit host-publication seam.
 //! The signed admission policy now evaluates an injected membership/capability
-//! provider; quorum rules, a durable grant ledger, and a group-key adapter
-//! remain.
+//! provider. Founder-governed signed grants narrow that provider's live
+//! decision; quorum rules, delegated grants, and a group-key adapter remain.
 
 #![doc(html_root_url = "https://docs.rs/gemot/0.1.0")]
 

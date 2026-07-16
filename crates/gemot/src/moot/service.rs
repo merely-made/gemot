@@ -135,8 +135,10 @@ pub struct MootAuthorizationRequest {
 /// The provider answers structural access and supplies the current Tessera
 /// facts. Its `facts.is_member` field is the single membership input for a
 /// members-only constitution; `capability_covers` is the corresponding scoped
-/// grant decision. Key material never crosses this API: a group-key engine may
-/// back the provider later without putting decryption authority in Gemot.
+/// live decision. [`Moot::authorize_constitution_grant`] intersects it with the
+/// signed constitutional grant state. Key material never crosses this API: a
+/// group-key engine may back the provider later without putting decryption
+/// authority in Gemot.
 #[derive(Clone, Debug, Default)]
 pub struct MootAuthorizationInputs {
     pub capability_covers: bool,
@@ -344,6 +346,33 @@ impl<B: Backend + Clone> Moot<B> {
         Ok(authorize(
             &policy,
             inputs.capability_covers,
+            &inputs.facts,
+            request.at_ms,
+        ))
+    }
+
+    /// Evaluate a current signed constitutional grant and a provider's live
+    /// structural decision together.
+    ///
+    /// Both checks must pass. The constitutional grant is portable, signed
+    /// authority; the provider supplies the present group/session condition
+    /// that can narrow it immediately. This permits future group-key rotation
+    /// or local device policy to deny access without rewriting constitutional
+    /// history.
+    pub async fn authorize_constitution_grant<P: MootAuthorizationProvider>(
+        &self,
+        provider: &P,
+        request: &MootAuthorizationRequest,
+    ) -> Result<GateDecision, MootError> {
+        let governance = self.governance.snapshot().await?;
+        let inputs = provider.inputs(request);
+        let grant_covers =
+            governance
+                .rules
+                .grant_covers(request.subject, &request.capability_path, request.at_ms);
+        Ok(authorize(
+            &governance.rules.admission,
+            grant_covers && inputs.capability_covers,
             &inputs.facts,
             request.at_ms,
         ))
@@ -659,6 +688,7 @@ impl<B: Backend + Clone> Moot<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::moot::constitution::CapabilityGrant;
     use crate::moot::tessera::{
         ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
     };
@@ -880,6 +910,82 @@ mod tests {
                 .await
                 .unwrap(),
             GateDecision::Deny(DenyReason::BelowThreshold)
+        );
+    }
+
+    #[tokio::test]
+    async fn constitutional_grants_narrow_live_capability_inputs_and_revoke_by_amendment() {
+        let founder = keypair(9);
+        let founder_id = founder.public_key().to_bytes();
+        let service = Moot::in_memory(ID, founder_id, retention());
+        let grant_id = [0xa9; 32];
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.admission = Policy::MembersOnly {
+            rate_limit: 20,
+            rate_window_ms: 60_000,
+        };
+        rules.grant(CapabilityGrant {
+            id: grant_id,
+            subject: [9; 32],
+            path_prefix: "moot/fauna".into(),
+            not_before_ms: 5,
+            expires_at_ms: Some(20),
+        });
+        service
+            .found(founder.to_seed(), None, None, rules.clone(), 1)
+            .await
+            .unwrap();
+        let member = Access {
+            capability_covers: true,
+            facts: TesseraFacts {
+                is_member: true,
+                ..Default::default()
+            },
+        };
+        let request = MootAuthorizationRequest {
+            subject: [9; 32],
+            capability_path: "moot/fauna/write".into(),
+            at_ms: 10,
+        };
+        assert_eq!(
+            service
+                .authorize_constitution_grant(&member, &request)
+                .await
+                .unwrap(),
+            GateDecision::Allow
+        );
+
+        let sibling = MootAuthorizationRequest {
+            capability_path: "moot/faunarium/write".into(),
+            ..request.clone()
+        };
+        assert_eq!(
+            service
+                .authorize_constitution_grant(&member, &sibling)
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+        let expired = MootAuthorizationRequest {
+            at_ms: 21,
+            ..request.clone()
+        };
+        assert_eq!(
+            service
+                .authorize_constitution_grant(&member, &expired)
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+
+        rules.revoke_grant(&grant_id);
+        service.amend(founder.to_seed(), rules, 22).await.unwrap();
+        assert_eq!(
+            service
+                .authorize_constitution_grant(&member, &request)
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
         );
     }
 
