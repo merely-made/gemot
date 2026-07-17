@@ -34,9 +34,12 @@
 //! provider. Founder-governed signed grants narrow that provider's live
 //! decision; quorum amendments and the p2panda-auth group adapter are
 //! implemented. The adapter binds membership changes to a host-owned
-//! p2panda-encryption group-secret epoch. Delegated grants remain a separate
-//! signed grant-lane design, rather than a forged property of constitutional
-//! amendments.
+//! p2panda-encryption group-secret epoch. Independent Personae-signed
+//! certificates now attenuate constitutional grant roots through a Gemot fold,
+//! including cascading certificate and root revocation. Their signed p2panda
+//! lane survives durable reopen and materializes correctly across out-of-order
+//! arrival. Aggregate native-drop carriage, participant projections, and
+//! scope-key rotation remain.
 
 #![doc(html_root_url = "https://docs.rs/gemot/0.1.0")]
 

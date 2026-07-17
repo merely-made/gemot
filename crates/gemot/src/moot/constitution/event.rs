@@ -73,6 +73,15 @@ pub struct CapabilityGrant {
     pub not_before_ms: u64,
     /// Optional expiry. Expiry preserves the historical constitution evidence.
     pub expires_at_ms: Option<u64>,
+    /// Maximum independent delegation depth beneath this constitutional root.
+    /// Zero keeps the grant direct-only and is the safe default for existing
+    /// serialized constitutions.
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub delegation_depth: u16,
+}
+
+fn is_zero_u16(value: &u16) -> bool {
+    *value == 0
 }
 
 impl CapabilityGrant {
@@ -229,5 +238,43 @@ impl ConstitutionEvent {
                 rules, rules_hash, ..
             } => rules.digest() == *rules_hash,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Serialize)]
+    struct LegacyCapabilityGrant {
+        id: [u8; 32],
+        subject: [u8; 32],
+        path_prefix: String,
+        not_before_ms: u64,
+        expires_at_ms: Option<u64>,
+    }
+
+    #[test]
+    fn direct_grants_keep_the_legacy_canonical_encoding() {
+        let legacy = LegacyCapabilityGrant {
+            id: [1; 32],
+            subject: [2; 32],
+            path_prefix: "moot/fauna".into(),
+            not_before_ms: 10,
+            expires_at_ms: Some(20),
+        };
+        let current = CapabilityGrant {
+            id: legacy.id,
+            subject: legacy.subject,
+            path_prefix: legacy.path_prefix.clone(),
+            not_before_ms: legacy.not_before_ms,
+            expires_at_ms: legacy.expires_at_ms,
+            delegation_depth: 0,
+        };
+
+        assert_eq!(
+            encode_cbor(&legacy).unwrap(),
+            encode_cbor(&current).unwrap()
+        );
     }
 }

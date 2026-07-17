@@ -20,6 +20,7 @@
 //! recognition contexts.
 
 pub mod constitution;
+pub mod delegation;
 pub mod group;
 mod id;
 pub mod records;
@@ -28,6 +29,9 @@ pub mod tessera;
 
 pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
+};
+pub use delegation::{
+    MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegations,
 };
 pub use group::{
     MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,

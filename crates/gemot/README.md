@@ -226,8 +226,12 @@ membership/capability provider. Founder-governed signed grants narrow that
 provider's live decision. Quorum amendments and a p2panda-auth group adapter
 are implemented. The adapter binds resolved membership changes to a
 host-owned p2panda-encryption group-secret epoch without importing private key
-material into Gemot. Delegated grants remain a distinct signed grant lane, not
-a misleading flag on constitutional amendments. The next slices land per the
+material into Gemot. Independent Personae-signed certificates now attenuate
+constitutional grant roots through a Gemot fold, including cascading
+certificate and root revocation. Their signed p2panda lane survives durable
+reopen and materializes correctly across out-of-order arrival. Aggregate
+native-drop carriage, participant-graph projections, and scope-key rotation
+remain. The next slices land per the
 [moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 
