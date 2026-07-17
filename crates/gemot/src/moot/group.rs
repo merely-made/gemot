@@ -15,6 +15,7 @@ use p2panda_auth::{Access, AccessLevel};
 use p2panda_encryption::data_scheme::GroupSecretId;
 use thiserror::Error;
 
+use super::delegation::MootScopeKeyEpoch;
 use super::service::{
     MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,
 };
@@ -96,6 +97,15 @@ pub struct P2pandaGroupKeyEpoch {
     pub auth_heads: Vec<[u8; 32]>,
 }
 
+/// Host-secret binding for one revoked delegation scope.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct P2pandaScopeKeyEpoch {
+    pub group: [u8; 32],
+    pub path_prefix: String,
+    pub epoch: u64,
+    pub secret_id: GroupSecretId,
+}
+
 #[derive(Debug, Error)]
 pub enum MootGroupError {
     #[error("membership operation targets another group")]
@@ -104,6 +114,10 @@ pub enum MootGroupError {
     Auth,
     #[error("cannot bind a group secret before the group has a member")]
     EmptyGroup,
+    #[error("scope-key epoch belongs to another Moot group")]
+    WrongScopeGroup,
+    #[error("scope-key epoch must follow at least one accepted revocation")]
+    UnrotatedScope,
 }
 
 /// Converged p2panda-auth membership for one Moot group.
@@ -197,6 +211,28 @@ impl MootGroup {
             secret_id,
             members: members.into_iter().collect(),
             auth_heads: self.state.heads().into_iter().map(|head| head.0).collect(),
+        })
+    }
+
+    /// Bind a host-held p2panda data-scheme secret to a delegation revocation
+    /// epoch. Gemot names the required epoch; the host owns secret bytes and
+    /// recipient distribution.
+    pub fn bind_scope_secret(
+        &self,
+        scope: &MootScopeKeyEpoch,
+        secret_id: GroupSecretId,
+    ) -> Result<P2pandaScopeKeyEpoch, MootGroupError> {
+        if scope.resource.as_slice() != self.group.0 {
+            return Err(MootGroupError::WrongScopeGroup);
+        }
+        if scope.epoch == 0 {
+            return Err(MootGroupError::UnrotatedScope);
+        }
+        Ok(P2pandaScopeKeyEpoch {
+            group: self.group.0,
+            path_prefix: scope.path_prefix.clone(),
+            epoch: scope.epoch,
+            secret_id,
         })
     }
 
@@ -343,6 +379,16 @@ mod tests {
         let key_epoch = group.bind_group_secret(id(77)).unwrap();
         assert_eq!(key_epoch.epoch, 3);
         assert_eq!(key_epoch.members, vec![id(1)]);
+        let scope_epoch = MootScopeKeyEpoch {
+            resource: id(9).to_vec(),
+            path_prefix: "moot/fauna".into(),
+            epoch: 1,
+            revoked_certificates: vec![identity::delegation::DelegationId(id(88))],
+        };
+        let bound_scope = group.bind_scope_secret(&scope_epoch, id(78)).unwrap();
+        assert_eq!(bound_scope.group, id(9));
+        assert_eq!(bound_scope.path_prefix, "moot/fauna");
+        assert_eq!(bound_scope.epoch, 1);
     }
 
     #[test]

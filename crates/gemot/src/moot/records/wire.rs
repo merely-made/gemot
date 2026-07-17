@@ -13,7 +13,7 @@
 use identity::Ed25519Keypair;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::prune::PruneFlag;
-use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
+use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
 use super::retention::RetentionCheckpoint;
@@ -71,16 +71,6 @@ pub enum MootEvent {
 }
 
 impl MootEvent {
-    fn at_ms(&self) -> u64 {
-        match self {
-            MootEvent::Declared { at_ms, .. }
-            | MootEvent::Joined { at_ms, .. }
-            | MootEvent::Shared { at_ms, .. }
-            | MootEvent::HistoryPruned { at_ms, .. } => *at_ms,
-            MootEvent::RetentionCheckpoint { checkpoint } => checkpoint.at_ms,
-        }
-    }
-
     pub(crate) fn log_id(&self) -> MootLogId {
         match self {
             Self::RetentionCheckpoint { .. } => MootLogId::Checkpoints,
@@ -104,7 +94,7 @@ pub fn to_operation(
     keypair: &Ed25519Keypair,
     moot_id: [u8; 32],
     event: &MootEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
     to_operation_seed(keypair.to_seed(), moot_id, event, seq_num, backlink)
@@ -116,7 +106,7 @@ pub fn to_prune_operation(
     moot_id: [u8; 32],
     checkpoint: [u8; 32],
     at_ms: u64,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
     to_prune_operation_seed(
@@ -135,7 +125,7 @@ pub fn to_prune_operation_seed(
     moot_id: [u8; 32],
     checkpoint: [u8; 32],
     at_ms: u64,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
     to_operation_seed_with_prune(
@@ -155,7 +145,7 @@ pub fn to_operation_seed(
     signing_seed: [u8; 32],
     moot_id: [u8; 32],
     event: &MootEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
     to_operation_seed_with_prune(signing_seed, moot_id, event, seq_num, backlink, false)
@@ -165,7 +155,7 @@ fn to_operation_seed_with_prune(
     signing_seed: [u8; 32],
     moot_id: [u8; 32],
     event: &MootEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
     prune: bool,
 ) -> Operation<MootExt> {
@@ -178,7 +168,6 @@ fn to_operation_seed_with_prune(
         signature: None,
         payload_size: body.size(),
         payload_hash: Some(body.hash()),
-        timestamp: Timestamp::from(event.at_ms()),
         seq_num,
         backlink: backlink.map(Hash::from),
         extensions: MootExt {

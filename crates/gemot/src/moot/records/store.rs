@@ -502,7 +502,7 @@ impl<B: Backend + Clone> MootStore<B> {
                 };
                 frontier
                     .get(&(*operation.header.verifying_key.as_bytes(), event.log_id()))
-                    .is_none_or(|seq_num| operation.header.seq_num > *seq_num)
+                    .is_none_or(|seq_num| u64::from(operation.header.seq_num) > *seq_num)
             })
             .collect();
         Ok(MootRoster::fold_from_snapshot(
@@ -609,7 +609,7 @@ impl<B: Backend + Clone> MootStore<B> {
                 LogFrontier {
                     author: key.0,
                     log_id,
-                    seq_num: operation.header.seq_num,
+                    seq_num: u64::from(operation.header.seq_num),
                     operation: *operation.hash.as_bytes(),
                 },
             );

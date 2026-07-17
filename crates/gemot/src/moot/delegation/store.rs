@@ -6,10 +6,10 @@ use std::path::Path;
 use identity::Ed25519Keypair;
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
 use murm_replication::{
-    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
-    StoreTarget,
+    Admission, DropRecord, MunimentStore, OperationPolicy, OperationProcessor, ProcessError,
+    Reject, StoreTarget, decode_operation_record, operation_record,
 };
-use p2panda_core::{Operation, Timestamp, Topic, VerifyingKey};
+use p2panda_core::{Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 
@@ -38,6 +38,9 @@ pub enum MootDelegationStoreError {
     /// Outer p2panda author differs from the Personae-attested signer.
     #[error("delegation operation author does not match its signer proof")]
     WrongAuthor,
+    /// Native-drop operation record is malformed.
+    #[error("delegation drop record: {0}")]
+    Drop(String),
 }
 
 #[derive(Clone, Copy)]
@@ -80,12 +83,6 @@ impl OperationPolicy<MootDelegationExt> for DelegationPolicy {
             return Err(Reject::new(
                 "wrong-inner-moot",
                 "delegation statement scope addresses another moot",
-            ));
-        }
-        if operation.header.timestamp != Timestamp::from(event.at_ms()) {
-            return Err(Reject::new(
-                "wrong-delegation-time",
-                "outer operation time differs from signed delegation time",
             ));
         }
         if event.signer() != Some(*operation.header.verifying_key.as_bytes()) {
@@ -283,6 +280,37 @@ impl<B: Backend + Clone> MootDelegationStore<B> {
             }
         }
         Ok(operations)
+    }
+
+    /// Full signed delegation corpus for aggregate native-drop carriage.
+    pub async fn drop_records(&self) -> Result<Vec<DropRecord>, MootDelegationStoreError> {
+        Ok(self
+            .operations()
+            .await?
+            .iter()
+            .map(|operation| operation_record(operation, true))
+            .collect())
+    }
+
+    /// Admit verified native-drop delegation records through the ordinary
+    /// cryptographic operation policy.
+    pub async fn accept_drop_records(
+        &self,
+        records: &[DropRecord],
+    ) -> Result<u64, MootDelegationStoreError> {
+        let mut accepted = 0;
+        for record in records {
+            let Some(operation) = decode_operation_record::<MootDelegationExt>(record)
+                .map_err(|error| MootDelegationStoreError::Drop(error.to_string()))?
+            else {
+                continue;
+            };
+            if operation.body.is_none() {
+                return Err(MootDelegationStoreError::Malformed);
+            }
+            accepted += u64::from(self.accept(&operation).await?);
+        }
+        Ok(accepted)
     }
 }
 

@@ -4,7 +4,7 @@
 
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
-use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Timestamp};
+use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
 use crate::{MootholdEvent, MootholdId};
@@ -28,7 +28,7 @@ pub fn to_operation_seed(
     signing_seed: [u8; 32],
     moothold_id: MootholdId,
     event: &MootholdEvent,
-    seq_num: u64,
+    seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootholdExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
@@ -40,7 +40,6 @@ pub fn to_operation_seed(
         signature: None,
         payload_size: body.size(),
         payload_hash: Some(body.hash()),
-        timestamp: Timestamp::from(event.at_ms()),
         seq_num,
         backlink: backlink.map(Hash::from),
         extensions: MootholdExt {

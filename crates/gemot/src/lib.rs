@@ -37,9 +37,10 @@
 //! p2panda-encryption group-secret epoch. Independent Personae-signed
 //! certificates now attenuate constitutional grant roots through a Gemot fold,
 //! including cascading certificate and root revocation. Their signed p2panda
-//! lane survives durable reopen and materializes correctly across out-of-order
-//! arrival. Aggregate native-drop carriage, participant projections, and
-//! scope-key rotation remain.
+//! lane survives durable reopen, out-of-order arrival, and live late-peer
+//! catch-up. Aggregate drops carry it as critical capability-chain evidence.
+//! Deterministic read-only participant projections and revocation-derived
+//! scope-key epochs preserve the signed-ledger and host-encryption boundaries.
 
 #![doc(html_root_url = "https://docs.rs/gemot/0.1.0")]
 

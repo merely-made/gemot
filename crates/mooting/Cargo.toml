@@ -15,6 +15,6 @@ path = "src/lib.rs"
 
 [dependencies]
 # Recognition fingerprints use p2panda's native BLAKE3 hash and CBOR.
-p2panda-core = "0.6.1"
+p2panda-core = "0.7.0"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
