@@ -74,17 +74,14 @@ impl OperationPolicy<ConstitutionExt> for ConstitutionPolicy {
             ConstitutionEvent::Genesis {
                 moot_id, founder, ..
             } if moot_id == self.moot_id && founder == self.founder && author == self.founder => {}
-            ConstitutionEvent::Amended { .. } if author == self.founder => {}
+            // Amendment authority is evaluated against the prior accepted
+            // constitution in `accept`. The processor must retain individual
+            // quorum signatures before their threshold is met.
+            ConstitutionEvent::Amended { .. } => {}
             ConstitutionEvent::Genesis { .. } => {
                 return Err(Reject::new(
                     "wrong-founder",
                     "genesis does not bind the Moot founder",
-                ));
-            }
-            ConstitutionEvent::Amended { .. } => {
-                return Err(Reject::new(
-                    "unauthorized-amendment",
-                    "actor is not authorized by the founder-signed rule",
                 ));
             }
         }
