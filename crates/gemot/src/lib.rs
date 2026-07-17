@@ -32,7 +32,11 @@
 //! protector, and Tessera commands return an explicit host-publication seam.
 //! The signed admission policy now evaluates an injected membership/capability
 //! provider. Founder-governed signed grants narrow that provider's live
-//! decision; quorum rules, delegated grants, and a group-key adapter remain.
+//! decision; quorum amendments and the p2panda-auth group adapter are
+//! implemented. The adapter binds membership changes to a host-owned
+//! p2panda-encryption group-secret epoch. Delegated grants remain a separate
+//! signed grant-lane design, rather than a forged property of constitutional
+//! amendments.
 
 #![doc(html_root_url = "https://docs.rs/gemot/0.1.0")]
 
