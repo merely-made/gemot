@@ -378,6 +378,31 @@ impl<B: Backend + Clone> Moot<B> {
         ))
     }
 
+    /// Evaluate independently delegated authority and the provider's current
+    /// structural decision under the accepted constitutional admission rule.
+    pub async fn authorize_delegated<P: MootAuthorizationProvider>(
+        &self,
+        delegations: &super::MootDelegations,
+        provider: &P,
+        request: &MootAuthorizationRequest,
+    ) -> Result<GateDecision, MootError> {
+        let governance = self.governance.snapshot().await?;
+        let inputs = provider.inputs(request);
+        let grant_covers = delegations.covers(
+            self.moot_id.0,
+            &governance.rules,
+            request.subject,
+            &request.capability_path,
+            request.at_ms,
+        );
+        Ok(authorize(
+            &governance.rules.admission,
+            grant_covers && inputs.capability_covers,
+            &inputs.facts,
+            request.at_ms,
+        ))
+    }
+
     pub async fn declare(
         &self,
         actor_seed: [u8; 32],
@@ -689,10 +714,14 @@ impl<B: Backend + Clone> Moot<B> {
 mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
+    use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegations};
     use crate::moot::tessera::{
         ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
     };
     use crate::moot::{KeepBound, MootStoreError};
+    use identity::delegation::{
+        CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+    };
     use identity::{IdentityProvider, InMemoryProvider};
     use murm_replication::NativeDropError;
     use std::io::Cursor;
@@ -930,6 +959,7 @@ mod tests {
             path_prefix: "moot/fauna".into(),
             not_before_ms: 5,
             expires_at_ms: Some(20),
+            delegation_depth: 0,
         });
         service
             .found(founder.to_seed(), None, None, rules.clone(), 1)
@@ -983,6 +1013,101 @@ mod tests {
         assert_eq!(
             service
                 .authorize_constitution_grant(&member, &request)
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+    }
+
+    #[tokio::test]
+    async fn delegated_grants_intersect_constitution_group_and_admission() {
+        let founder = keypair(10);
+        let founder_id = founder.public_key().to_bytes();
+        let root_holder = InMemoryProvider::from_seed([0x31; 32]);
+        let delegate = InMemoryProvider::from_seed([0x32; 32]);
+        let root_id = [0xb1; 32];
+        let service = Moot::in_memory(ID, founder_id, retention());
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.admission = Policy::MembersOnly {
+            rate_limit: 20,
+            rate_window_ms: 60_000,
+        };
+        rules.grant(CapabilityGrant {
+            id: root_id,
+            subject: root_holder.master_public_key().to_bytes(),
+            path_prefix: "moot/fauna".into(),
+            not_before_ms: 5,
+            expires_at_ms: Some(100),
+            delegation_depth: 2,
+        });
+        service
+            .found(founder.to_seed(), None, None, rules.clone(), 1)
+            .await
+            .unwrap();
+
+        let certificate = DelegationCertificate::new(
+            DelegationParent::Root(root_id),
+            root_holder.master_public_key().to_bytes(),
+            delegate.master_public_key().to_bytes(),
+            CapabilityScope {
+                domain: MOOT_DELEGATION_DOMAIN.into(),
+                resource: ID.0.to_vec(),
+                path_prefix: "moot/fauna/research".into(),
+                actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+            },
+            5,
+            10,
+            Some(90),
+            1,
+            [0x41; 32],
+        );
+        let mut delegations = MootDelegations::new();
+        delegations
+            .accept_certificate(
+                ID.0,
+                &rules,
+                SignedDelegationCertificate::issue(&root_holder, certificate).unwrap(),
+            )
+            .unwrap();
+        let request = MootAuthorizationRequest {
+            subject: delegate.master_public_key().to_bytes(),
+            capability_path: "moot/fauna/research/write".into(),
+            at_ms: 50,
+        };
+        let member = Access {
+            capability_covers: true,
+            facts: TesseraFacts {
+                is_member: true,
+                ..Default::default()
+            },
+        };
+        assert_eq!(
+            service
+                .authorize_delegated(&delegations, &member, &request)
+                .await
+                .unwrap(),
+            GateDecision::Allow
+        );
+        assert_eq!(
+            service
+                .authorize_delegated(
+                    &delegations,
+                    &Access {
+                        capability_covers: false,
+                        facts: member.facts.clone(),
+                    },
+                    &request,
+                )
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+
+        rules.revoke_grant(&root_id);
+        service.amend(founder.to_seed(), rules, 101).await.unwrap();
+        assert_eq!(
+            service
+                .authorize_delegated(&delegations, &member, &request)
                 .await
                 .unwrap(),
             GateDecision::Deny(DenyReason::NoCapability)
