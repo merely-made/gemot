@@ -1,6 +1,9 @@
 //! Deterministic constitution fold and the shared governance chokepoint.
 
+use std::collections::BTreeSet;
+
 use p2panda_core::Operation;
+use p2panda_core::cbor::encode_cbor;
 use proofs::Digest;
 
 use super::wire::{ConstitutionExt, from_operation, verify};
@@ -54,6 +57,9 @@ pub enum ConstitutionError {
     /// Actor is not permitted by the prior constitution.
     #[error("actor is not authorized to amend this constitution")]
     Unauthorized,
+    /// One quorum signature alone cannot advance the accepted constitution.
+    #[error("amendment still needs additional quorum signatures")]
+    PendingQuorum,
 }
 
 /// Evaluate one governed action against the current shared law.
@@ -62,11 +68,62 @@ pub fn authorize_governed(
     actor: [u8; 32],
     constitution: &Constitution,
 ) -> bool {
-    match (action, &constitution.rules.amendment) {
-        (GovernedAction::AmendConstitution, AmendmentRule::FounderSigned) => {
-            actor == constitution.founder
+    match action {
+        GovernedAction::AmendConstitution => constitution
+            .rules
+            .amendment
+            .permits(constitution.founder, actor),
+    }
+}
+
+fn quorum_revision(previous: &Digest, rules_hash: &Digest) -> Digest {
+    let encoded = encode_cbor(&(previous, rules_hash))
+        .expect("constitution quorum revision components always CBOR-encode");
+    let mut bytes = b"gemot/constitution/quorum-revision/v1\0".to_vec();
+    bytes.extend_from_slice(&encoded);
+    Digest::blake3(&bytes)
+}
+
+fn accepted_amendment(
+    state: &Constitution,
+    candidates: &[([u8; 32], [u8; 32], ConstitutionEvent)],
+) -> Option<([u8; 32], ConstitutionRules, Digest)> {
+    let mut proposals: Vec<([u8; 32], ConstitutionRules, Digest, BTreeSet<[u8; 32]>)> = Vec::new();
+    for (hash, author, event) in candidates {
+        let ConstitutionEvent::Amended {
+            previous,
+            rules,
+            rules_hash,
+            ..
+        } = event
+        else {
+            continue;
+        };
+        if *previous != state.revision
+            || !authorize_governed(GovernedAction::AmendConstitution, *author, state)
+        {
+            continue;
+        }
+        if let Some((canonical, _, _, supporters)) = proposals
+            .iter_mut()
+            .find(|(_, _, proposed_hash, _)| *proposed_hash == *rules_hash)
+        {
+            *canonical = (*canonical).min(*hash);
+            supporters.insert(*author);
+        } else {
+            proposals.push((
+                *hash,
+                rules.clone(),
+                rules_hash.clone(),
+                BTreeSet::from([*author]),
+            ));
         }
     }
+    proposals.sort_by_key(|(canonical, _, _, _)| *canonical);
+    proposals
+        .into_iter()
+        .find(|(_, _, _, supporters)| supporters.len() >= state.rules.amendment.threshold())
+        .map(|(canonical, rules, rules_hash, _)| (canonical, rules, rules_hash))
 }
 
 impl Constitution {
@@ -130,18 +187,16 @@ impl Constitution {
         };
 
         loop {
-            let next = candidates.iter().find(|(_, author, event)| {
-                let ConstitutionEvent::Amended { previous, .. } = event else {
-                    return false;
-                };
-                *previous == state.revision
-                    && authorize_governed(GovernedAction::AmendConstitution, *author, &state)
-            });
-            let Some((hash, _, ConstitutionEvent::Amended { rules, .. })) = next else {
+            let Some((hash, rules, rules_hash)) = accepted_amendment(&state, &candidates) else {
                 break;
             };
-            state.rules = rules.clone();
-            state.revision = Digest::p2panda_operation(*hash);
+            let quorum = matches!(state.rules.amendment, AmendmentRule::MemberQuorum { .. });
+            state.rules = rules;
+            state.revision = if quorum {
+                quorum_revision(&state.revision, &rules_hash)
+            } else {
+                Digest::p2panda_operation(hash)
+            };
         }
         Some(state)
     }
@@ -174,6 +229,9 @@ impl Constitution {
         if !authorize_governed(GovernedAction::AmendConstitution, actor, self) {
             return Err(ConstitutionError::Unauthorized);
         }
+        if matches!(self.rules.amendment, AmendmentRule::MemberQuorum { .. }) {
+            return Err(ConstitutionError::PendingQuorum);
+        }
         self.rules = rules;
         self.revision = Digest::p2panda_operation(*operation.hash.as_bytes());
         Ok(())
@@ -182,6 +240,8 @@ impl Constitution {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
     use crate::moot::constitution::{ConstitutionEvent, ConstitutionRules, to_operation};
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
@@ -261,5 +321,94 @@ mod tests {
             Err(ConstitutionError::Unauthorized)
         );
         assert_eq!(state, before);
+    }
+
+    #[test]
+    fn quorum_amendment_needs_distinct_electors_and_has_a_stable_revision() {
+        let founder = keypair(1);
+        let alice = keypair(2);
+        let bob = keypair(3);
+        let carol = keypair(4);
+        let founder_id = founder.public_key().to_bytes();
+        let electorate = BTreeSet::from([
+            alice.public_key().to_bytes(),
+            bob.public_key().to_bytes(),
+            carol.public_key().to_bytes(),
+        ]);
+        let genesis_event = ConstitutionEvent::genesis(
+            MOOT,
+            founder_id,
+            None,
+            None,
+            ConstitutionRules::founder_only(founder_id),
+            1,
+        );
+        let genesis = to_operation(&founder, MOOT, &genesis_event, 0, None);
+        let genesis_revision = Digest::p2panda_operation(*genesis.hash.as_bytes());
+
+        let mut quorum_rules = ConstitutionRules::founder_only(founder_id);
+        quorum_rules.amendment = AmendmentRule::MemberQuorum {
+            electorate,
+            threshold: 2,
+        };
+        let quorum = to_operation(
+            &founder,
+            MOOT,
+            &ConstitutionEvent::amended(genesis_revision, quorum_rules.clone(), 2),
+            1,
+            Some(*genesis.hash.as_bytes()),
+        );
+        let quorum_revision = Digest::p2panda_operation(*quorum.hash.as_bytes());
+
+        let mut next_rules = quorum_rules.clone();
+        next_rules.checkpoint_signers = BTreeSet::from([alice.public_key().to_bytes()]);
+        let alice_support = to_operation(
+            &alice,
+            MOOT,
+            &ConstitutionEvent::amended(quorum_revision.clone(), next_rules.clone(), 3),
+            0,
+            None,
+        );
+        let bob_support = to_operation(
+            &bob,
+            MOOT,
+            &ConstitutionEvent::amended(quorum_revision.clone(), next_rules.clone(), 3),
+            0,
+            None,
+        );
+        let carol_support = to_operation(
+            &carol,
+            MOOT,
+            &ConstitutionEvent::amended(quorum_revision, next_rules.clone(), 3),
+            0,
+            None,
+        );
+
+        let pending =
+            Constitution::fold(MOOT, founder_id, [&genesis, &quorum, &alice_support]).unwrap();
+        assert_eq!(pending.rules, quorum_rules);
+
+        let accepted = Constitution::fold(
+            MOOT,
+            founder_id,
+            [&genesis, &quorum, &alice_support, &bob_support],
+        )
+        .unwrap();
+        assert_eq!(accepted.rules, next_rules);
+        let revision = accepted.revision.clone();
+
+        let late_support = Constitution::fold(
+            MOOT,
+            founder_id,
+            [
+                &genesis,
+                &quorum,
+                &alice_support,
+                &bob_support,
+                &carol_support,
+            ],
+        )
+        .unwrap();
+        assert_eq!(late_support.revision, revision);
     }
 }

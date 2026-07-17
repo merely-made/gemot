@@ -16,6 +16,43 @@ use crate::moot::tessera::Policy;
 pub enum AmendmentRule {
     /// Only the founder bound by genesis may amend the constitution.
     FounderSigned,
+    /// A frozen electorate must co-sign identical replacement rules.
+    ///
+    /// The electorate belongs to the prior accepted revision. This keeps an
+    /// in-flight amendment deterministic during membership churn: a later
+    /// group-state change can affect the next proposal, never who may finish
+    /// the one already being considered.
+    MemberQuorum {
+        /// Public keys eligible to co-sign this amendment.
+        electorate: BTreeSet<[u8; 32]>,
+        /// Distinct eligible signatures required for acceptance.
+        threshold: u16,
+    },
+}
+
+impl AmendmentRule {
+    /// Whether `actor` may contribute a signature to an amendment.
+    pub fn permits(&self, founder: [u8; 32], actor: [u8; 32]) -> bool {
+        match self {
+            Self::FounderSigned => actor == founder,
+            Self::MemberQuorum {
+                electorate,
+                threshold,
+            } => {
+                *threshold > 0
+                    && usize::from(*threshold) <= electorate.len()
+                    && electorate.contains(&actor)
+            }
+        }
+    }
+
+    /// Number of distinct signatures an amendment needs under this rule.
+    pub fn threshold(&self) -> usize {
+        match self {
+            Self::FounderSigned => 1,
+            Self::MemberQuorum { threshold, .. } => usize::from(*threshold),
+        }
+    }
 }
 
 /// A founder-governed capability grant carried by the signed constitution.
