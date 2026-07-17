@@ -20,6 +20,8 @@ path = "src/lib.rs"
 # (same as murm posts); identity supplies the Ed25519 signing keypair.
 serde = { version = "1", features = ["derive"] }
 p2panda-core = "0.6.1"
+p2panda-auth = { version = "0.6.1", default-features = false }
+p2panda-encryption = { version = "0.6.1", default-features = false, features = ["data_scheme"] }
 identity.workspace = true
 murm-replication = { workspace = true }
 proofs.workspace = true

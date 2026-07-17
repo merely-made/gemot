@@ -223,8 +223,11 @@ fresh recipient, and refresh the materialized view through the shared atomic
 importer. A receipt resolves to an explicit typed outbound operation for the
 host to publish. The signed admission rule evaluates an injected
 membership/capability provider. Founder-governed signed grants narrow that
-provider's live decision; quorum rules, delegated grants, and a group-key
-adapter remain. The next slices land per the
+provider's live decision. Quorum amendments and a p2panda-auth group adapter
+are implemented. The adapter binds resolved membership changes to a
+host-owned p2panda-encryption group-secret epoch without importing private key
+material into Gemot. Delegated grants remain a distinct signed grant lane, not
+a misleading flag on constitutional amendments. The next slices land per the
 [moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 

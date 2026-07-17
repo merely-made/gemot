@@ -20,6 +20,7 @@
 //! recognition contexts.
 
 pub mod constitution;
+pub mod group;
 mod id;
 pub mod records;
 mod service;
@@ -27,6 +28,10 @@ pub mod tessera;
 
 pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
+};
+pub use group::{
+    MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
+    MootGroupTransition, P2pandaGroupKeyEpoch,
 };
 pub use id::MootId;
 pub use records::{
