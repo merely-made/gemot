@@ -82,7 +82,7 @@ impl MootSession {
             .author(keypair, MOOT, event)
             .await
             .expect("author");
-        self.handle.publish(op).await.expect("publish");
+        self.handle.publish(op).expect("publish");
     }
 
     async fn roster(&self) -> MootRoster {

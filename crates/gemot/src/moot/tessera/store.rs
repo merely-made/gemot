@@ -231,7 +231,7 @@ impl<B: Backend + Clone> TesseraStore<B> {
                     let seq = op.header.seq_num;
                     let (_moot, event) =
                         from_operation(&op).map_err(|_| TesseraStoreError::Malformed)?;
-                    tagged.push((event.at_ms(), author_bytes, seq, event));
+                    tagged.push((event.at_ms(), author_bytes, u64::from(seq), event));
                 }
             }
         }

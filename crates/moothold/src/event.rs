@@ -65,15 +65,6 @@ pub enum MootholdEvent {
 }
 
 impl MootholdEvent {
-    pub(crate) fn at_ms(&self) -> u64 {
-        match self {
-            Self::Founded { at_ms, .. }
-            | Self::MootAdmitted { at_ms, .. }
-            | Self::MootRemoved { at_ms, .. }
-            | Self::CompositionChanged { at_ms, .. } => *at_ms,
-        }
-    }
-
     pub(crate) fn previous(&self) -> Option<[u8; 32]> {
         match self {
             Self::Founded { .. } => None,

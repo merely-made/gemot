@@ -4,8 +4,8 @@
 
 //! A Moot community and its bounded record lanes.
 //!
-//! [`Moot`] is the command and snapshot boundary. Its three lanes are
-//! [`constitution`], [`records`], and [`tessera`]. Hosts may adapt the signed
+//! [`Moot`] is the command and snapshot boundary. Its four retained lanes are
+//! [`constitution`], [`delegation`], [`records`], and [`tessera`]. Hosts may adapt the signed
 //! wire/store types for LogSync, but Gemot owns neither a network session nor a
 //! UI runtime.
 //!
@@ -31,11 +31,12 @@ pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
 };
 pub use delegation::{
-    MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegations,
+    MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegationProjection,
+    MootDelegations, MootScopeKeyEpoch,
 };
 pub use group::{
     MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
-    MootGroupTransition, P2pandaGroupKeyEpoch,
+    MootGroupTransition, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
 };
 pub use id::MootId;
 pub use records::{

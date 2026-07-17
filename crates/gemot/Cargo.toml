@@ -19,15 +19,15 @@ path = "src/lib.rs"
 # wire bridge; p2panda-core is the operation/signing substrate the bridge rides
 # (same as murm posts); identity supplies the Ed25519 signing keypair.
 serde = { version = "1", features = ["derive"] }
-p2panda-core = "0.6.1"
-p2panda-auth = { version = "0.6.1", default-features = false }
-p2panda-encryption = { version = "0.6.1", default-features = false, features = ["data_scheme"] }
+p2panda-core = "0.7.0"
+p2panda-auth = { version = "0.7.0", default-features = false }
+p2panda-encryption = { version = "0.7.0", default-features = false, features = ["data_scheme"] }
 identity.workspace = true
 murm-replication = { workspace = true }
 proofs.workspace = true
 # The sync traits implemented by the shared muniment adapter. `macros` and
 # p2panda-store's own SQLite backend stay off.
-p2panda-store = { version = "0.6.1", default-features = false }
+p2panda-store = { version = "0.7.0", default-features = false }
 # Recognition policy remains in mooting. The generic store moved to
 # murm-replication.
 mooting = { workspace = true }
@@ -49,8 +49,8 @@ thiserror = "1"
 # reads the subscription; `macros` + `rt-multi-thread` run the async tests;
 # tempfile backs the persistent-store reopen test.
 transport.workspace = true
-p2panda-net = "0.6.1"
-p2panda-sync = "0.6.1"
+p2panda-net = "0.7.0"
+p2panda-sync = "0.7.0"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
 tempfile = "3"

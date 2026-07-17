@@ -17,6 +17,8 @@ use thiserror::Error;
 use super::constitution::{CapabilityGrant, ConstitutionRules};
 
 mod store;
+#[cfg(test)]
+mod sync;
 mod wire;
 
 pub use store::{MootDelegationFileStore, MootDelegationStore, MootDelegationStoreError};
@@ -38,6 +40,36 @@ pub enum MootDelegationEvent {
     Issued(SignedDelegationCertificate),
     /// Withdraw a certificate under its original issuer's authority.
     Revoked(SignedDelegationRevocation),
+}
+
+/// Read-only authority projection for participant graphs and inspection UIs.
+/// The signed delegation store remains the source of truth.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MootDelegationProjection {
+    pub certificate: DelegationId,
+    pub parent: DelegationParent,
+    pub issuer: [u8; 32],
+    pub subject: [u8; 32],
+    pub path_prefix: String,
+    pub actions: BTreeSet<String>,
+    pub not_before_ms: u64,
+    pub expires_at_ms: Option<u64>,
+    pub remaining_delegation_depth: u16,
+    /// This certificate has its own accepted revocation statement.
+    pub directly_revoked: bool,
+    /// The full chain, constitutional root, and evaluation time are current.
+    pub active: bool,
+}
+
+/// Deterministic scope-key epoch demanded by accepted revocations.
+/// Secret generation and distribution remain in the host encryption engine.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MootScopeKeyEpoch {
+    pub resource: Vec<u8>,
+    pub path_prefix: String,
+    /// Count of distinct accepted revocations for this exact scope.
+    pub epoch: u64,
+    pub revoked_certificates: Vec<DelegationId>,
 }
 
 impl MootDelegationEvent {
@@ -89,6 +121,67 @@ impl MootDelegations {
     /// certificates retained for audit and descendant resolution.
     pub fn certificate_count(&self) -> usize {
         self.certificates.len()
+    }
+
+    /// Materialize deterministic, non-authoritative participant projections.
+    pub fn projections(
+        &self,
+        moot_id: [u8; 32],
+        rules: &ConstitutionRules,
+        at_ms: u64,
+    ) -> Vec<MootDelegationProjection> {
+        self.certificates
+            .iter()
+            .map(|(id, signed)| {
+                let certificate = &signed.certificate;
+                let time_active = at_ms >= certificate.not_before_ms
+                    && certificate
+                        .expires_at_ms
+                        .is_none_or(|expires| at_ms <= expires);
+                MootDelegationProjection {
+                    certificate: *id,
+                    parent: certificate.parent,
+                    issuer: certificate.issuer,
+                    subject: certificate.subject,
+                    path_prefix: certificate.scope.path_prefix.clone(),
+                    actions: certificate.scope.actions.clone(),
+                    not_before_ms: certificate.not_before_ms,
+                    expires_at_ms: certificate.expires_at_ms,
+                    remaining_delegation_depth: certificate.remaining_delegation_depth,
+                    directly_revoked: self.revoked.contains(id),
+                    active: time_active && self.chain_is_live(*id, rules, moot_id),
+                }
+            })
+            .collect()
+    }
+
+    /// Derive monotone per-scope encryption epochs from accepted revocations.
+    /// Replaying a revocation leaves the epoch unchanged.
+    pub fn scope_key_epochs(&self) -> Vec<MootScopeKeyEpoch> {
+        let mut by_scope: BTreeMap<(Vec<u8>, String), Vec<DelegationId>> = BTreeMap::new();
+        for id in &self.revoked {
+            let Some(signed) = self.certificates.get(id) else {
+                continue;
+            };
+            by_scope
+                .entry((
+                    signed.certificate.scope.resource.clone(),
+                    signed.certificate.scope.path_prefix.clone(),
+                ))
+                .or_default()
+                .push(*id);
+        }
+        by_scope
+            .into_iter()
+            .map(
+                |((resource, path_prefix), revoked_certificates)| MootScopeKeyEpoch {
+                    resource,
+                    path_prefix,
+                    epoch: revoked_certificates.len() as u64,
+                    revoked_certificates,
+                },
+            )
+            .collect()
     }
 
     /// Accept a signed certificate beneath a currently valid root or parent.
@@ -431,6 +524,18 @@ mod tests {
             "moot/fauna/notes",
             50,
         ));
+        let projections = grants.projections(MOOT, &rules, 50);
+        assert_eq!(projections.len(), 2);
+        assert!(projections.iter().any(|projection| {
+            projection.certificate == first_id && projection.directly_revoked && !projection.active
+        }));
+        assert!(projections.iter().all(|projection| !projection.active));
+        let key_epochs = grants.scope_key_epochs();
+        assert_eq!(key_epochs.len(), 1);
+        assert_eq!(key_epochs[0].resource, MOOT);
+        assert_eq!(key_epochs[0].path_prefix, "moot/fauna");
+        assert_eq!(key_epochs[0].epoch, 1);
+        assert_eq!(key_epochs[0].revoked_certificates, vec![first_id]);
 
         rules.revoke_grant(&ROOT);
         assert!(!grants.covers(

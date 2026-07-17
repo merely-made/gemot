@@ -20,6 +20,10 @@ use serde::{Deserialize, Serialize};
 use super::constitution::{
     ConstitutionRules, MootGovernance, MootGovernanceError, MootGovernanceSnapshot,
 };
+use super::delegation::{
+    MootDelegationProjection, MootDelegationStore, MootDelegationStoreError, MootDelegations,
+    MootScopeKeyEpoch,
+};
 
 use super::MootId;
 use super::records::{
@@ -32,6 +36,7 @@ use super::tessera::{
 };
 
 const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
+const DELEGATION_EVIDENCE_VERSION: u16 = 1;
 
 /// Stable privacy and radio-budget priorities for an importable Moot drop.
 /// Every selected record remains full-bodied because a signed log with a
@@ -69,6 +74,12 @@ impl DropExportSelector<super::MootExt> for MootDropSelector {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct ConstitutionEvidence {
+    version: u16,
+    operations: Vec<DropRecord>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct DelegationEvidence {
     version: u16,
     operations: Vec<DropRecord>,
 }
@@ -115,6 +126,8 @@ pub struct MootSnapshot {
     pub governance: MootGovernanceSnapshot,
     pub roster: MootRoster,
     pub checkpoint: Option<MootCheckpointSnapshot>,
+    /// Signed delegated certificates retained in the current authority fold.
+    pub delegated_certificates: usize,
 }
 
 /// A request to evaluate one capability-scoped community action.
@@ -185,6 +198,7 @@ pub enum MootOutboundOperation {
 pub struct MootDropImportReceipt {
     pub import: DropImportReport,
     pub constitution_operations: u64,
+    pub delegation_operations: u64,
     pub snapshot: MootSnapshot,
 }
 
@@ -197,6 +211,8 @@ pub enum MootError {
     Store(#[from] MootStoreError),
     #[error(transparent)]
     Tessera(#[from] TesseraStoreError),
+    #[error(transparent)]
+    Delegation(#[from] MootDelegationStoreError),
     #[error("moot has no accepted retention checkpoint")]
     CheckpointMissing,
     #[error("moot storage directory: {0}")]
@@ -211,6 +227,8 @@ pub enum MootError {
     ConstitutionEvidenceMissing,
     #[error("Moot drop carries malformed constitution authority evidence")]
     ConstitutionEvidenceMalformed,
+    #[error("Moot drop carries malformed delegation authority evidence")]
+    DelegationEvidenceMalformed,
     #[error("authored operation is absent from its retained lane")]
     OutboundMissing,
 }
@@ -222,6 +240,7 @@ pub struct Moot<B> {
     governance: MootGovernance<B>,
     objects: MootStore<B>,
     tessera: TesseraStore<B>,
+    delegations: MootDelegationStore<B>,
     retention: MootRetentionSettings,
 }
 
@@ -235,6 +254,7 @@ impl Moot<MemoryBackend> {
             governance: MootGovernance::in_memory(moot_id.0, founder),
             objects: MootStore::in_memory(),
             tessera: TesseraStore::in_memory(),
+            delegations: MootDelegationStore::in_memory(moot_id.0),
             retention,
         }
     }
@@ -259,6 +279,10 @@ impl Moot<RedbBackend> {
             )?,
             objects: MootStore::at_path(directory.as_ref().join("objects.redb"))?,
             tessera: TesseraFileStore::open(directory.as_ref().join("tessera.redb"))?,
+            delegations: super::delegation::MootDelegationFileStore::open(
+                directory.as_ref().join("delegations.redb"),
+                moot_id.0,
+            )?,
             retention,
         };
         match service.governance.snapshot().await {
@@ -283,6 +307,11 @@ impl<B: Backend + Clone> Moot<B> {
     /// Lower store boundary for a host-composed Tessera LogSync session.
     pub fn tessera_store(&self) -> &TesseraStore<B> {
         &self.tessera
+    }
+
+    /// Independent delegation lane for host-composed LogSync publication.
+    pub fn delegation_store(&self) -> &MootDelegationStore<B> {
+        &self.delegations
     }
 
     async fn refresh_retention_authority(&self) -> Result<(), MootError> {
@@ -380,6 +409,45 @@ impl<B: Backend + Clone> Moot<B> {
 
     /// Evaluate independently delegated authority and the provider's current
     /// structural decision under the accepted constitutional admission rule.
+    pub async fn delegations(&self) -> Result<MootDelegations, MootError> {
+        let rules = self.governance.snapshot().await?.rules;
+        Ok(self.delegations.delegations(&rules).await?)
+    }
+
+    /// Deterministic authority projections for a participant graph. Callers
+    /// may replace their projection nodes from this value, never petition the
+    /// graph to mutate the underlying authority ledger.
+    pub async fn delegation_projections(
+        &self,
+        at_ms: u64,
+    ) -> Result<Vec<MootDelegationProjection>, MootError> {
+        let rules = self.governance.snapshot().await?.rules;
+        Ok(self
+            .delegations
+            .delegations(&rules)
+            .await?
+            .projections(self.moot_id.0, &rules, at_ms))
+    }
+
+    /// Scope-key epochs the host encryption engine must bind and distribute.
+    pub async fn delegation_scope_key_epochs(&self) -> Result<Vec<MootScopeKeyEpoch>, MootError> {
+        Ok(self.delegations().await?.scope_key_epochs())
+    }
+
+    /// Evaluate the aggregate's retained independent delegation lane.
+    pub async fn authorize_current_delegated<P: MootAuthorizationProvider>(
+        &self,
+        provider: &P,
+        request: &MootAuthorizationRequest,
+    ) -> Result<GateDecision, MootError> {
+        let governance = self.governance.snapshot().await?;
+        let delegations = self.delegations.delegations(&governance.rules).await?;
+        self.authorize_delegated(&delegations, provider, request)
+            .await
+    }
+
+    /// Evaluate caller-supplied delegated authority. Prefer
+    /// [`Self::authorize_current_delegated`] for the aggregate-owned lane.
     pub async fn authorize_delegated<P: MootAuthorizationProvider>(
         &self,
         delegations: &super::MootDelegations,
@@ -570,6 +638,18 @@ impl<B: Backend + Clone> Moot<B> {
             bytes: evidence_bytes,
             critical: true,
         }];
+        let delegation = DelegationEvidence {
+            version: DELEGATION_EVIDENCE_VERSION,
+            operations: self.delegations.drop_records().await?,
+        };
+        let delegation_bytes =
+            encode_cbor(&delegation).map_err(|_| MootError::DelegationEvidenceMalformed)?;
+        records.push(DropRecord::Evidence {
+            kind: EvidenceKind::CapabilityChain,
+            subject: self.moot_id.0,
+            bytes: delegation_bytes,
+            critical: true,
+        });
         let (objects, selection) = self
             .objects
             .export_selected_drop_records(self.moot_id.0, selector, budget)
@@ -610,6 +690,33 @@ impl<B: Backend + Clone> Moot<B> {
         found.ok_or(MootError::ConstitutionEvidenceMissing)
     }
 
+    fn delegation_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
+        let mut found = None;
+        for record in records {
+            let DropRecord::Evidence {
+                kind: EvidenceKind::CapabilityChain,
+                subject,
+                bytes,
+                critical: true,
+            } = record
+            else {
+                continue;
+            };
+            if *subject != self.moot_id.0 || found.is_some() {
+                return Err(MootError::DelegationEvidenceMalformed);
+            }
+            let evidence: DelegationEvidence =
+                decode_cbor(&bytes[..]).map_err(|_| MootError::DelegationEvidenceMalformed)?;
+            if evidence.version != DELEGATION_EVIDENCE_VERSION
+                || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
+            {
+                return Err(MootError::DelegationEvidenceMalformed);
+            }
+            found = Some(evidence.operations);
+        }
+        Ok(found.unwrap_or_default())
+    }
+
     async fn import_aggregate_records(
         &self,
         drop_id: DropId,
@@ -617,6 +724,11 @@ impl<B: Backend + Clone> Moot<B> {
     ) -> Result<MootDropImportReceipt, MootError> {
         let evidence = self.constitution_evidence(&records)?;
         let constitution_operations = self.governance.accept_drop_records(&evidence).await?;
+        let delegation_evidence = self.delegation_evidence(&records)?;
+        let delegation_operations = self
+            .delegations
+            .accept_drop_records(&delegation_evidence)
+            .await?;
         // The evidence becomes active before the object lane examines its
         // checkpoint chain. This is the dependency order a fresh device needs
         // after a signer rotation.
@@ -628,6 +740,7 @@ impl<B: Backend + Clone> Moot<B> {
         Ok(MootDropImportReceipt {
             import,
             constitution_operations,
+            delegation_operations,
             snapshot: self.snapshot().await?,
         })
     }
@@ -701,11 +814,17 @@ impl<B: Backend + Clone> Moot<B> {
                 frontier_count: stored.checkpoint.frontier.len(),
                 at_ms: stored.checkpoint.at_ms,
             });
+        let delegated_certificates = self
+            .delegations
+            .delegations(&governance.rules)
+            .await?
+            .certificate_count();
         Ok(MootSnapshot {
             moot_id: self.moot_id,
             governance,
             roster,
             checkpoint,
+            delegated_certificates,
         })
     }
 }
@@ -714,13 +833,14 @@ impl<B: Backend + Clone> Moot<B> {
 mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
-    use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegations};
+    use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
     use crate::moot::tessera::{
         ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
     };
     use crate::moot::{KeepBound, MootStoreError};
     use identity::delegation::{
-        CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+        CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+        SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
     };
     use identity::{IdentityProvider, InMemoryProvider};
     use murm_replication::NativeDropError;
@@ -891,7 +1011,10 @@ mod tests {
                 .authorize(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts::default(),
+                        facts: TesseraFacts {
+                            score: 1,
+                            ..Default::default()
+                        },
                     },
                     &request,
                 )
@@ -1045,30 +1168,36 @@ mod tests {
             .await
             .unwrap();
 
+        let scope = CapabilityScope {
+            domain: MOOT_DELEGATION_DOMAIN.into(),
+            resource: ID.0.to_vec(),
+            path_prefix: "moot/fauna/research".into(),
+            actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+        };
         let certificate = DelegationCertificate::new(
             DelegationParent::Root(root_id),
             root_holder.master_public_key().to_bytes(),
             delegate.master_public_key().to_bytes(),
-            CapabilityScope {
-                domain: MOOT_DELEGATION_DOMAIN.into(),
-                resource: ID.0.to_vec(),
-                path_prefix: "moot/fauna/research".into(),
-                actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
-            },
+            scope.clone(),
             5,
             10,
             Some(90),
             1,
             [0x41; 32],
         );
-        let mut delegations = MootDelegations::new();
-        delegations
-            .accept_certificate(
-                ID.0,
+        let delegation_key = root_holder
+            .derive_keypair(&delegation_signing_salt(&scope))
+            .unwrap();
+        service
+            .delegation_store()
+            .author_issue(
+                &delegation_key,
                 &rules,
                 SignedDelegationCertificate::issue(&root_holder, certificate).unwrap(),
             )
+            .await
             .unwrap();
+        assert_eq!(service.snapshot().await.unwrap().delegated_certificates, 1);
         let request = MootAuthorizationRequest {
             subject: delegate.master_public_key().to_bytes(),
             capability_path: "moot/fauna/research/write".into(),
@@ -1083,15 +1212,14 @@ mod tests {
         };
         assert_eq!(
             service
-                .authorize_delegated(&delegations, &member, &request)
+                .authorize_current_delegated(&member, &request)
                 .await
                 .unwrap(),
             GateDecision::Allow
         );
         assert_eq!(
             service
-                .authorize_delegated(
-                    &delegations,
+                .authorize_current_delegated(
                     &Access {
                         capability_covers: false,
                         facts: member.facts.clone(),
@@ -1107,7 +1235,160 @@ mod tests {
         service.amend(founder.to_seed(), rules, 101).await.unwrap();
         assert_eq!(
             service
-                .authorize_delegated(&delegations, &member, &request)
+                .authorize_current_delegated(&member, &request)
+                .await
+                .unwrap(),
+            GateDecision::Deny(DenyReason::NoCapability)
+        );
+    }
+
+    #[tokio::test]
+    async fn native_drop_bootstraps_independent_delegation_authority() {
+        let founder = keypair(11);
+        let founder_id = founder.public_key().to_bytes();
+        let root_holder = InMemoryProvider::from_seed([0x51; 32]);
+        let delegate = InMemoryProvider::from_seed([0x52; 32]);
+        let root_id = [0xc1; 32];
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.grant(CapabilityGrant {
+            id: root_id,
+            subject: root_holder.master_public_key().to_bytes(),
+            path_prefix: "moot/fauna".into(),
+            not_before_ms: 1,
+            expires_at_ms: Some(100),
+            delegation_depth: 1,
+        });
+        let source = Moot::in_memory(ID, founder_id, retention());
+        source
+            .found(founder.to_seed(), None, None, rules.clone(), 1)
+            .await
+            .unwrap();
+        let scope = CapabilityScope {
+            domain: MOOT_DELEGATION_DOMAIN.into(),
+            resource: ID.0.to_vec(),
+            path_prefix: "moot/fauna/notes".into(),
+            actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+        };
+        let signed = SignedDelegationCertificate::issue(
+            &root_holder,
+            DelegationCertificate::new(
+                DelegationParent::Root(root_id),
+                root_holder.master_public_key().to_bytes(),
+                delegate.master_public_key().to_bytes(),
+                scope.clone(),
+                2,
+                3,
+                Some(90),
+                0,
+                [0x53; 32],
+            ),
+        )
+        .unwrap();
+        let certificate_id = signed.certificate.id();
+        let delegation_key = root_holder
+            .derive_keypair(&delegation_signing_salt(&scope))
+            .unwrap();
+        source
+            .delegation_store()
+            .author_issue(&delegation_key, &rules, signed)
+            .await
+            .unwrap();
+
+        let mut bytes = Vec::new();
+        source
+            .export_plain_drop(
+                &mut bytes,
+                DropExportProfile::default(),
+                DropLimits::default(),
+            )
+            .await
+            .unwrap();
+        let target = Moot::in_memory(ID, founder_id, retention());
+        let receipt = target
+            .import_plain_drop(Cursor::new(bytes), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(receipt.delegation_operations, 1);
+        assert_eq!(receipt.snapshot.delegated_certificates, 1);
+        assert_eq!(
+            target
+                .authorize_current_delegated(
+                    &Access {
+                        capability_covers: true,
+                        facts: TesseraFacts {
+                            score: 1,
+                            ..Default::default()
+                        },
+                    },
+                    &MootAuthorizationRequest {
+                        subject: delegate.master_public_key().to_bytes(),
+                        capability_path: "moot/fauna/notes/write".into(),
+                        at_ms: 50,
+                    },
+                )
+                .await
+                .unwrap(),
+            GateDecision::Allow
+        );
+
+        let revocation = SignedDelegationRevocation::issue(
+            &root_holder,
+            DelegationRevocation::new(
+                certificate_id,
+                root_holder.master_public_key().to_bytes(),
+                scope.clone(),
+                60,
+                [0x54; 32],
+            ),
+        )
+        .unwrap();
+        source
+            .delegation_store()
+            .author_revoke(&delegation_key, &rules, revocation)
+            .await
+            .unwrap();
+        let mut revoked_bytes = Vec::new();
+        source
+            .export_plain_drop(
+                &mut revoked_bytes,
+                DropExportProfile::default(),
+                DropLimits::default(),
+            )
+            .await
+            .unwrap();
+        let revoked_receipt = target
+            .import_plain_drop(Cursor::new(revoked_bytes), DropLimits::default())
+            .await
+            .unwrap();
+        assert_eq!(revoked_receipt.delegation_operations, 1);
+        assert_eq!(
+            target.delegation_scope_key_epochs().await.unwrap()[0].epoch,
+            1
+        );
+        assert!(
+            target
+                .delegation_projections(60)
+                .await
+                .unwrap()
+                .iter()
+                .all(|projection| !projection.active)
+        );
+        assert_eq!(
+            target
+                .authorize_current_delegated(
+                    &Access {
+                        capability_covers: true,
+                        facts: TesseraFacts {
+                            score: 1,
+                            ..Default::default()
+                        },
+                    },
+                    &MootAuthorizationRequest {
+                        subject: delegate.master_public_key().to_bytes(),
+                        capability_path: "moot/fauna/notes/write".into(),
+                        at_ms: 60,
+                    },
+                )
                 .await
                 .unwrap(),
             GateDecision::Deny(DenyReason::NoCapability)

@@ -229,9 +229,11 @@ host-owned p2panda-encryption group-secret epoch without importing private key
 material into Gemot. Independent Personae-signed certificates now attenuate
 constitutional grant roots through a Gemot fold, including cascading
 certificate and root revocation. Their signed p2panda lane survives durable
-reopen and materializes correctly across out-of-order arrival. Aggregate
-native-drop carriage, participant-graph projections, and scope-key rotation
-remain. The next slices land per the
+reopen, materializes correctly across out-of-order arrival, and catches up a
+late peer over upstream p2panda 0.7 / Iroh 1.0. Aggregate native drops carry the
+lane as critical capability-chain evidence. The service exposes deterministic
+read-only participant projections and revocation-derived scope-key epochs for a
+host to bind to p2panda-encryption secrets. The next slices land per the
 [moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 
