@@ -20,4 +20,4 @@ directly from `murm-replication` by domain crates.
 
 ## License
 
-MPL-2.0.
+MIT OR Apache-2.0.
