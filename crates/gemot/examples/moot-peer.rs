@@ -275,7 +275,6 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("declare: {e}"))?;
             handle
                 .publish(op)
-                .await
                 .map_err(|e| format!("publish: {e}"))?;
             println!("declared.");
         }
@@ -293,7 +292,6 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("join: {e}"))?;
             handle
                 .publish(op)
-                .await
                 .map_err(|e| format!("publish: {e}"))?;
             println!("joined.");
         }
@@ -317,7 +315,6 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("share: {e}"))?;
             handle
                 .publish(op)
-                .await
                 .map_err(|e| format!("publish: {e}"))?;
             println!("shared into the fauna.");
         }
