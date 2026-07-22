@@ -314,6 +314,33 @@ mod tests {
         assert_eq!(roster.fauna.len(), 1);
         assert_eq!(roster.fauna[0].schema_id, "eidetic.SearchIndexSpec/v1");
         assert_eq!(roster.fauna[0].shared_by, author(&friend));
+        // The pack hand-off (participant gate B5's curation half): a shared
+        // engram whose schema is mere.pack/v1 lists in the fauna like any
+        // other — the moot's flora IS where a distributed pack becomes
+        // discoverable, no pack-specific wire needed.
+        let pack_shared = to_operation(
+            &friend,
+            MOOT,
+            &MootEvent::Shared {
+                manifest_id: [0xbb; 32],
+                schema_id: "mere.pack/v1".into(),
+                title: "trail-keeper 0.1.0".into(),
+                at_ms: 14,
+            },
+            2,
+            Some(*shared.hash.as_bytes()),
+        );
+        let with_pack =
+            MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join, &shared, &pack_shared]);
+        assert_eq!(with_pack.fauna.len(), 2);
+        assert!(
+            with_pack
+                .fauna
+                .iter()
+                .any(|f| f.schema_id == "mere.pack/v1" && f.title == "trail-keeper 0.1.0"),
+            "the pack is visible in the moot's flora under its schema"
+        );
+
         let without_fauna = MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join]);
         assert_eq!(
             roster.membership_revision, without_fauna.membership_revision,
