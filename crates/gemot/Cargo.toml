@@ -46,6 +46,10 @@ thiserror = "1"
 # two-peer convergence tests + the `moot-peer` example play the host).
 
 [dev-dependencies]
+# The peer-petition receipt drives a REAL servitor::Gate over a chartulary
+# graph, proving one gate serves scripts, components, and moot peers alike.
+# Test-only: MootAuthority itself needs no graph substrate.
+chartulary.workspace = true
 # The two-peer convergence tests + the `moot-peer` example play the host: they
 # build the real p2panda-net peers and the `LogSync` + `SyncedSpace` pump.
 # `transport` supplies `P2pandaTransport` / `sync_overlay_topic`;

@@ -19,6 +19,16 @@
 //! against the SAME certificate grammar; the two tiers differ only in where
 //! chains root (a constitution grant here, the profile identity there).
 //!
+//! The unification runs BOTH directions, one type per seam:
+//!
+//! - [`TypedMootAuthorization`] is the **moot-facing** face: it answers
+//!   gemot's own [`MootAuthorizationProvider`] seam from typed capabilities.
+//! - [`MootAuthority`] is the **servitor-facing** face: it presents the same
+//!   moot certificates as a [`servitor::AuthorityProvider`], so a moot peer's
+//!   petition runs through the very `servitor::Gate` a script's and a wasm
+//!   component's do. That is the participant-gate doctrine's third actor
+//!   kind, and it needs no new gate — only this adapter.
+//!
 //! Typed means typed: a certificate issued with a raw path (`moot/fauna`)
 //! does not answer a typed request, and a bare-string request parses as the
 //! scope it always was — never accidentally a power. Moots that have not
@@ -26,7 +36,7 @@
 //! raw [`MootDelegations::covers`]; there is no silent bridge between the
 //! vocabularies, because a silent bridge is the F1 ambiguity again.
 
-use servitor::{Cap, cap_path};
+use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 
 use super::constitution::ConstitutionRules;
 use super::delegation::MootDelegations;
@@ -77,15 +87,62 @@ impl<M: MootAuthorizationProvider> MootAuthorizationProvider
     }
 }
 
+/// The moot's delegated authority as a **servitor** [`AuthorityProvider`].
+///
+/// This is what makes "one gate for every denizen" true rather than aspirational:
+/// a moot peer petitions a shared graph through the same `servitor::Gate` a
+/// resident script or wasm component uses, with the same projection guard,
+/// scope check, and attributed revision-checked commit. Only the AUTHORITY
+/// differs — chains root at a constitutional capability grant here, at the
+/// profile identity in merecat's denizen table.
+///
+/// **Mode mapping.** The moot vocabulary carries a single action today
+/// ([`MOOT_ACT_ACTION`](super::delegation::MOOT_ACT_ACTION)): holding it means
+/// "may act in this scope", which satisfies [`Mode::Read`] and [`Mode::Write`].
+/// [`Mode::Delegate`] is **not** answerable through this seam — a moot
+/// expresses delegability as the certificate's `remaining_delegation_depth`,
+/// a different axis from its action set — so a delegate-mode need fails
+/// closed here rather than being approximated by "act".
+pub struct MootAuthority<'a> {
+    /// The moot's converged delegation certificates.
+    pub delegations: &'a MootDelegations,
+    /// The accepted constitution, whose capability grants root the chains.
+    pub rules: &'a ConstitutionRules,
+    /// Which moot's scopes count.
+    pub moot_id: [u8; 32],
+    /// The host-set evaluation clock. Gemot and servitor both take time as
+    /// input; neither reads a clock of its own.
+    pub now_ms: u64,
+}
+
+impl AuthorityProvider for MootAuthority<'_> {
+    fn covers(&self, subject: Subject, needed: &Cap, mode: Mode) -> bool {
+        if matches!(mode, Mode::Delegate) {
+            // Not expressible in the moot action vocabulary; see the type doc.
+            return false;
+        }
+        self.delegations.covers(
+            self.moot_id,
+            self.rules,
+            subject.0,
+            &cap_path(needed),
+            self.now_ms,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
     use crate::moot::tessera::gate::TesseraFacts;
+    use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{
-        CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+        CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
+        DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,
     };
+    use servitor::{Gate, GateError, ScopePath};
     use identity::{IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [9; 32];
@@ -114,13 +171,24 @@ mod tests {
         holder: &InMemoryProvider,
         member: &InMemoryProvider,
     ) -> (MootDelegations, ConstitutionRules) {
-        let power = Cap::power("curate").unwrap();
+        let (delegations, rules, _) =
+            typed_moot_for(holder, member, &Cap::power("curate").unwrap());
+        (delegations, rules)
+    }
+
+    /// The same, over any typed capability, returning the certificate id so a
+    /// test can revoke it.
+    fn typed_moot_for(
+        holder: &InMemoryProvider,
+        member: &InMemoryProvider,
+        power: &Cap,
+    ) -> (MootDelegations, ConstitutionRules, DelegationId) {
         let mut rules =
             ConstitutionRules::founder_only(holder.master_public_key().to_bytes());
         rules.grant(CapabilityGrant {
             id: ROOT_GRANT,
             subject: holder.master_public_key().to_bytes(),
-            path_prefix: cap_path(&power),
+            path_prefix: cap_path(power),
             not_before_ms: 10,
             expires_at_ms: Some(1_000),
             delegation_depth: 3,
@@ -132,7 +200,7 @@ mod tests {
             CapabilityScope {
                 domain: MOOT_DELEGATION_DOMAIN.into(),
                 resource: MOOT.to_vec(),
-                path_prefix: cap_path(&power),
+                path_prefix: cap_path(power),
                 actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
             },
             15,
@@ -142,11 +210,12 @@ mod tests {
             [3; 32],
         );
         let signed = SignedDelegationCertificate::issue(holder, certificate).unwrap();
+        let id = signed.certificate.id();
         let mut delegations = MootDelegations::new();
         delegations
             .accept_certificate(MOOT, &rules, signed)
             .unwrap();
-        (delegations, rules)
+        (delegations, rules, id)
     }
 
     fn request(subject: [u8; 32], capability: &str) -> MootAuthorizationRequest {
@@ -234,5 +303,147 @@ mod tests {
             !provider.inputs(&late).capability_covers,
             "the certificate's own expiry decides, with no seam-side state"
         );
+    }
+
+    // ── The peer lane: one gate, three actor kinds ────────────────────────
+
+    /// The participant-gate doctrine's third actor kind, made real: a moot
+    /// peer petitions a shared graph through the SAME `servitor::Gate` a
+    /// resident script or wasm component uses. No peer-specific gate, no
+    /// second authority model — only a different root for the chain.
+    #[test]
+    fn a_moot_peer_petitions_a_shared_graph_through_the_same_gate() {
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let peer = InMemoryProvider::from_seed([2; 32]);
+        let shared = Cap::scope("shared").unwrap();
+        let (delegations, rules, _) = typed_moot_for(&holder, &peer, &shared);
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+            now_ms: 500,
+        };
+        let peer_subject = Subject::new(peer.master_public_key().to_bytes());
+        let gate = Gate::new();
+        let mut graph = GraphLog::<Container, Relation>::new();
+        let claimed = ScopePath::parse("shared").unwrap();
+
+        // In scope: commits, attributed to the PEER — the same attributed
+        // revision-checked commit a denizen gets.
+        let revision = graph.revision();
+        let committed = gate
+            .petition(
+                &authority,
+                &mut graph,
+                peer_subject,
+                &claimed,
+                revision,
+                vec![EditSpec::InsertNode(Container::new("shared/note"))],
+            )
+            .expect("a delegated peer's in-scope petition commits");
+        let entry = &graph.log().entries()[committed.batch.0 as usize];
+        assert_eq!(entry.author, peer_subject.to_author(), "attributed to the peer");
+        assert_eq!(graph.graph().node_count(), 1);
+
+        // Out of scope: the gate's own scope check, unchanged.
+        let revision = graph.revision();
+        let err = gate
+            .petition(
+                &authority,
+                &mut graph,
+                peer_subject,
+                &claimed,
+                revision,
+                vec![EditSpec::InsertNode(Container::new("private/secret"))],
+            )
+            .unwrap_err();
+        assert!(matches!(err, GateError::OutOfScope { .. }), "{err:?}");
+
+        // An undelegated peer: refused, though it is a real identity.
+        let stranger = Subject::new(InMemoryProvider::from_seed([9; 32]).master_public_key().to_bytes());
+        let revision = graph.revision();
+        let err = gate
+            .petition(
+                &authority,
+                &mut graph,
+                stranger,
+                &claimed,
+                revision,
+                vec![EditSpec::InsertNode(Container::new("shared/intrusion"))],
+            )
+            .unwrap_err();
+        assert!(matches!(err, GateError::Unauthorized { .. }), "{err:?}");
+        assert_eq!(graph.graph().node_count(), 1, "nothing else applied");
+    }
+
+    /// Revoking the moot certificate stops the peer AT THE GATE — the moot
+    /// tier's revocation reaching the same petition path the denizen tier's
+    /// uninstall reaches.
+    #[test]
+    fn revoking_the_moot_certificate_stops_the_peer_at_the_gate() {
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let peer = InMemoryProvider::from_seed([2; 32]);
+        let shared = Cap::scope("shared").unwrap();
+        let (mut delegations, rules, certificate) = typed_moot_for(&holder, &peer, &shared);
+        let peer_subject = Subject::new(peer.master_public_key().to_bytes());
+        let gate = Gate::new();
+        let mut graph = GraphLog::<Container, Relation>::new();
+        let claimed = ScopePath::parse("shared").unwrap();
+
+        let revocation = DelegationRevocation::new(
+            certificate,
+            holder.master_public_key().to_bytes(),
+            CapabilityScope {
+                domain: MOOT_DELEGATION_DOMAIN.into(),
+                resource: MOOT.to_vec(),
+                path_prefix: cap_path(&shared),
+                actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+            },
+            400,
+            [5; 32],
+        );
+        delegations
+            .accept_revocation(SignedDelegationRevocation::issue(&holder, revocation).unwrap())
+            .unwrap();
+
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+            now_ms: 500,
+        };
+        let revision = graph.revision();
+        let err = gate
+            .petition(
+                &authority,
+                &mut graph,
+                peer_subject,
+                &claimed,
+                revision,
+                vec![EditSpec::InsertNode(Container::new("shared/after"))],
+            )
+            .unwrap_err();
+        assert!(matches!(err, GateError::Unauthorized { .. }), "{err:?}");
+        assert_eq!(graph.graph().node_count(), 0, "nothing applied after revocation");
+    }
+
+    #[test]
+    fn delegate_mode_fails_closed_rather_than_approximating_act() {
+        // The moot expresses delegability as certificate depth, not as an
+        // action, so this seam refuses to answer for it.
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let peer = InMemoryProvider::from_seed([2; 32]);
+        let shared = Cap::scope("shared").unwrap();
+        let (delegations, rules, _) = typed_moot_for(&holder, &peer, &shared);
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+            now_ms: 500,
+        };
+        let peer_subject = Subject::new(peer.master_public_key().to_bytes());
+        assert!(authority.covers(peer_subject, &shared, Mode::Write));
+        assert!(authority.covers(peer_subject, &shared, Mode::Read), "act implies read");
+        assert!(!authority.covers(peer_subject, &shared, Mode::Delegate));
     }
 }
