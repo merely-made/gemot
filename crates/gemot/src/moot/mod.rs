@@ -25,6 +25,7 @@ mod id;
 pub mod records;
 mod service;
 pub mod tessera;
+pub mod typed_authorization;
 
 pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
@@ -33,6 +34,7 @@ pub use delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegationProjection,
     MootDelegations, MootScopeKeyEpoch,
 };
+pub use typed_authorization::TypedMootAuthorization;
 pub use group::{
     MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
     MootGroupTransition, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
