@@ -12,7 +12,7 @@ categories = ["network-programming"]
 
 [dependencies]
 gemot.workspace = true
-muniment = { version = "0.1.0", features = ["redb"] }
+muniment = { workspace = true, features = ["redb"] }
 murm-replication.workspace = true
 p2panda-core = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
