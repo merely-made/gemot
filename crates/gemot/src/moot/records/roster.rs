@@ -20,6 +20,8 @@ use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
 use p2panda_core::{Hash, Operation};
 use serde::{Deserialize, Serialize};
 
+use servitor::{AuthorityProvider, Cap, Mode, Subject};
+
 use super::retention::MootRosterSnapshot;
 use super::wire::{MootEvent, MootExt, from_operation, verify};
 
@@ -58,6 +60,13 @@ pub struct FaunaEntry {
     pub op_hash: [u8; 32],
 }
 
+/// The capability a sharer must hold for their contribution to count as part
+/// of the moot's commons: the typed scope `moot/fauna`
+/// (`scope/moot/fauna` on the wire, per the capability-model encoding).
+pub fn fauna_cap() -> Cap {
+    Cap::scope("moot/fauna").expect("a valid scope")
+}
+
 /// The folded moot: founding, membership, fauna.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MootRoster {
@@ -87,6 +96,41 @@ impl MootRoster {
         policy: RecognitionPolicy,
     ) -> RecognitionContext {
         RecognitionContext::new(policy, self.electorate_snapshot(moot_id))
+    }
+
+    /// The commons **as converged authority sees it**: fauna entries whose
+    /// sharer holds [`fauna_cap`] under `authority`, in the roster's order.
+    ///
+    /// Authority is applied here, at read, rather than at admission — and that
+    /// is a correctness requirement, not a preference. Authority state
+    /// (delegation certificates, constitution amendments) converges
+    /// *separately* from the operations it authorizes, so an operation can
+    /// legitimately arrive before the certificate that authorizes it:
+    /// out-of-order sync, a late-joining peer, a drop import. Refusing at
+    /// admission would permanently discard operations that become authorized
+    /// moments later, with no retry, because the operation is gone. Evaluating
+    /// here cannot fail that way: the same entry becomes visible the moment
+    /// its certificate lands, and stops being visible the moment it is
+    /// revoked — the identical read-time discipline
+    /// [`MootDelegations`](crate::moot::MootDelegations) already applies to
+    /// chain validity.
+    ///
+    /// The division of labour: **admission validates what one operation can
+    /// prove about itself** (signature, moot address, wire grammar, prune
+    /// flag — all self-contained); **the fold and this projection decide what
+    /// converged authority makes effective.**
+    ///
+    /// [`fauna`](Self::fauna) remains the unfiltered convergent record, so
+    /// nothing is lost and an entry can be shown as pending rather than
+    /// silently dropped.
+    pub fn authorized_fauna(&self, authority: &impl AuthorityProvider) -> Vec<&FaunaEntry> {
+        let cap = fauna_cap();
+        self.fauna
+            .iter()
+            .filter(|entry| {
+                authority.covers(Subject::new(entry.shared_by), &cap, Mode::Write)
+            })
+            .collect()
     }
 
     /// Fold a set of operations into a roster. Order-independent; ops that
