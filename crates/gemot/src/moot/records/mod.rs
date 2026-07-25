@@ -14,7 +14,7 @@ pub use retention::{
     AvailabilityPolicy, CheckpointError, ErasurePolicy, GovernedCheckpointAuthority, KeepBound,
     LogFrontier, MootRetentionPolicy, MootRosterSnapshot, PolicyRevision, RetentionCheckpoint,
 };
-pub use roster::{Declaration, FaunaEntry, Member, MootRoster};
+pub use roster::{Declaration, FaunaEntry, Member, MootRoster, fauna_cap};
 pub use store::{MootStore, MootStoreError, MootStoreFile, StoredCheckpoint};
 pub use wire::{
     MootEvent, MootExt, MootLogId, WireError, from_operation, to_operation, to_operation_seed,
