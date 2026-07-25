@@ -446,4 +446,111 @@ mod tests {
         assert!(authority.covers(peer_subject, &shared, Mode::Read), "act implies read");
         assert!(!authority.covers(peer_subject, &shared, Mode::Delegate));
     }
+
+    // ── The commons, as converged authority sees it ───────────────────────
+
+    /// `MootPolicy::admit` accepts a `Shared` event on wire grammar and moot
+    /// address alone, so the raw fauna is whatever anyone put there. The
+    /// authorized projection is the capability answer over it — and it is
+    /// evaluated at READ, because authority converges separately from the
+    /// operations it authorizes.
+    #[test]
+    fn the_authorized_commons_filters_shares_by_capability() {
+        use crate::moot::records::{FaunaEntry, MootRoster};
+
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let sharer = InMemoryProvider::from_seed([2; 32]);
+        let stranger = InMemoryProvider::from_seed([3; 32]);
+        // The moot roots the fauna capability and delegates it to `sharer`.
+        let (delegations, rules, _) =
+            typed_moot_for(&holder, &sharer, &crate::moot::records::fauna_cap());
+
+        // Two contributions to the commons: one from the delegated sharer,
+        // one from an identity that was never granted anything.
+        let mut roster = MootRoster::default();
+        let entry = |who: &InMemoryProvider, title: &str, tag: u8| FaunaEntry {
+            manifest_id: [tag; 32],
+            schema_id: "mere.pack/v1".into(),
+            title: title.into(),
+            shared_by: who.master_public_key().to_bytes(),
+            at_ms: 100,
+            op_hash: [tag; 32],
+        };
+        roster.fauna.push(entry(&sharer, "granted", 1));
+        roster.fauna.push(entry(&stranger, "ungranted", 2));
+
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+            now_ms: 500,
+        };
+        let authorized = roster.authorized_fauna(&authority);
+        assert_eq!(authorized.len(), 1, "only the delegated share counts");
+        assert_eq!(authorized[0].title, "granted");
+        assert_eq!(
+            roster.fauna.len(),
+            2,
+            "the unfiltered record keeps both, so a surface can show the other as pending"
+        );
+    }
+
+    /// The read-time property that makes this the right layer: revoking the
+    /// sharer's certificate removes their contribution from the commons with
+    /// **no change to stored operations**. Nothing was discarded on the way
+    /// in, and nothing has to be rewritten on the way out.
+    #[test]
+    fn revoking_a_sharer_withdraws_their_contribution_without_touching_storage() {
+        use crate::moot::records::{FaunaEntry, MootRoster};
+
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let sharer = InMemoryProvider::from_seed([2; 32]);
+        let fauna = crate::moot::records::fauna_cap();
+        let (mut delegations, rules, certificate) = typed_moot_for(&holder, &sharer, &fauna);
+
+        let mut roster = MootRoster::default();
+        roster.fauna.push(FaunaEntry {
+            manifest_id: [1; 32],
+            schema_id: "mere.pack/v1".into(),
+            title: "contribution".into(),
+            shared_by: sharer.master_public_key().to_bytes(),
+            at_ms: 100,
+            op_hash: [1; 32],
+        });
+
+        let visible = |delegations: &MootDelegations| {
+            roster
+                .authorized_fauna(&MootAuthority {
+                    delegations,
+                    rules: &rules,
+                    moot_id: MOOT,
+                    now_ms: 500,
+                })
+                .len()
+        };
+        assert_eq!(visible(&delegations), 1, "visible while the certificate stands");
+
+        let revocation = DelegationRevocation::new(
+            certificate,
+            holder.master_public_key().to_bytes(),
+            CapabilityScope {
+                domain: MOOT_DELEGATION_DOMAIN.into(),
+                resource: MOOT.to_vec(),
+                path_prefix: cap_path(&fauna),
+                actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+            },
+            400,
+            [5; 32],
+        );
+        delegations
+            .accept_revocation(SignedDelegationRevocation::issue(&holder, revocation).unwrap())
+            .unwrap();
+
+        assert_eq!(visible(&delegations), 0, "withdrawn from the commons on revocation");
+        assert_eq!(
+            roster.fauna.len(),
+            1,
+            "and the stored record is untouched: authority decided, not the log"
+        );
+    }
 }

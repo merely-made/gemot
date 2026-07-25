@@ -27,9 +27,10 @@ use super::delegation::{
 
 use super::MootId;
 use super::records::{
-    AvailabilityPolicy, ErasurePolicy, MootEvent, MootRetentionPolicy, MootRoster, MootStore,
-    MootStoreError, PolicyRevision,
+    AvailabilityPolicy, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy, MootRoster,
+    MootStore, MootStoreError, PolicyRevision,
 };
+use super::typed_authorization::MootAuthority;
 use super::tessera::{
     GateDecision, TesseraEvent, TesseraExt, TesseraFacts, TesseraFileStore, TesseraStore,
     TesseraStoreError, authorize,
@@ -797,6 +798,39 @@ impl<B: Backend + Clone> Moot<B> {
     ) -> Result<MootDropImportReceipt, MootError> {
         let (read, records) = read_protected_drop(reader, limits, protector)?;
         self.import_aggregate_records(read.id, records).await
+    }
+
+    /// The moot's commons **as converged authority sees it**: fauna entries
+    /// whose sharer holds the typed `moot/fauna` capability at `at_ms`.
+    ///
+    /// Today `MootPolicy::admit` accepts a `Shared` event on wire grammar and
+    /// moot address alone, so the raw
+    /// [`roster.fauna`](super::MootRoster::fauna) is *everything anyone put
+    /// there*. This is the authorized view over it, evaluated at read for the
+    /// reason recorded on
+    /// [`MootRoster::authorized_fauna`](super::MootRoster::authorized_fauna):
+    /// authority converges separately from the operations it authorizes, so
+    /// refusing at admission would discard operations that become authorized
+    /// a moment later.
+    ///
+    /// Both views are deliberately available. Which one a surface shows is a
+    /// product call — the unfiltered record lets a UI show an unauthorized
+    /// contribution as *pending* rather than making it vanish.
+    pub async fn authorized_fauna(&self, at_ms: u64) -> Result<Vec<FaunaEntry>, MootError> {
+        let rules = self.governance.snapshot().await?.rules;
+        let delegations = self.delegations.delegations(&rules).await?;
+        let roster = self.objects.roster(self.moot_id.0).await?;
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: self.moot_id.0,
+            now_ms: at_ms,
+        };
+        Ok(roster
+            .authorized_fauna(&authority)
+            .into_iter()
+            .cloned()
+            .collect())
     }
 
     pub async fn snapshot(&self) -> Result<MootSnapshot, MootError> {
