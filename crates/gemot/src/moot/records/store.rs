@@ -771,6 +771,117 @@ mod tests {
         assert_eq!(roster.fauna[0].title, "retained tail");
     }
 
+    /// The intake paths do NOT all return the same decision, and that is
+    /// deliberate — this pins the one place they diverge so it cannot be
+    /// "cleaned up" into agreement.
+    ///
+    /// `MootPolicy` carries `allow_historical_checkpoint_authority` and
+    /// `allow_historical_prune`: `false` for live processing and plain-drop
+    /// import, `true` for the aggregate carrier. An aggregate drop bootstraps
+    /// a fresh peer *through a rotated checkpoint chain*, so it must accept a
+    /// prune naming a checkpoint that has since been superseded — exactly what
+    /// live intake must reject as stale, because on a live peer that prune
+    /// would destroy history against outdated authority.
+    ///
+    /// One store, one operation, two paths, two answers. Phase B's "same
+    /// decision for one operation corpus" holds for everything else.
+    #[tokio::test]
+    async fn aggregate_import_admits_the_historical_prune_that_live_intake_rejects() {
+        let authority = keypair(1);
+        let store = MootStore::in_memory_with_retention(retention(&authority));
+        store
+            .author(
+                &authority,
+                MOOT,
+                &MootEvent::Declared {
+                    name: "printing circle".into(),
+                    charter: "shared type".into(),
+                    at_ms: 1,
+                },
+            )
+            .await
+            .unwrap();
+        let joined = store
+            .author(
+                &authority,
+                MOOT,
+                &MootEvent::Joined {
+                    name: "mark".into(),
+                    at_ms: 2,
+                },
+            )
+            .await
+            .unwrap();
+
+        // Two checkpoints: the second supersedes the first, so a prune naming
+        // the first is historical.
+        let first = store.build_checkpoint(MOOT, 10).await.unwrap();
+        let superseded = store
+            .author(
+                &authority,
+                MOOT,
+                &MootEvent::RetentionCheckpoint {
+                    checkpoint: Box::new(first),
+                },
+            )
+            .await
+            .unwrap();
+        let second = store.build_checkpoint(MOOT, 20).await.unwrap();
+        store
+            .author(
+                &authority,
+                MOOT,
+                &MootEvent::RetentionCheckpoint {
+                    checkpoint: Box::new(second),
+                },
+            )
+            .await
+            .unwrap();
+
+        // Build the prune WITHOUT accepting it: checkpoints ride their own
+        // log, so the events log still ends at `joined`.
+        let prune = to_prune_operation_seed(
+            authority.to_seed(),
+            MOOT,
+            *superseded.hash.as_bytes(),
+            30,
+            joined.header.seq_num + 1,
+            Some(*joined.hash.as_bytes()),
+        );
+
+        // Live intake: refused, and nothing moved.
+        let before = store.ops(MOOT).await.unwrap().len();
+        let error = store
+            .accept(MOOT, &prune)
+            .await
+            .expect_err("live intake rejects a prune against superseded authority");
+        assert!(
+            format!("{error}").contains("checkpoint-stale")
+                || format!("{error:?}").contains("checkpoint-stale"),
+            "rejected for staleness, not something incidental: {error:?}"
+        );
+        assert_eq!(
+            store.ops(MOOT).await.unwrap().len(),
+            before,
+            "a refused prune leaves the live store unchanged"
+        );
+
+        // The aggregate carrier: the same operation, admitted, because a
+        // bootstrapping peer has to walk the whole rotated chain.
+        let report = store
+            .import_drop_records(
+                MOOT,
+                murm_replication::DropId([0x0d; 32]),
+                vec![murm_replication::operation_record(&prune, true)],
+            )
+            .await
+            .expect("the aggregate carrier admits historical prune ancestry");
+        assert_eq!(
+            report.accepted, 1,
+            "the divergence is real: {report:?}"
+        );
+    }
+
     #[tokio::test]
     async fn unauthorized_checkpoint_is_rejected_before_mutation() {
         let authority = keypair(1);
