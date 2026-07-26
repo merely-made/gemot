@@ -31,7 +31,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use gemot::moot::{MootEvent, MootExt, MootLogId, MootRoster, MootStoreFile, verify};
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use murm_replication::JoinedSpace;
-use p2panda_core::{Hash, Operation, Topic};
+use p2panda_core::{Hash, Operation};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;
 
@@ -239,7 +239,7 @@ async fn main() -> Result<(), String> {
         store.sync_store(),
         endpoint,
         gossip,
-        Topic::from(moot_id),
+        moot_id,
         move |op: Operation<MootExt>| {
             let store = accept_store.clone();
             async move {

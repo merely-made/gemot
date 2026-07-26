@@ -11,7 +11,6 @@ use identity::delegation::{
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use murm_replication::JoinedSpace;
-use p2panda_core::Topic;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore};
@@ -33,7 +32,7 @@ impl DelegationSession {
             store.sync_store(),
             endpoint,
             gossip,
-            Topic::from(MOOT),
+            MOOT,
             move |operation| {
                 let store = receiving_store.clone();
                 async move { matches!(store.accept(&operation).await, Ok(true)) }

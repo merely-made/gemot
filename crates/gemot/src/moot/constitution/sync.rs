@@ -6,7 +6,6 @@ use std::time::Duration;
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use murm_replication::{CheckpointAuthority, JoinedSpace};
-use p2panda_core::Topic;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{Constitution, ConstitutionExt, ConstitutionRules, ConstitutionStore};
@@ -27,7 +26,7 @@ impl ConstitutionSession {
             store.sync_store(),
             endpoint,
             gossip,
-            Topic::from(MOOT),
+            MOOT,
             move |operation| {
                 let store = receiving_store.clone();
                 async move { matches!(store.accept(&operation).await, Ok(true)) }

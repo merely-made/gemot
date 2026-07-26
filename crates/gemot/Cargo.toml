@@ -39,11 +39,20 @@ mooting = { workspace = true }
 muniment = { workspace = true, features = ["redb"] }
 redb = "2"
 thiserror = "1"
-# Sync is host-composed after the sibling-posture purity split: gemot owns no
-# p2panda-net. It provides the stores + folds + `verify`; the host builds the
-# `LogSync` + `murm-replication::SyncedSpace` pump and publishes authored ops. So
-# p2panda-net / p2panda-sync / tokio-stream / tokio are dev-only (the in-crate
-# two-peer convergence tests + the `moot-peer` example play the host).
+# Sync is host-composed after the sibling-posture purity split: gemot does not
+# ASSEMBLE transport. It provides the stores + folds + `verify`; the host joins
+# the space (`murm-replication::JoinedSpace`) and publishes authored ops. The
+# direct p2panda-net / p2panda-sync / tokio-stream / tokio entries below are
+# dev-only, for the in-crate two-peer convergence tests and the `moot-peer`
+# example, which play the host.
+#
+# Stated precisely, because an earlier version of this comment claimed "gemot
+# owns no p2panda-net" and `cargo tree -p gemot -e normal -i p2panda-net`
+# disproves it: p2panda-net IS in gemot's production graph, transitively
+# through murm-replication, and has been since that became a normal dependency.
+# The posture that holds is about SOURCE, not the build graph — gemot's code
+# names no session type, and its constitution and delegation lanes import no
+# p2panda crate at all. See the murm/moot plan's 2026-07-25 JoinedSpace entry.
 
 [dev-dependencies]
 # The peer-petition receipt drives a REAL servitor::Gate over a chartulary
