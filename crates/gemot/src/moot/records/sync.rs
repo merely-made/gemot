@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use murm_replication::JoinedSpace;
-use p2panda_core::{Operation, Topic};
+use p2panda_core::Operation;
 use p2panda_net::{Endpoint, Gossip};
 use transport::P2pandaTransport;
 
@@ -45,7 +45,7 @@ impl MootSession {
             store.sync_store(),
             endpoint,
             gossip,
-            Topic::from(MOOT),
+            MOOT,
             move |op: Operation<MootExt>| {
                 let store = accept_store.clone();
                 async move {

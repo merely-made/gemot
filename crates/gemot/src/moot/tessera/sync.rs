@@ -18,7 +18,7 @@ use std::sync::Arc;
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use murm_replication::JoinedSpace;
-use p2panda_core::{Operation, Topic};
+use p2panda_core::Operation;
 use p2panda_net::{Endpoint, Gossip};
 use transport::{P2pandaTransport, PeerID};
 
@@ -50,7 +50,7 @@ impl TesseraSession {
             store.sync_store(),
             endpoint,
             gossip,
-            Topic::from(moot_id),
+            moot_id,
             move |op: Operation<TesseraExt>| {
                 let store = accept_store.clone();
                 async move { matches!(store.accept(moot_id, &op).await, Ok(true)) }
