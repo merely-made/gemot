@@ -19,12 +19,9 @@ use std::sync::Arc as StdArc;
 use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use muniment::MemoryBackend;
-use murm_replication::{MunimentStore, SyncedSpace};
+use murm_replication::JoinedSpace;
 use p2panda_core::{Operation, Topic};
-use p2panda_net::sync::SyncHandle;
-use p2panda_net::{Endpoint, Gossip, LogSync};
-use p2panda_sync::protocols::TopicLogSyncEvent;
+use p2panda_net::{Endpoint, Gossip};
 use transport::P2pandaTransport;
 
 use super::roster::MootRoster;
@@ -33,45 +30,34 @@ use super::wire::{MootEvent, MootExt, MootLogId, verify};
 
 const MOOT: [u8; 32] = [0x6e; 32];
 
-type MootHandle = SyncHandle<Operation<MootExt>, TopicLogSyncEvent<MootExt>>;
-
-/// A host-composed moot-object session: the LogSync session (held for
-/// liveness), the live-publish handle, the shared [`SyncedSpace`] drain, and the
-/// store to fold. This is the boilerplate a real host writes now that the pump
-/// lives host-side.
+/// A host-composed moot-object session: the joined LogSync session (session +
+/// live-publish lane + drain) and the store to fold. This is the boilerplate a
+/// real host writes now that the pump lives host-side.
 struct MootSession {
     store: MootStore,
-    handle: MootHandle,
-    space: SyncedSpace,
-    _log_sync: LogSync<MunimentStore<MemoryBackend, MootExt>, MootLogId, MootExt>,
+    joined: JoinedSpace<MootExt>,
 }
 
 impl MootSession {
     async fn join(endpoint: Endpoint, gossip: Gossip, store: MootStore) -> Self {
-        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .expect("logsync spawn");
-        let handle = log_sync
-            .stream(Topic::from(MOOT), true)
-            .await
-            .expect("logsync stream");
-        let sub = handle.subscribe().await.expect("logsync subscribe");
         let accept_store = store.clone();
-        let space = SyncedSpace::drive(sub, move |op: Operation<MootExt>| {
-            let store = accept_store.clone();
-            async move {
-                verify(&op)
-                    && op.header.extensions.moot_id == MOOT
-                    && matches!(store.insert(&op).await, Ok(true))
-            }
-        });
-        Self {
-            store,
-            handle,
-            space,
-            _log_sync: log_sync,
-        }
+        let joined = JoinedSpace::join::<_, MootLogId, _, _>(
+            store.sync_store(),
+            endpoint,
+            gossip,
+            Topic::from(MOOT),
+            move |op: Operation<MootExt>| {
+                let store = accept_store.clone();
+                async move {
+                    verify(&op)
+                        && op.header.extensions.moot_id == MOOT
+                        && matches!(store.insert(&op).await, Ok(true))
+                }
+            },
+        )
+        .await
+        .expect("moot join");
+        Self { store, joined }
     }
 
     /// Sign + store an event (moot-side), then publish it live (host-side).
@@ -81,7 +67,7 @@ impl MootSession {
             .author(keypair, MOOT, event)
             .await
             .expect("author");
-        self.handle.publish(op).expect("publish");
+        self.joined.publish(op).expect("publish");
     }
 
     async fn roster(&self) -> MootRoster {
@@ -89,7 +75,7 @@ impl MootSession {
     }
 
     fn ops_received(&self) -> u64 {
-        self.space.sync_status().ops_received
+        self.joined.sync_status().ops_received
     }
 }
 
@@ -226,7 +212,13 @@ async fn declare_join_share_converges_on_both_peers() {
     // Real (non-placebo) sync feedback on both sides.
     assert!(founder_space.ops_received() >= 2);
     assert!(friend_space.ops_received() >= 2);
-    assert!(founder_space.space.sync_status().last_activity_ms.is_some());
+    assert!(
+        founder_space
+            .joined
+            .sync_status()
+            .last_activity_ms
+            .is_some()
+    );
 }
 
 /// The catch-up lane: a roster authored before the friend connects converges

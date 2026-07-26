@@ -127,9 +127,7 @@ impl MootRoster {
         let cap = fauna_cap();
         self.fauna
             .iter()
-            .filter(|entry| {
-                authority.covers(Subject::new(entry.shared_by), &cap, Mode::Write)
-            })
+            .filter(|entry| authority.covers(Subject::new(entry.shared_by), &cap, Mode::Write))
             .collect()
     }
 
@@ -374,8 +372,16 @@ mod tests {
             2,
             Some(*shared.hash.as_bytes()),
         );
-        let with_pack =
-            MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join, &shared, &pack_shared]);
+        let with_pack = MootRoster::fold(
+            MOOT,
+            [
+                &declared,
+                &founder_join,
+                &friend_join,
+                &shared,
+                &pack_shared,
+            ],
+        );
         assert_eq!(with_pack.fauna.len(), 2);
         assert!(
             with_pack

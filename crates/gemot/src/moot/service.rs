@@ -30,11 +30,11 @@ use super::records::{
     AvailabilityPolicy, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy, MootRoster,
     MootStore, MootStoreError, PolicyRevision,
 };
-use super::typed_authorization::MootAuthority;
 use super::tessera::{
     GateDecision, TesseraEvent, TesseraExt, TesseraFacts, TesseraFileStore, TesseraStore,
     TesseraStoreError, authorize,
 };
+use super::typed_authorization::MootAuthority;
 
 const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
 const DELEGATION_EVIDENCE_VERSION: u16 = 1;

@@ -34,7 +34,6 @@ pub use delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegationProjection,
     MootDelegations, MootScopeKeyEpoch,
 };
-pub use typed_authorization::{MootAuthority, TypedMootAuthorization};
 pub use group::{
     MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
     MootGroupTransition, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
@@ -52,3 +51,4 @@ pub use service::{
     MootCheckpointSnapshot, MootCommandReceipt, MootDropImportReceipt, MootDropSelector, MootError,
     MootFile, MootLane, MootOutboundOperation, MootRetentionSettings, MootSnapshot,
 };
+pub use typed_authorization::{MootAuthority, TypedMootAuthorization};

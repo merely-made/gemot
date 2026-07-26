@@ -10,11 +10,8 @@ use identity::delegation::{
 };
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use murm_replication::{MunimentStore, SyncedSpace};
-use p2panda_core::{Operation, Topic};
-use p2panda_net::LogSync;
-use p2panda_net::sync::SyncHandle;
-use p2panda_sync::protocols::TopicLogSyncEvent;
+use murm_replication::JoinedSpace;
+use p2panda_core::Topic;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore};
@@ -23,39 +20,28 @@ use crate::moot::constitution::{CapabilityGrant, ConstitutionRules};
 const MOOT: [u8; 32] = [0x67; 32];
 const ROOT_GRANT: [u8; 32] = [0x68; 32];
 
-type DelegationHandle =
-    SyncHandle<Operation<MootDelegationExt>, TopicLogSyncEvent<MootDelegationExt>>;
-
 struct DelegationSession {
     store: MootDelegationStore<MemoryBackend>,
-    space: SyncedSpace,
-    _log_sync: LogSync<MunimentStore<MemoryBackend, MootDelegationExt>, u64, MootDelegationExt>,
-    _handle: DelegationHandle,
+    joined: JoinedSpace<MootDelegationExt>,
 }
 
 impl DelegationSession {
     async fn join(transport: &P2pandaTransport, store: MootDelegationStore<MemoryBackend>) -> Self {
         let (endpoint, gossip) = transport.sync_parts().expect("delegation sync parts");
-        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .expect("delegation LogSync spawn");
-        let handle = log_sync
-            .stream(Topic::from(MOOT), true)
-            .await
-            .expect("delegation LogSync stream");
-        let subscription = handle.subscribe().await.expect("delegation subscription");
         let receiving_store = store.clone();
-        let space = SyncedSpace::drive(subscription, move |operation| {
-            let store = receiving_store.clone();
-            async move { matches!(store.accept(&operation).await, Ok(true)) }
-        });
-        Self {
-            store,
-            space,
-            _log_sync: log_sync,
-            _handle: handle,
-        }
+        let joined = JoinedSpace::join::<_, u64, _, _>(
+            store.sync_store(),
+            endpoint,
+            gossip,
+            Topic::from(MOOT),
+            move |operation| {
+                let store = receiving_store.clone();
+                async move { matches!(store.accept(&operation).await, Ok(true)) }
+            },
+        )
+        .await
+        .expect("delegation join");
+        Self { store, joined }
     }
 }
 
@@ -157,5 +143,5 @@ async fn late_peer_catches_up_on_independent_delegation() {
     })
     .await;
     assert!(converged.is_ok(), "late peer did not receive delegation");
-    assert!(bob.space.sync_status().ops_received >= 1);
+    assert!(bob.joined.sync_status().ops_received >= 1);
 }
