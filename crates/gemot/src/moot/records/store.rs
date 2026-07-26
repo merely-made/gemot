@@ -876,10 +876,7 @@ mod tests {
             )
             .await
             .expect("the aggregate carrier admits historical prune ancestry");
-        assert_eq!(
-            report.accepted, 1,
-            "the divergence is real: {report:?}"
-        );
+        assert_eq!(report.accepted, 1, "the divergence is real: {report:?}");
     }
 
     #[tokio::test]

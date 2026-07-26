@@ -63,9 +63,7 @@ pub struct TypedMootAuthorization<'a, M: MootAuthorizationProvider> {
     pub moot_id: [u8; 32],
 }
 
-impl<M: MootAuthorizationProvider> MootAuthorizationProvider
-    for TypedMootAuthorization<'_, M>
-{
+impl<M: MootAuthorizationProvider> MootAuthorizationProvider for TypedMootAuthorization<'_, M> {
     fn inputs(&self, request: &MootAuthorizationRequest) -> MootAuthorizationInputs {
         let membership = self.membership.inputs(request);
         // Parse at the seam; an unparseable capability fails closed.
@@ -142,8 +140,8 @@ mod tests {
         CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
         DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,
     };
-    use servitor::{Gate, GateError, ScopePath};
     use identity::{IdentityProvider, InMemoryProvider};
+    use servitor::{Gate, GateError, ScopePath};
 
     const MOOT: [u8; 32] = [9; 32];
     const ROOT_GRANT: [u8; 32] = [7; 32];
@@ -183,8 +181,7 @@ mod tests {
         member: &InMemoryProvider,
         power: &Cap,
     ) -> (MootDelegations, ConstitutionRules, DelegationId) {
-        let mut rules =
-            ConstitutionRules::founder_only(holder.master_public_key().to_bytes());
+        let mut rules = ConstitutionRules::founder_only(holder.master_public_key().to_bytes());
         rules.grant(CapabilityGrant {
             id: ROOT_GRANT,
             subject: holder.master_public_key().to_bytes(),
@@ -271,15 +268,21 @@ mod tests {
         let subject = member.master_public_key().to_bytes();
 
         assert!(
-            !provider.inputs(&request(subject, "power:curate-admin")).capability_covers,
+            !provider
+                .inputs(&request(subject, "power:curate-admin"))
+                .capability_covers,
             "a longer power name is a different power (the F1 hazard, dead at the moot tier too)"
         );
         assert!(
-            !provider.inputs(&request(subject, "curate")).capability_covers,
+            !provider
+                .inputs(&request(subject, "curate"))
+                .capability_covers,
             "a bare string is the scope it always was, never accidentally the power"
         );
         assert!(
-            !provider.inputs(&request(subject, "scope:curate")).capability_covers,
+            !provider
+                .inputs(&request(subject, "scope:curate"))
+                .capability_covers,
             "a scope spelled like the power is not the power"
         );
     }
@@ -342,7 +345,11 @@ mod tests {
             )
             .expect("a delegated peer's in-scope petition commits");
         let entry = &graph.log().entries()[committed.batch.0 as usize];
-        assert_eq!(entry.author, peer_subject.to_author(), "attributed to the peer");
+        assert_eq!(
+            entry.author,
+            peer_subject.to_author(),
+            "attributed to the peer"
+        );
         assert_eq!(graph.graph().node_count(), 1);
 
         // Out of scope: the gate's own scope check, unchanged.
@@ -360,7 +367,11 @@ mod tests {
         assert!(matches!(err, GateError::OutOfScope { .. }), "{err:?}");
 
         // An undelegated peer: refused, though it is a real identity.
-        let stranger = Subject::new(InMemoryProvider::from_seed([9; 32]).master_public_key().to_bytes());
+        let stranger = Subject::new(
+            InMemoryProvider::from_seed([9; 32])
+                .master_public_key()
+                .to_bytes(),
+        );
         let revision = graph.revision();
         let err = gate
             .petition(
@@ -424,7 +435,11 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, GateError::Unauthorized { .. }), "{err:?}");
-        assert_eq!(graph.graph().node_count(), 0, "nothing applied after revocation");
+        assert_eq!(
+            graph.graph().node_count(),
+            0,
+            "nothing applied after revocation"
+        );
     }
 
     #[test]
@@ -443,7 +458,10 @@ mod tests {
         };
         let peer_subject = Subject::new(peer.master_public_key().to_bytes());
         assert!(authority.covers(peer_subject, &shared, Mode::Write));
-        assert!(authority.covers(peer_subject, &shared, Mode::Read), "act implies read");
+        assert!(
+            authority.covers(peer_subject, &shared, Mode::Read),
+            "act implies read"
+        );
         assert!(!authority.covers(peer_subject, &shared, Mode::Delegate));
     }
 
@@ -528,7 +546,11 @@ mod tests {
                 })
                 .len()
         };
-        assert_eq!(visible(&delegations), 1, "visible while the certificate stands");
+        assert_eq!(
+            visible(&delegations),
+            1,
+            "visible while the certificate stands"
+        );
 
         let revocation = DelegationRevocation::new(
             certificate,
@@ -546,7 +568,11 @@ mod tests {
             .accept_revocation(SignedDelegationRevocation::issue(&holder, revocation).unwrap())
             .unwrap();
 
-        assert_eq!(visible(&delegations), 0, "withdrawn from the commons on revocation");
+        assert_eq!(
+            visible(&delegations),
+            0,
+            "withdrawn from the commons on revocation"
+        );
         assert_eq!(
             roster.fauna.len(),
             1,

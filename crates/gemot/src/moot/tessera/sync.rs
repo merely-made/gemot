@@ -17,11 +17,9 @@ use std::sync::Arc;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use murm_replication::{MunimentStore, SyncedSpace};
+use murm_replication::JoinedSpace;
 use p2panda_core::{Operation, Topic};
-use p2panda_net::sync::SyncHandle;
-use p2panda_net::{Endpoint, Gossip, LogSync};
-use p2panda_sync::protocols::TopicLogSyncEvent;
+use p2panda_net::{Endpoint, Gossip};
 use transport::{P2pandaTransport, PeerID};
 
 use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
@@ -31,17 +29,13 @@ use crate::moot::tessera::wire::{TesseraExt, to_operation};
 
 const MOOT: [u8; 32] = [0x33; 32];
 
-type TesseraHandle = SyncHandle<Operation<TesseraExt>, TopicLogSyncEvent<TesseraExt>>;
-
-/// A host-composed tessera session: the store to fold, the shared
-/// [`SyncedSpace`] drain, and the LogSync session + handle held for liveness.
-/// The tessera lane is receive-only, so nothing publishes on the handle.
+/// A host-composed tessera session: the store to fold and the joined LogSync
+/// session. The tessera lane is receive-only, so nothing publishes on the
+/// live lane.
 struct TesseraSession {
     store: TesseraStore<MemoryBackend>,
     moot_id: [u8; 32],
-    space: SyncedSpace,
-    _log_sync: LogSync<MunimentStore<MemoryBackend, TesseraExt>, u64, TesseraExt>,
-    _handle: TesseraHandle,
+    joined: JoinedSpace<TesseraExt>,
 }
 
 impl TesseraSession {
@@ -51,26 +45,23 @@ impl TesseraSession {
         store: TesseraStore<MemoryBackend>,
         moot_id: [u8; 32],
     ) -> Self {
-        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .expect("logsync spawn");
-        let handle = log_sync
-            .stream(Topic::from(moot_id), true)
-            .await
-            .expect("logsync stream");
-        let sub = handle.subscribe().await.expect("logsync subscribe");
         let accept_store = store.clone();
-        let space = SyncedSpace::drive(sub, move |op: Operation<TesseraExt>| {
-            let store = accept_store.clone();
-            async move { matches!(store.accept(moot_id, &op).await, Ok(true)) }
-        });
+        let joined = JoinedSpace::join::<_, u64, _, _>(
+            store.sync_store(),
+            endpoint,
+            gossip,
+            Topic::from(moot_id),
+            move |op: Operation<TesseraExt>| {
+                let store = accept_store.clone();
+                async move { matches!(store.accept(moot_id, &op).await, Ok(true)) }
+            },
+        )
+        .await
+        .expect("tessera join");
         Self {
             store,
             moot_id,
-            space,
-            _log_sync: log_sync,
-            _handle: handle,
+            joined,
         }
     }
 
@@ -186,7 +177,7 @@ async fn two_moots_converge_on_the_same_scores() {
     assert_eq!(bob_score, 11, "+10 fulfil, +1 govern");
 
     // Real (non-placebo) sync feedback recorded the catch-up.
-    let status = bob_moot.space.sync_status();
+    let status = bob_moot.joined.sync_status();
     assert!(
         status.ops_received >= 3,
         "sync status recorded the caught-up ops (got {})",
@@ -195,7 +186,7 @@ async fn two_moots_converge_on_the_same_scores() {
     assert!(status.last_activity_ms.is_some());
 
     // The manual checkpoint returns quickly (already synced).
-    let round = bob_moot.space.resync().await;
+    let round = bob_moot.joined.resync().await;
     println!(
         "tessera resync checkpoint: items_received={}",
         round.items_received

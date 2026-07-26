@@ -5,11 +5,8 @@ use std::time::Duration;
 
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use murm_replication::{CheckpointAuthority, MunimentStore, SyncedSpace};
-use p2panda_core::{Operation, Topic};
-use p2panda_net::LogSync;
-use p2panda_net::sync::SyncHandle;
-use p2panda_sync::protocols::TopicLogSyncEvent;
+use murm_replication::{CheckpointAuthority, JoinedSpace};
+use p2panda_core::Topic;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{Constitution, ConstitutionExt, ConstitutionRules, ConstitutionStore};
@@ -17,39 +14,28 @@ use crate::moot::GovernedCheckpointAuthority;
 
 const MOOT: [u8; 32] = [0x64; 32];
 
-type ConstitutionHandle =
-    SyncHandle<Operation<ConstitutionExt>, TopicLogSyncEvent<ConstitutionExt>>;
-
 struct ConstitutionSession {
     store: ConstitutionStore<MemoryBackend>,
-    space: SyncedSpace,
-    _log_sync: LogSync<MunimentStore<MemoryBackend, ConstitutionExt>, u64, ConstitutionExt>,
-    _handle: ConstitutionHandle,
+    joined: JoinedSpace<ConstitutionExt>,
 }
 
 impl ConstitutionSession {
     async fn join(transport: &P2pandaTransport, store: ConstitutionStore<MemoryBackend>) -> Self {
         let (endpoint, gossip) = transport.sync_parts().expect("constitution sync parts");
-        let log_sync = LogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .expect("constitution LogSync spawn");
-        let handle = log_sync
-            .stream(Topic::from(MOOT), true)
-            .await
-            .expect("constitution LogSync stream");
-        let subscription = handle.subscribe().await.expect("constitution subscription");
         let receiving_store = store.clone();
-        let space = SyncedSpace::drive(subscription, move |operation| {
-            let store = receiving_store.clone();
-            async move { matches!(store.accept(&operation).await, Ok(true)) }
-        });
-        Self {
-            store,
-            space,
-            _log_sync: log_sync,
-            _handle: handle,
-        }
+        let joined = JoinedSpace::join::<_, u64, _, _>(
+            store.sync_store(),
+            endpoint,
+            gossip,
+            Topic::from(MOOT),
+            move |operation| {
+                let store = receiving_store.clone();
+                async move { matches!(store.accept(&operation).await, Ok(true)) }
+            },
+        )
+        .await
+        .expect("constitution join");
+        Self { store, joined }
     }
 
     async fn constitution(&self) -> Option<Constitution> {
@@ -144,5 +130,5 @@ async fn late_peer_catches_up_on_accepted_constitution() {
     assert_eq!(bob_state, alice_state);
     let authority = GovernedCheckpointAuthority::from_state(&bob_state);
     assert!(authority.permits_checkpoint([9; 32], &bob_state.revision));
-    assert!(bob.space.sync_status().ops_received >= 2);
+    assert!(bob.joined.sync_status().ops_received >= 2);
 }

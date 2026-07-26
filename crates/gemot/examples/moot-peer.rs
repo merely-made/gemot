@@ -30,10 +30,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gemot::moot::{MootEvent, MootExt, MootLogId, MootRoster, MootStoreFile, verify};
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use muniment::RedbBackend;
-use murm_replication::{MunimentStore, SyncedSpace};
+use murm_replication::JoinedSpace;
 use p2panda_core::{Hash, Operation, Topic};
-use p2panda_net::LogSync;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;
 
@@ -233,31 +231,26 @@ async fn main() -> Result<(), String> {
     let (endpoint, gossip) = transport
         .sync_parts()
         .ok_or_else(|| "transport has no sync parts (gossip not enabled?)".to_string())?;
-    // Host-composed pump: build the moot-object LogSync session, drain it via
-    // the shared `SyncedSpace`, and keep the session + handle for liveness and
-    // live publish. gemot owns no p2panda-net; the host wires the pump.
-    let log_sync: LogSync<MunimentStore<RedbBackend, MootExt>, MootLogId, MootExt> =
-        LogSync::builder(store.sync_store(), endpoint, gossip)
-            .spawn()
-            .await
-            .map_err(|e| format!("logsync spawn: {e}"))?;
-    let handle = log_sync
-        .stream(Topic::from(moot_id), true)
-        .await
-        .map_err(|e| format!("logsync stream: {e}"))?;
-    let sub = handle
-        .subscribe()
-        .await
-        .map_err(|e| format!("logsync subscribe: {e}"))?;
+    // Host-composed pump: join the moot-object LogSync session via the shared
+    // `JoinedSpace` (session + live-publish lane + drain, drop-ordered).
+    // gemot owns no p2panda-net; the host wires the pump.
     let accept_store = store.clone();
-    let space = SyncedSpace::drive(sub, move |op: Operation<MootExt>| {
-        let store = accept_store.clone();
-        async move {
-            verify(&op)
-                && op.header.extensions.moot_id == moot_id
-                && matches!(store.insert(&op).await, Ok(true))
-        }
-    });
+    let joined: JoinedSpace<MootExt> = JoinedSpace::join::<_, MootLogId, _, _>(
+        store.sync_store(),
+        endpoint,
+        gossip,
+        Topic::from(moot_id),
+        move |op: Operation<MootExt>| {
+            let store = accept_store.clone();
+            async move {
+                verify(&op)
+                    && op.header.extensions.moot_id == moot_id
+                    && matches!(store.insert(&op).await, Ok(true))
+            }
+        },
+    )
+    .await
+    .map_err(|e| e.to_string())?;
 
     match mode {
         Mode::Declare { name, charter } => {
@@ -273,9 +266,7 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("declare: {e}"))?;
-            handle
-                .publish(op)
-                .map_err(|e| format!("publish: {e}"))?;
+            joined.publish(op).map_err(|e| e.to_string())?;
             println!("declared.");
         }
         Mode::Join { name } => {
@@ -290,9 +281,7 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("join: {e}"))?;
-            handle
-                .publish(op)
-                .map_err(|e| format!("publish: {e}"))?;
+            joined.publish(op).map_err(|e| e.to_string())?;
             println!("joined.");
         }
         Mode::Share {
@@ -313,9 +302,7 @@ async fn main() -> Result<(), String> {
                 )
                 .await
                 .map_err(|e| format!("share: {e}"))?;
-            handle
-                .publish(op)
-                .map_err(|e| format!("publish: {e}"))?;
+            joined.publish(op).map_err(|e| e.to_string())?;
             println!("shared into the fauna.");
         }
         Mode::Show => {}
@@ -329,7 +316,7 @@ async fn main() -> Result<(), String> {
             .roster(moot_id)
             .await
             .map_err(|e| format!("roster: {e}"))?;
-        let status = space.sync_status();
+        let status = joined.sync_status();
         let mut snapshot = String::new();
         {
             use std::fmt::Write;
