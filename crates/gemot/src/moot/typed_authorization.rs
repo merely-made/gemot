@@ -92,7 +92,7 @@ impl<M: MootAuthorizationProvider> MootAuthorizationProvider for TypedMootAuthor
 /// resident script or wasm component uses, with the same projection guard,
 /// scope check, and attributed revision-checked commit. Only the AUTHORITY
 /// differs — chains root at a constitutional capability grant here, at the
-/// profile identity in merecat's denizen table.
+/// profile identity in turnstone's denizen table.
 ///
 /// **Mode mapping.** The moot vocabulary carries a single action today
 /// ([`MOOT_ACT_ACTION`](super::delegation::MOOT_ACT_ACTION)): holding it means
