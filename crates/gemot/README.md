@@ -153,7 +153,7 @@ it back up.
 ## How it relates to other workspace crates
 
 ```text
-                 Merecat community UI
+                 Turnstone community UI
                             │
                             ▼
                           gemot
@@ -208,7 +208,7 @@ it back up.
 - [`moothold`](https://crates.io/crates/moothold) — Tier 3 federation:
   direct concords, reciprocity, and cross-Moot resource coordination.
 - [`mere`](https://crates.io/crates/mere) — supplies the reusable graph-browser
-  library; Merecat composes Gemot and Moothold into the product.
+  library; Turnstone composes Gemot and Moothold into the product.
 
 ## Status
 
