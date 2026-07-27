@@ -10,7 +10,7 @@ use identity::delegation::{
 };
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use murm_replication::JoinedSpace;
+use stickleback::JoinedSpace;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore};

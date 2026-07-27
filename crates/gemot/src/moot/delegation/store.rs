@@ -5,13 +5,13 @@ use std::path::Path;
 
 use identity::Ed25519Keypair;
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
-    Admission, DropRecord, MunimentStore, OperationPolicy, OperationProcessor, ProcessError,
-    Reject, StoreTarget, decode_operation_record, operation_record,
-};
 use p2panda_core::{Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use stickleback::{
+    Admission, DropRecord, MunimentStore, OperationPolicy, OperationProcessor, ProcessError,
+    Reject, StoreTarget, decode_operation_record, operation_record,
+};
 
 use super::wire::{MootDelegationExt, from_operation, to_operation, verify};
 use super::{

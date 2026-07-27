@@ -4,7 +4,7 @@
 //! Two-peer convergence for the tessera lane.
 //!
 //! After the sibling-posture purity split, gemot no longer owns p2panda-net:
-//! the pump (the LogSync session + the [`murm_replication::SyncedSpace`] drain) is
+//! the pump (the LogSync session + the [`stickleback::SyncedSpace`] drain) is
 //! **host-composed**, and tessera keeps only the store, wire-level admission,
 //! and ledger fold. The tessera lane is receive-only (authoring is a direct
 //! `store.insert`, no live publish), so the host just builds the session, drives
@@ -17,9 +17,9 @@ use std::sync::Arc;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use murm_replication::JoinedSpace;
 use p2panda_core::Operation;
 use p2panda_net::{Endpoint, Gossip};
+use stickleback::JoinedSpace;
 use transport::{P2pandaTransport, PeerID};
 
 use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};

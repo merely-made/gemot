@@ -4,7 +4,7 @@
 //!
 //! [`RecognitionContext`] evaluates a recognition policy against a membership
 //! set frozen at one signed revision. Generic replicated storage lives in the
-//! sibling `murm-replication` crate.
+//! sibling `stickleback` crate.
 //!
 //! ## Status
 //!
