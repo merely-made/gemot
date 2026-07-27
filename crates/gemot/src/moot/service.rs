@@ -8,14 +8,14 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend};
-use murm_replication::{
+use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use proofs::Digest;
+use serde::{Deserialize, Serialize};
+use stickleback::{
     DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropId,
     DropImportReport, DropLimits, DropProtector, DropRecord, DropWriteReceipt, EvidenceKind,
     NativeDropError, read_plain_drop, read_protected_drop, write_plain_drop, write_protected_drop,
 };
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
-use proofs::Digest;
-use serde::{Deserialize, Serialize};
 
 use super::constitution::{
     ConstitutionRules, MootGovernance, MootGovernanceError, MootGovernanceSnapshot,
@@ -877,8 +877,8 @@ mod tests {
         SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
     };
     use identity::{IdentityProvider, InMemoryProvider};
-    use murm_replication::NativeDropError;
     use std::io::Cursor;
+    use stickleback::NativeDropError;
 
     const ID: MootId = MootId([0x6d; 32]);
 

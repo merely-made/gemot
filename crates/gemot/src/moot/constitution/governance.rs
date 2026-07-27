@@ -8,12 +8,12 @@
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend};
-use murm_replication::{
+use p2panda_core::Topic;
+use proofs::Digest;
+use stickleback::{
     CheckpointAuthority, DropExportProfile, DropRecord, decode_operation_record,
     export_topic_operations,
 };
-use p2panda_core::Topic;
-use proofs::Digest;
 
 use crate::moot::constitution::{
     Constitution, ConstitutionRules, ConstitutionStore, ConstitutionStoreError,

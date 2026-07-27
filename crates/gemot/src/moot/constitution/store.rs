@@ -4,14 +4,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
-    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
-    StoreTarget,
-};
 use p2panda_core::{Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use proofs::Digest;
+use stickleback::{
+    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    StoreTarget,
+};
 
 use super::wire::{ConstitutionExt, from_operation};
 use super::{
@@ -291,7 +291,7 @@ mod tests {
     use super::*;
     use crate::moot::GovernedCheckpointAuthority;
     use identity::{IdentityProvider, InMemoryProvider};
-    use murm_replication::CheckpointAuthority;
+    use stickleback::CheckpointAuthority;
 
     const MOOT: [u8; 32] = [0x63; 32];
 

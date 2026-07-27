@@ -7,10 +7,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use murm_replication::CheckpointAuthority;
 use p2panda_core::cbor::encode_cbor;
 use proofs::{BlobRef, Commitment, CommitmentDomain, Digest};
 use serde::{Deserialize, Serialize};
+use stickleback::CheckpointAuthority;
 
 use crate::moot::constitution::Constitution;
 

@@ -14,16 +14,16 @@ use std::sync::{Arc, RwLock};
 
 use identity::Ed25519Keypair;
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
+use p2panda_core::{Hash, Operation, SigningKey, Topic, VerifyingKey};
+use p2panda_store::logs::LogStore;
+use p2panda_store::topics::TopicStore;
+use stickleback::{
     Admission, CheckpointAuthority, DropExportBudget, DropExportProfile, DropExportSelector,
     DropImportReport, DropIoError, DropLimits, DropWriteReceipt, MunimentStore, OperationPolicy,
     OperationProcessor, ProcessError, ProcessOutcome, Reject, StoreTarget, decode_operation_record,
     export_topic_operations, export_topic_operations_selected, import_drop_records,
     import_plain_drop, write_plain_drop,
 };
-use p2panda_core::{Hash, Operation, SigningKey, Topic, VerifyingKey};
-use p2panda_store::logs::LogStore;
-use p2panda_store::topics::TopicStore;
 
 use super::retention::{
     CheckpointError, LogFrontier, MootRetentionPolicy, MootRosterSnapshot, RetentionCheckpoint,
@@ -400,13 +400,7 @@ impl<B: Backend + Clone> MootStore<B> {
         moot_id: [u8; 32],
         selector: &S,
         budget: DropExportBudget,
-    ) -> Result<
-        (
-            Vec<murm_replication::DropRecord>,
-            murm_replication::DropExportStats,
-        ),
-        MootStoreError,
-    > {
+    ) -> Result<(Vec<stickleback::DropRecord>, stickleback::DropExportStats), MootStoreError> {
         Ok(
             export_topic_operations_selected::<B, MootExt, MootLogId, S>(
                 &self.store,
@@ -450,8 +444,8 @@ impl<B: Backend + Clone> MootStore<B> {
     pub async fn import_drop_records(
         &self,
         moot_id: [u8; 32],
-        drop_id: murm_replication::DropId,
-        records: Vec<murm_replication::DropRecord>,
+        drop_id: stickleback::DropId,
+        records: Vec<stickleback::DropRecord>,
     ) -> Result<DropImportReport, MootStoreError> {
         let retention = self.retention_policy();
         let mut operations = self.ops(moot_id).await?;
@@ -871,8 +865,8 @@ mod tests {
         let report = store
             .import_drop_records(
                 MOOT,
-                murm_replication::DropId([0x0d; 32]),
-                vec![murm_replication::operation_record(&prune, true)],
+                stickleback::DropId([0x0d; 32]),
+                vec![stickleback::operation_record(&prune, true)],
             )
             .await
             .expect("the aggregate carrier admits historical prune ancestry");

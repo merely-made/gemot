@@ -16,7 +16,7 @@ act. This crate supplies the evaluation vocabulary, not a second policy engine.
 ## Status
 
 Pre-1.0. Recognition policy is implemented. Replicated storage is consumed
-directly from `murm-replication` by domain crates.
+directly from `stickleback` by domain crates.
 
 ## License
 

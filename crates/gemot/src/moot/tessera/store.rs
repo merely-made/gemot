@@ -1,7 +1,7 @@
 //! The tessera operation store, over the muniment substrate.
 //!
 //! [`TesseraStore`] persists a moot's tessera operations through
-//! [`murm_replication::MunimentStore`], the shared p2panda-store adapter murm and mesh
+//! [`stickleback::MunimentStore`], the shared p2panda-store adapter murm and mesh
 //! also ride: one operation store that doubles as the `LogStore` + `TopicStore`
 //! LogSync reconciles, keyed and folded the same way across all three. One store
 //! of record, one write path ([`insert`](TesseraStore::insert)), serving both the
@@ -25,13 +25,13 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use murm_replication::{
-    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
-    StoreTarget,
-};
 use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use stickleback::{
+    Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    StoreTarget,
+};
 
 use crate::moot::tessera::event::TesseraEvent;
 use crate::moot::tessera::ledger::{Ledger, TesseraConfig};

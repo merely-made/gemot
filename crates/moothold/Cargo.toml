@@ -13,7 +13,7 @@ categories = ["network-programming"]
 [dependencies]
 gemot.workspace = true
 muniment = { workspace = true, features = ["redb"] }
-murm-replication.workspace = true
+stickleback.workspace = true
 p2panda-core = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
 serde = { version = "1", features = ["derive"] }
