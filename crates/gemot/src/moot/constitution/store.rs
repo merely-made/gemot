@@ -13,7 +13,7 @@ use stickleback::{
     StoreTarget,
 };
 
-use super::wire::{ConstitutionExt, from_operation};
+use super::wire::{ConstitutionExt, from_operation, verify};
 use super::{
     Constitution, ConstitutionError, ConstitutionEvent, ConstitutionRules, GovernedAction,
     authorize_governed, to_operation_seed,
@@ -36,6 +36,9 @@ pub enum ConstitutionStoreError {
     /// The Moot has not accepted genesis.
     #[error("constitution is not founded")]
     NotFounded,
+    /// More than one independently valid founder genesis is present.
+    #[error("constitution store contains conflicting founder genesis operations")]
+    ConflictingFounders,
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +129,57 @@ impl ConstitutionStore<RedbBackend> {
             founder,
             store: MunimentStore::new(RedbBackend::open(path)?),
         })
+    }
+
+    /// Open durable constitutional state by discovering the founder from the
+    /// retained, signed genesis operation.
+    ///
+    /// This is the restart path for consumers which retain only the Moot id.
+    /// The discovered key is accepted only when the genesis operation verifies,
+    /// addresses `moot_id`, names the same founder as its signer, and is the
+    /// sole valid founder claim in the retained topic.
+    pub async fn open_existing(
+        path: impl AsRef<Path>,
+        moot_id: [u8; 32],
+    ) -> Result<Self, ConstitutionStoreError> {
+        if !path.as_ref().is_file() {
+            return Err(ConstitutionStoreError::NotFounded);
+        }
+        let store = MunimentStore::new(RedbBackend::open(path)?);
+        let probe = Self {
+            moot_id,
+            founder: [0; 32],
+            store,
+        };
+        let mut founders = std::collections::BTreeSet::new();
+        for operation in probe.operations().await? {
+            if !verify(&operation) || operation.header.extensions.moot_id != moot_id {
+                continue;
+            }
+            let Ok(ConstitutionEvent::Genesis {
+                moot_id: event_moot,
+                founder,
+                ..
+            }) = from_operation(&operation)
+            else {
+                continue;
+            };
+            if event_moot == moot_id && operation.header.verifying_key.as_bytes() == &founder {
+                founders.insert(founder);
+            }
+        }
+        let founder = match founders.len() {
+            0 => return Err(ConstitutionStoreError::NotFounded),
+            1 => *founders
+                .first()
+                .expect("a one-element founder set has a first element"),
+            _ => return Err(ConstitutionStoreError::ConflictingFounders),
+        };
+        let service = Self { founder, ..probe };
+        if service.constitution().await?.is_none() {
+            return Err(ConstitutionStoreError::NotFounded);
+        }
+        Ok(service)
     }
 }
 
@@ -334,6 +388,33 @@ mod tests {
         let authority = GovernedCheckpointAuthority::from_state(&first_state);
         assert!(authority.permits_checkpoint([9; 32], &first_state.revision));
         assert!(!authority.permits_checkpoint([8; 32], &first_state.revision));
+    }
+
+    #[tokio::test]
+    async fn durable_restart_discovers_founder_from_signed_genesis() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("constitution.redb");
+        let founder = keypair(7);
+        let founder_id = founder.public_key().to_bytes();
+        let first = ConstitutionStore::open(&path, MOOT, founder_id).unwrap();
+        first
+            .author_genesis(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+        drop(first);
+
+        let reopened = ConstitutionStore::open_existing(&path, MOOT).await.unwrap();
+        assert_eq!(reopened.founder(), founder_id);
+        assert_eq!(
+            reopened.constitution().await.unwrap().unwrap().founder,
+            founder_id
+        );
     }
 
     #[tokio::test]
