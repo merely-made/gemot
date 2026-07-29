@@ -12,8 +12,11 @@ use p2panda_encryption::data_scheme::GroupSecretId;
 use p2panda_net::{Endpoint, Gossip};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
+use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use proofs::Digest;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use servitor::Cap;
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, CheckpointAuthority, DataKeyring,
     EpochCheckpointBasis, EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts,
@@ -25,6 +28,7 @@ use stickleback::{
 
 const CHAT_LOG: u64 = 0;
 const CHAT_CHECKPOINT_LOG: u64 = 1;
+const CHAT_AUTHORED_VERSION: u16 = 1;
 const CHAT_LIMITS: CausalLimits = CausalLimits {
     max_parents: 64,
     max_payload_bytes: 1024 * 1024,
@@ -112,9 +116,103 @@ impl ChatEvent {
     }
 }
 
+/// Encrypted inner wire record carrying one chat fact and its stable-root
+/// binding. Legacy chat payloads decode as unattested direct-root records.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct ChatAuthored<T> {
+    version: u16,
+    payload: T,
+    #[serde(default)]
+    author_attestation: Option<DerivedKeyAttestation>,
+}
+
+impl<T> ChatAuthored<T> {
+    fn new(payload: T, author_attestation: Option<DerivedKeyAttestation>) -> Self {
+        Self {
+            version: CHAT_AUTHORED_VERSION,
+            payload,
+            author_attestation,
+        }
+    }
+}
+
+/// Domain-separated salt for one chat space's Personae-derived signing key.
+pub fn chat_identity_salt(space_id: [u8; 32]) -> Vec<u8> {
+    let mut salt = Vec::with_capacity(61);
+    salt.extend_from_slice(b"mere.commons.chat.writer.v1/");
+    salt.extend_from_slice(&space_id);
+    salt
+}
+
+/// Typed write capability carried by every retained fact in one chat space.
+pub fn chat_write_capability(space_id: [u8; 32]) -> Cap {
+    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
+    Cap::scope(&format!("commons/chat/{hex}"))
+        .expect("a fixed prefix plus lowercase hex is a valid scope")
+}
+
+/// Invalid binding between a signed chat operation and a stable Personae root.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ChatAuthorBindingError {
+    #[error("unsupported authored-chat payload version {0}")]
+    UnsupportedVersion(u16),
+    #[error("derived chat-author attestation does not verify for this space")]
+    InvalidAttestation,
+    #[error("derived chat-author attestation contains an invalid key")]
+    InvalidDerivedKey,
+    #[error("derived chat-author attestation does not bind the operation signer")]
+    SignerMismatch,
+    #[error("derived chat-author attestation contains an invalid root key")]
+    InvalidRoot,
+}
+
+fn decode_authored<T: DeserializeOwned>(bytes: &[u8]) -> Result<ChatAuthored<T>, ChatError> {
+    match decode_cbor::<ChatAuthored<T>, _>(bytes) {
+        Ok(record) => {
+            if record.version != CHAT_AUTHORED_VERSION {
+                return Err(ChatAuthorBindingError::UnsupportedVersion(record.version).into());
+            }
+            Ok(record)
+        }
+        Err(_) => {
+            let payload = decode_cbor(bytes).map_err(|error| ChatError::Wire(error.to_string()))?;
+            Ok(ChatAuthored {
+                version: 0,
+                payload,
+                author_attestation: None,
+            })
+        }
+    }
+}
+
+fn stable_chat_author<T>(
+    operation: &Operation<ChatExt>,
+    record: &ChatAuthored<T>,
+) -> Result<[u8; 32], ChatAuthorBindingError> {
+    let signer = *operation.header.verifying_key.as_bytes();
+    let Some(attestation) = &record.author_attestation else {
+        return Ok(signer);
+    };
+    if !attestation.verify(&chat_identity_salt(operation.header.extensions.space_id)) {
+        return Err(ChatAuthorBindingError::InvalidAttestation);
+    }
+    let derived = attestation
+        .derived_public_key()
+        .map_err(|_| ChatAuthorBindingError::InvalidDerivedKey)?
+        .to_bytes();
+    if derived != signer {
+        return Err(ChatAuthorBindingError::SignerMismatch);
+    }
+    attestation
+        .master_public_key()
+        .map(|key| key.to_bytes())
+        .map_err(|_| ChatAuthorBindingError::InvalidRoot)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthoredMessage {
     pub operation: [u8; 32],
+    /// Stable Personae root verified from the encrypted authored record.
     pub author: [u8; 32],
     pub message: Message,
     #[serde(default)]
@@ -279,6 +377,21 @@ pub enum ChatError {
     MessageMutation(String),
     #[error("chat wire: {0}")]
     Wire(String),
+    #[error(transparent)]
+    AuthorBinding(#[from] ChatAuthorBindingError),
+}
+
+/// Failure to construct a chat replica under a Personae-derived writer.
+#[derive(Debug, thiserror::Error)]
+pub enum ChatReplicaIdentityError {
+    #[error(transparent)]
+    Identity(#[from] IdentityError),
+    #[error("identity provider returned an invalid chat-writer attestation")]
+    InvalidAttestation,
+    #[error("identity provider attested a different chat writer")]
+    WriterMismatch,
+    #[error("identity provider attested a different stable Personae root")]
+    RootMismatch,
 }
 
 #[derive(Clone)]
@@ -320,8 +433,12 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                 let plaintext = keys
                     .open(&envelope)
                     .map_err(|error| Reject::new("unreadable-chat-event", error.to_string()))?;
-                let event: ChatEvent = decode_cbor(plaintext.as_slice())
+                let record: ChatAuthored<ChatEvent> = decode_authored(plaintext.as_slice())
                     .map_err(|error| Reject::new("invalid-chat-event", error.to_string()))?;
+                let stable_author = stable_chat_author(operation, &record).map_err(|error| {
+                    Reject::new("invalid-chat-author-binding", error.to_string())
+                })?;
+                let event = record.payload;
                 if event.class() != operation.header.extensions.class {
                     return Err(Reject::new(
                         "mismatched-chat-class",
@@ -340,7 +457,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                             "edit or deletion must reference a current projected message",
                         ));
                     };
-                    if author != operation.header.verifying_key.as_bytes() {
+                    if author != &stable_author {
                         return Err(Reject::new(
                             "foreign-message-mutation",
                             "only the original author can edit or delete a message",
@@ -368,8 +485,12 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                 let plaintext = keys.open(&envelope).map_err(|error| {
                     Reject::new("unreadable-chat-checkpoint", error.to_string())
                 })?;
-                let checkpoint: ChatCheckpoint = decode_cbor(plaintext.as_slice())
+                let record: ChatAuthored<ChatCheckpoint> = decode_authored(plaintext.as_slice())
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error.to_string()))?;
+                let stable_author = stable_chat_author(operation, &record).map_err(|error| {
+                    Reject::new("invalid-chat-author-binding", error.to_string())
+                })?;
+                let checkpoint = record.payload;
                 validate_retained_checkpoint(
                     self.space_id,
                     self.current_checkpoint.as_ref(),
@@ -378,12 +499,8 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                     &checkpoint,
                 )
                 .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
-                validate_current_checkpoint_authority(
-                    *operation.header.verifying_key.as_bytes(),
-                    authority,
-                    &checkpoint,
-                )
-                .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
+                validate_current_checkpoint_authority(stable_author, authority, &checkpoint)
+                    .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 validate_checkpoint_epoch_inventory(&keys, &checkpoint)
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 CHAT_CHECKPOINT_LOG
@@ -510,6 +627,8 @@ pub struct ChatReplica<B: Backend + Clone> {
     store: MunimentStore<B, ChatExt>,
     space_id: [u8; 32],
     signing_seed: [u8; 32],
+    stable_author: [u8; 32],
+    author_attestation: Option<DerivedKeyAttestation>,
     keys: DataKeyring,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
 }
@@ -518,18 +637,84 @@ impl ChatReplica<MemoryBackend> {
     pub fn in_memory(space_id: [u8; 32], signing_seed: [u8; 32], keys: DataKeyring) -> Self {
         Self::new(MemoryBackend::new(), space_id, signing_seed, keys)
     }
+
+    /// In-memory replica under this chat space's Personae-derived writer.
+    pub fn in_memory_for_identity<P: IdentityProvider + ?Sized>(
+        space_id: [u8; 32],
+        identity: &P,
+        keys: DataKeyring,
+    ) -> Result<Self, ChatReplicaIdentityError> {
+        Self::for_identity(MemoryBackend::new(), space_id, identity, keys)
+    }
 }
 
 impl<B: Backend + Clone> ChatReplica<B> {
+    /// Direct-root compatibility constructor.
+    ///
+    /// Product hosts with a Personae identity should use
+    /// [`Self::for_identity`].
     pub fn new(backend: B, space_id: [u8; 32], signing_seed: [u8; 32], keys: DataKeyring) -> Self {
         debug_assert_eq!(COMMONS_CHAT_PROFILE.mode, GroupEncryptionMode::Data);
+        let stable_author = *SigningKey::from_bytes(&signing_seed)
+            .verifying_key()
+            .as_bytes();
         Self {
             store: MunimentStore::new(backend),
             space_id,
             signing_seed,
+            stable_author,
+            author_attestation: None,
             keys,
             checkpoint_authority: None,
         }
+    }
+
+    /// Replica writing under this chat space's derived Personae key.
+    ///
+    /// Every authored encrypted record carries the root attestation. Admission
+    /// verifies it against the operation signer and projection exposes the
+    /// stable root as the message author.
+    pub fn for_identity<P: IdentityProvider + ?Sized>(
+        backend: B,
+        space_id: [u8; 32],
+        identity: &P,
+        keys: DataKeyring,
+    ) -> Result<Self, ChatReplicaIdentityError> {
+        debug_assert_eq!(COMMONS_CHAT_PROFILE.mode, GroupEncryptionMode::Data);
+        let salt = chat_identity_salt(space_id);
+        let keypair = identity.derive_keypair(&salt)?;
+        let author_attestation = identity.attest_derived_key(&salt)?;
+        if !author_attestation.verify(&salt) {
+            return Err(ChatReplicaIdentityError::InvalidAttestation);
+        }
+        let derived = author_attestation
+            .derived_public_key()
+            .map_err(|_| ChatReplicaIdentityError::InvalidAttestation)?
+            .to_bytes();
+        if derived != keypair.public_key().to_bytes() {
+            return Err(ChatReplicaIdentityError::WriterMismatch);
+        }
+        let stable_author = author_attestation
+            .master_public_key()
+            .map_err(|_| ChatReplicaIdentityError::InvalidAttestation)?
+            .to_bytes();
+        if stable_author != identity.master_public_key().to_bytes() {
+            return Err(ChatReplicaIdentityError::RootMismatch);
+        }
+        Ok(Self {
+            store: MunimentStore::new(backend),
+            space_id,
+            signing_seed: keypair.to_seed(),
+            stable_author,
+            author_attestation: Some(author_attestation),
+            keys,
+            checkpoint_authority: None,
+        })
+    }
+
+    /// Stable Personae root used for author and authority projection.
+    pub fn stable_author(&self) -> [u8; 32] {
+        self.stable_author
     }
 
     /// Install the current Commons-governed checkpoint authority.
@@ -552,7 +737,9 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
         let author = signing_key.verifying_key();
         let (seq_num, backlink) = author_head(&entries, *author.as_bytes(), &CHAT_LOG)?;
-        let plaintext = encode_cbor(&event).map_err(|error| ChatError::Wire(error.to_string()))?;
+        let class = event.class();
+        let record = ChatAuthored::new(event, self.author_attestation.clone());
+        let plaintext = encode_cbor(&record).map_err(|error| ChatError::Wire(error.to_string()))?;
         let envelope = self
             .keys
             .seal(&plaintext, &p2panda_encryption::Rng::default())?;
@@ -569,7 +756,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             backlink: backlink.map(Hash::from),
             extensions: ChatExt {
                 space_id: self.space_id,
-                class: event.class(),
+                class,
                 parents,
             },
         };
@@ -624,8 +811,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     "the original message is absent from the current projection".into(),
                 )
             })?;
-        let author = SigningKey::from_bytes(&self.signing_seed).verifying_key();
-        if message.author != *author.as_bytes() {
+        if message.author != self.stable_author {
             return Err(ChatError::MessageMutation(
                 "only the original author can edit or delete a message".into(),
             ));
@@ -695,8 +881,8 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
         let author = signing_key.verifying_key();
         let (seq_num, backlink) = author_head(&entries, *author.as_bytes(), &CHAT_CHECKPOINT_LOG)?;
-        let plaintext =
-            encode_cbor(&checkpoint).map_err(|error| ChatError::Wire(error.to_string()))?;
+        let record = ChatAuthored::new(checkpoint.clone(), self.author_attestation.clone());
+        let plaintext = encode_cbor(&record).map_err(|error| ChatError::Wire(error.to_string()))?;
         let envelope = self
             .keys
             .seal(&plaintext, &p2panda_encryption::Rng::default())?;
@@ -733,11 +919,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
             ChatError::Checkpoint("checkpoint authority is not configured".into())
         })?;
-        let signing_key = SigningKey::from_bytes(&self.signing_seed);
-        if !authority.permits_checkpoint(
-            *signing_key.verifying_key().as_bytes(),
-            &authority.authority_revision(),
-        ) {
+        if !authority.permits_checkpoint(self.stable_author, &authority.authority_revision()) {
             return Err(ChatError::Checkpoint(
                 "local signer is not the current checkpoint authority".into(),
             ));
@@ -1188,12 +1370,14 @@ fn project_records(
     let mut messages = Vec::new();
     let mut deleted_messages = Vec::new();
     for index in causal.order {
+        let (event, author) = decode_event_record(keys, &records[index].operation)?;
         apply_event(
             &mut channels,
             &mut messages,
             &mut deleted_messages,
             &records[index].operation,
-            decode_event(keys, &records[index].operation)?,
+            author,
+            event,
         )?;
     }
     Ok(ChatProjection {
@@ -1257,12 +1441,14 @@ fn project_checkpoint_tail(
     let mut messages = checkpoint.snapshot.messages.clone();
     let mut deleted_messages = checkpoint.snapshot.deleted_messages.clone();
     for index in causal.order {
+        let (event, author) = decode_event_record(keys, &tail_records[index].operation)?;
         apply_event(
             &mut channels,
             &mut messages,
             &mut deleted_messages,
             &tail_records[index].operation,
-            decode_event(keys, &tail_records[index].operation)?,
+            author,
+            event,
         )?;
     }
     Ok(ChatProjection {
@@ -1301,6 +1487,7 @@ fn apply_event(
     messages: &mut Vec<AuthoredMessage>,
     deleted_messages: &mut Vec<DeletedMessage>,
     operation: &Operation<ChatExt>,
+    stable_author: [u8; 32],
     event: ChatEvent,
 ) -> Result<(), ChatError> {
     if event.class() != operation.header.extensions.class {
@@ -1314,7 +1501,7 @@ fn apply_event(
         }
         ChatEvent::Message(message) => messages.push(AuthoredMessage {
             operation: *operation.hash.as_bytes(),
-            author: *operation.header.verifying_key.as_bytes(),
+            author: stable_author,
             message,
             latest_edit: None,
             edited_at_ms: None,
@@ -1328,7 +1515,7 @@ fn apply_event(
                         "edit does not reference a projected original message".into(),
                     )
                 })?;
-            require_original_author(message, operation)?;
+            require_original_author(message, stable_author)?;
             message.message.body = edit.body;
             message.latest_edit = Some(*operation.hash.as_bytes());
             message.edited_at_ms = Some(edit.edited_at_ms);
@@ -1342,7 +1529,7 @@ fn apply_event(
                         "deletion does not reference a projected original message".into(),
                     )
                 })?;
-            require_original_author(&messages[index], operation)?;
+            require_original_author(&messages[index], stable_author)?;
             let message = messages.remove(index);
             deleted_messages.push(DeletedMessage {
                 original: message.operation,
@@ -1357,9 +1544,9 @@ fn apply_event(
 
 fn require_original_author(
     original: &AuthoredMessage,
-    mutation: &Operation<ChatExt>,
+    mutation_author: [u8; 32],
 ) -> Result<(), ChatError> {
-    if original.author != *mutation.header.verifying_key.as_bytes() {
+    if original.author != mutation_author {
         return Err(ChatError::MessageMutation(
             "only the original author can edit or delete a message".into(),
         ));
@@ -1386,18 +1573,28 @@ fn decode_checkpoint_operation(
     }
     let envelope = encrypted_body(operation)?;
     let plaintext = keys.open(&envelope)?;
-    let checkpoint =
-        decode_cbor(plaintext.as_slice()).map_err(|error| ChatError::Wire(error.to_string()))?;
-    Ok((checkpoint, envelope))
+    let record: ChatAuthored<ChatCheckpoint> = decode_authored(plaintext.as_slice())?;
+    stable_chat_author(operation, &record)?;
+    Ok((record.payload, envelope))
 }
 
+#[cfg(test)]
 fn decode_event(
     keys: &DataKeyring,
     operation: &Operation<ChatExt>,
 ) -> Result<ChatEvent, ChatError> {
+    decode_event_record(keys, operation).map(|(event, _)| event)
+}
+
+fn decode_event_record(
+    keys: &DataKeyring,
+    operation: &Operation<ChatExt>,
+) -> Result<(ChatEvent, [u8; 32]), ChatError> {
     let envelope = encrypted_body(operation)?;
     let plaintext = keys.open(&envelope)?;
-    decode_cbor(plaintext.as_slice()).map_err(|error| ChatError::Wire(error.to_string()))
+    let record: ChatAuthored<ChatEvent> = decode_authored(plaintext.as_slice())?;
+    let stable_author = stable_chat_author(operation, &record)?;
+    Ok((record.payload, stable_author))
 }
 
 #[cfg(test)]
@@ -1407,9 +1604,17 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use crate::{AuthorityState, CommonsAuthority, GemotAuthorityView};
+    use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
+    use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
     use muniment::RedbBackend;
     use murm::{CabalId, CabalKey, CabalKeyring};
+    use personae::delegation::{
+        CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+        SignedDelegationCertificate, SignedDelegationRevocation,
+    };
     use personae::{IdentityProvider, InMemoryProvider};
+    use servitor::{Mode, Subject, cap_path};
     use stickleback::{
         DropLimits, DropRecord, decode_operation_record, operation_record, read_protected_drop,
         write_protected_drop,
@@ -1423,6 +1628,8 @@ mod tests {
     use super::*;
 
     const SPACE: [u8; 32] = [0x51; 32];
+    const MOOT: [u8; 32] = [0x6d; 32];
+    const ROOT_GRANT: [u8; 32] = [0x67; 32];
 
     fn paired_keys() -> (DataKeyring, DataKeyring) {
         let rng = p2panda_encryption::Rng::default();
@@ -1516,6 +1723,209 @@ mod tests {
             header,
             body: Some(body),
         }
+    }
+
+    fn bound_event_operation(
+        replica: &ChatReplica<MemoryBackend>,
+        event: ChatEvent,
+        signing_seed: [u8; 32],
+        author_attestation: DerivedKeyAttestation,
+    ) -> Operation<ChatExt> {
+        let record = ChatAuthored::new(event, Some(author_attestation));
+        let plaintext = encode_cbor(&record).unwrap();
+        let envelope = replica
+            .keys
+            .seal(&plaintext, &p2panda_encryption::Rng::default())
+            .unwrap();
+        let body = Body::new(&encode_cbor(&envelope).unwrap());
+        let signing_key = SigningKey::from_bytes(&signing_seed);
+        let mut header = Header {
+            version: 1,
+            verifying_key: signing_key.verifying_key(),
+            signature: None,
+            payload_size: body.size(),
+            payload_hash: Some(body.hash()),
+            seq_num: 0,
+            backlink: None,
+            extensions: ChatExt {
+                space_id: replica.space_id,
+                class: record.payload.class(),
+                parents: Vec::new(),
+            },
+        };
+        header.sign(&signing_key);
+        Operation {
+            hash: header.hash(),
+            header,
+            body: Some(body),
+        }
+    }
+
+    #[tokio::test]
+    async fn personae_chat_author_binds_to_gemot_subject_and_revocation() {
+        let founder = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let stranger = InMemoryProvider::from_seed([0x73; 32]);
+        let (author_keys, relay_keys) = paired_keys();
+        let mut author = ChatReplica::in_memory_for_identity(SPACE, &writer, author_keys).unwrap();
+        assert_eq!(
+            author.stable_author(),
+            writer.master_public_key().to_bytes()
+        );
+        assert_ne!(
+            *SigningKey::from_bytes(&author.signing_seed)
+                .verifying_key()
+                .as_bytes(),
+            author.stable_author()
+        );
+
+        let message = Message {
+            channel: "general".into(),
+            body: "bound author".into(),
+            sent_at_ms: 1,
+            reply_to: None,
+        };
+        let operation = author
+            .author(ChatEvent::Message(message.clone()))
+            .await
+            .unwrap();
+        let edit = author
+            .edit_message(*operation.hash.as_bytes(), "root-bound edit".into(), 2)
+            .await
+            .unwrap();
+        author.set_checkpoint_authority(ChatCheckpointAuthority::new(
+            Digest::blake3(b"root-bound checkpoint"),
+            [writer.master_public_key().to_bytes()],
+        ));
+        let checkpoint = author.author_checkpoint().await.unwrap();
+        assert!(decode_checkpoint_operation(&author.keys, &checkpoint).is_ok());
+
+        let relay = ChatReplica::in_memory(SPACE, [0x74; 32], relay_keys);
+        let forged = bound_event_operation(
+            &author,
+            ChatEvent::Message(message.clone()),
+            author.signing_seed,
+            stranger
+                .attest_derived_key(&chat_identity_salt(SPACE))
+                .unwrap(),
+        );
+        let error = relay
+            .accept(&forged)
+            .await
+            .expect_err("a foreign root cannot claim the derived chat signer");
+        assert!(error.to_string().contains("invalid-chat-author-binding"));
+        assert_eq!(relay.sync_store().operation_count().await.unwrap(), 0);
+
+        let cross_space = bound_event_operation(
+            &author,
+            ChatEvent::Message(message),
+            author.signing_seed,
+            writer
+                .attest_derived_key(&chat_identity_salt([0x52; 32]))
+                .unwrap(),
+        );
+        let error = relay
+            .accept(&cross_space)
+            .await
+            .expect_err("a derived-key attestation cannot be replayed into another chat space");
+        assert!(error.to_string().contains("invalid-chat-author-binding"));
+        assert_eq!(relay.sync_store().operation_count().await.unwrap(), 0);
+
+        relay.accept(&operation).await.unwrap();
+        relay.accept(&edit).await.unwrap();
+        let projection = relay.projection().await.unwrap();
+        assert_eq!(projection.messages.len(), 1);
+        assert_eq!(projection.messages[0].message.body, "root-bound edit");
+        assert_eq!(
+            projection.messages[0].author,
+            writer.master_public_key().to_bytes()
+        );
+
+        let capability = chat_write_capability(SPACE);
+        let needed = cap_path(&capability);
+        let mut rules = ConstitutionRules::founder_only(founder.master_public_key().to_bytes());
+        rules.grant(CapabilityGrant {
+            id: ROOT_GRANT,
+            subject: founder.master_public_key().to_bytes(),
+            path_prefix: needed.clone(),
+            not_before_ms: 10,
+            expires_at_ms: Some(1_000),
+            delegation_depth: 2,
+        });
+        let delegation = SignedDelegationCertificate::issue(
+            &founder,
+            DelegationCertificate::new(
+                DelegationParent::Root(ROOT_GRANT),
+                founder.master_public_key().to_bytes(),
+                writer.master_public_key().to_bytes(),
+                CapabilityScope {
+                    domain: MOOT_DELEGATION_DOMAIN.into(),
+                    resource: MOOT.to_vec(),
+                    path_prefix: needed,
+                    actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+                },
+                15,
+                20,
+                Some(900),
+                0,
+                [1; 32],
+            ),
+        )
+        .unwrap();
+        let delegation_id = delegation.certificate.id();
+        let delegation_scope = delegation.certificate.scope.clone();
+        let mut delegations = MootDelegations::new();
+        assert!(
+            delegations
+                .accept_certificate(MOOT, &rules, delegation)
+                .unwrap()
+        );
+        let view = GemotAuthorityView {
+            authority: MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: MOOT,
+                now_ms: 50,
+            },
+        };
+        assert_eq!(
+            view.classify(
+                Subject(projection.messages[0].author),
+                &capability,
+                Mode::Write
+            ),
+            AuthorityState::Effective
+        );
+
+        let revocation = SignedDelegationRevocation::issue(
+            &founder,
+            DelegationRevocation::new(
+                delegation_id,
+                founder.master_public_key().to_bytes(),
+                delegation_scope,
+                60,
+                [2; 32],
+            ),
+        )
+        .unwrap();
+        assert!(delegations.accept_revocation(revocation).unwrap());
+        let withdrawn = GemotAuthorityView {
+            authority: MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: MOOT,
+                now_ms: 50,
+            },
+        };
+        assert_eq!(
+            withdrawn.classify(
+                Subject(projection.messages[0].author),
+                &capability,
+                Mode::Write
+            ),
+            AuthorityState::Revoked
+        );
+        assert_eq!(relay.sync_store().operation_count().await.unwrap(), 2);
     }
 
     #[tokio::test]
