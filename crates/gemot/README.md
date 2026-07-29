@@ -78,7 +78,7 @@ themselves and members reach them via thin clients.
 
 The crate is called `gemot`. The product term *moothold* refers
 specifically to **Tier 3** (federation of moots) per the
-[2026-05-07 moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md).
+[2026-05-07 moot-tiers brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md).
 Earlier docs may use *moothold* as an umbrella term — that's the older
 framing.
 
@@ -239,7 +239,7 @@ late peer over upstream p2panda 0.7 / Iroh 1.0. Aggregate native drops carry the
 lane as critical capability-chain evidence. The service exposes deterministic
 read-only participant projections and revocation-derived scope-key epochs for a
 host to bind to p2panda-encryption secrets. The next slices land per the
-[moot-tiers brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
+[moot-tiers brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
 §13:
 
 - **T1 milestone**: orrery as a one-member moot-of-self with local
