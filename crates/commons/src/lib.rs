@@ -43,7 +43,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, MunimentStore, OperationPolicy,
     OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
-    causal_projection, happens_before, observed_frontier, validate_causal_metadata,
+    causal_projection, happens_before, observed_frontier, stable_writer_subject,
+    validate_causal_metadata,
 };
 
 /// One log per author. The commons has no second log class (no separate
@@ -171,42 +172,12 @@ fn stable_subject(
     operation: &Operation<CommonsExt>,
     record: &CommonsRecord,
 ) -> Result<[u8; 32], Reject> {
-    let signer = *operation.header.verifying_key.as_bytes();
-    let Some(attestation) = &record.writer_attestation else {
-        return Ok(signer);
-    };
-    if !attestation.verify(&commons_identity_salt(
-        operation.header.extensions.container,
-    )) {
-        return Err(Reject::new(
-            "invalid-writer-attestation",
-            "derived writer attestation does not verify for this container",
-        ));
-    }
-    let derived = attestation
-        .derived_public_key()
-        .map_err(|_| {
-            Reject::new(
-                "invalid-derived-writer",
-                "derived writer attestation contains an invalid key",
-            )
-        })?
-        .to_bytes();
-    if derived != signer {
-        return Err(Reject::new(
-            "writer-attestation-mismatch",
-            "derived writer attestation does not bind the operation signer",
-        ));
-    }
-    attestation
-        .master_public_key()
-        .map(|key| key.to_bytes())
-        .map_err(|_| {
-            Reject::new(
-                "invalid-writer-root",
-                "derived writer attestation contains an invalid root key",
-            )
-        })
+    stable_writer_subject(
+        *operation.header.verifying_key.as_bytes(),
+        record.writer_attestation.as_ref(),
+        &commons_identity_salt(operation.header.extensions.container),
+    )
+    .map_err(|error| Reject::new(error.code(), error.to_string()))
 }
 
 /// Typed write capability implied by every batch for one container.
