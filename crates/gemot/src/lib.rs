@@ -8,8 +8,9 @@
 //!
 //! Inside `gemot`, the [`mooting`](https://crates.io/crates/mooting)
 //! crate supplies backend-neutral p2panda storage and recognition-policy
-//! plumbing. [`moot`] owns the community namespace: constitutional law, public
-//! records, and Tessera trust facts sit beneath one aggregate boundary.
+//! plumbing. [`moot`] owns the community namespace: constitutional law,
+//! delegation, membership, public records, and Tessera trust facts sit beneath
+//! one aggregate boundary.
 //!
 //! ## Naming note
 //!
@@ -22,18 +23,20 @@
 //! Pre-1.0. Signed Moot declarations, membership, fauna, deterministic roster
 //! folds, trust records, and host-composed sync tests are implemented. Signed
 //! constitutional governance has a durable fold and high-level command/snapshot
-//! service. The aggregate `Moot` service now composes that governance with the
-//! muniment-backed object lane, plain declare/join/share commands, durable
-//! snapshots, constitution-bound retention checkpoints, rotation-safe
+//! service. The aggregate `Moot` service now composes that governance with
+//! signed membership, delegation, object, and Tessera stores, plain commands,
+//! durable snapshots, constitution-bound retention checkpoints, rotation-safe
 //! checkpoint ancestry, prefix pruning, and public/local native-drop
-//! export/import with refreshed snapshots. Aggregate drops carry critical
-//! constitution evidence before object records, so a fresh recipient can
-//! verify a rotated checkpoint chain. Protected drops take an injected group
-//! protector, and Tessera commands return an explicit host-publication seam.
+//! export/import. Aggregate drops reconstruct all five retained domains on a
+//! fresh recipient. Protected drops take an injected group protector, and
+//! membership, object, and Tessera commands return explicit host-publication
+//! seams.
 //! The signed admission policy now evaluates an injected membership/capability
 //! provider. Founder-governed signed grants narrow that provider's live
 //! decision; quorum amendments and the p2panda-auth group adapter are
-//! implemented. The adapter binds membership changes to a host-owned
+//! implemented. Membership has a Gemot-owned signed wire grammar and durable
+//! store; a verified derived-key attestation binds its signer to a stable
+//! Personae root. The adapter binds membership changes to a host-owned
 //! p2panda-encryption group-secret epoch. Independent Personae-signed
 //! certificates now attenuate constitutional grant roots through a Gemot fold,
 //! including cascading certificate and root revocation. Their signed p2panda

@@ -100,6 +100,13 @@ impl MootGovernance<RedbBackend> {
 }
 
 impl<B: Backend + Clone> MootGovernance<B> {
+    /// Shared LogSync store surface for the constitution lane.
+    pub fn sync_store(
+        &self,
+    ) -> stickleback::MunimentStore<B, crate::moot::constitution::ConstitutionExt> {
+        self.store.sync_store()
+    }
+
     /// Establish the first accepted constitution.
     pub async fn found(
         &self,

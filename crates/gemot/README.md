@@ -27,12 +27,14 @@ with their members.
 ## Moot layout
 
 `Moot` is the public community aggregate and owns the namespace below. The
-modules make the three persistence lanes explicit without making callers
+modules make its five retained domains explicit without making callers
 assemble them themselves:
 
 ```text
 gemot::moot
 ├── constitution  signed governance law, folds, checkpoints, and sync
+├── delegation    signed attenuated authority and revocation
+├── group         signed p2panda-auth membership and key epochs
 ├── records       the public community object and retention lane
 └── tessera       trust facts, persona lineage, storage, and sync
 ```
@@ -216,15 +218,18 @@ Pre-1.0. Signed Moot declarations, membership, fauna, deterministic roster
 folds, Tessera, constitutional governance, shared muniment stores,
 constitution-bound retention checkpoints, prefix pruning, and host-composed
 sync proofs are implemented. The aggregate `Moot` service composes governance,
-object and Tessera commands, snapshots, checkpointing, pruning, and authority
-rotation without exposing p2panda types. Plain and protected aggregate drops
-carry critical constitution evidence, bootstrap a rotated checkpoint chain on a
-fresh recipient, and refresh the materialized view through the shared atomic
-importer. A receipt resolves to an explicit typed outbound operation for the
-host to publish. The signed admission rule evaluates an injected
+membership, object, and Tessera commands, snapshots, checkpointing, pruning,
+and authority rotation. Its constitution and membership stores are explicit
+host-composed sync seams. Plain and protected aggregate drops carry
+constitution, delegation, membership, object, and Tessera operations, then
+refresh the complete materialized view on a fresh recipient. A receipt resolves
+to an explicit typed outbound operation for the host to publish. The signed
+admission rule evaluates an injected
 membership/capability provider. Founder-governed signed grants narrow that
 provider's live decision. Quorum amendments and a p2panda-auth group adapter
-are implemented. The adapter binds resolved membership changes to a
+are implemented. Membership operations use a Gemot-owned wire grammar,
+survive durable reopen, and verify a derived writer's Personae root attestation
+before entering the fold. The adapter binds resolved membership changes to a
 host-owned p2panda-encryption group-secret epoch without importing private key
 material into Gemot. Independent Personae-signed certificates now attenuate
 constitutional grant roots through a Gemot fold, including cascading

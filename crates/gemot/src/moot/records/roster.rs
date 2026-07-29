@@ -249,7 +249,7 @@ impl MootRoster {
                 )
             })
             .collect();
-        fauna.sort_by(|a, b| (a.at_ms, a.op_hash).cmp(&(b.at_ms, b.op_hash)));
+        fauna.sort_by_key(|entry| (entry.at_ms, entry.op_hash));
 
         Self {
             declaration,

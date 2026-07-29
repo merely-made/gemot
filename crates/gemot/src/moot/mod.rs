@@ -3,10 +3,10 @@
 
 //! A Moot community and its bounded record lanes.
 //!
-//! [`Moot`] is the command and snapshot boundary. Its four retained lanes are
-//! [`constitution`], [`delegation`], [`records`], and [`tessera`]. Hosts may adapt the signed
-//! wire/store types for LogSync, but Gemot owns neither a network session nor a
-//! UI runtime.
+//! [`Moot`] is the command and snapshot boundary. Its five retained domains are
+//! [`constitution`], [`delegation`], [`group`], [`records`], and [`tessera`].
+//! Hosts may adapt the signed wire/store types for LogSync, but Gemot owns
+//! neither a network session nor a UI runtime.
 //!
 //! M1 trust is the ring rule: holding the moot id is membership
 //! eligibility (the kith ring's definition). Invitations, capability
@@ -34,9 +34,12 @@ pub use delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegationProjection,
     MootDelegations, MootScopeKeyEpoch,
 };
+pub use group::store::{MootGroupFileStore, MootGroupStore, MootGroupStoreError};
+pub use group::wire::{MootGroupExt, MootGroupWireError, membership_identity_salt};
 pub use group::{
-    MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
-    MootGroupTransition, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
+    MootAccessLevel, MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation,
+    MootGroupOperationId, MootGroupSnapshot, MootGroupTransition, MootMember, MootMembershipAction,
+    MootMembershipRecord, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
 };
 pub use id::MootId;
 pub use records::{
