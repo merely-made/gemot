@@ -14,16 +14,20 @@ use serde::{Deserialize, Serialize};
 use stickleback::{
     DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropId,
     DropImportReport, DropLimits, DropProtector, DropRecord, DropWriteReceipt, EvidenceKind,
-    NativeDropError, read_plain_drop, read_protected_drop, write_plain_drop, write_protected_drop,
+    MunimentStore, NativeDropError, decode_operation_record, export_topic_operations,
+    read_plain_drop, read_protected_drop, write_plain_drop, write_protected_drop,
 };
 
 use super::constitution::{
-    ConstitutionRules, MootGovernance, MootGovernanceError, MootGovernanceSnapshot,
+    ConstitutionExt, ConstitutionRules, MootGovernance, MootGovernanceError, MootGovernanceSnapshot,
 };
 use super::delegation::{
     MootDelegationProjection, MootDelegationStore, MootDelegationStoreError, MootDelegations,
     MootScopeKeyEpoch,
 };
+use super::group::store::{MootGroupStore, MootGroupStoreError};
+use super::group::wire::MootGroupExt;
+use super::group::{MootGroup, MootGroupSnapshot, MootMembershipAction};
 
 use super::MootId;
 use super::records::{
@@ -38,6 +42,7 @@ use super::typed_authorization::MootAuthority;
 
 const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
 const DELEGATION_EVIDENCE_VERSION: u16 = 1;
+const DOMAIN_EVIDENCE_VERSION: u16 = 1;
 
 /// Stable privacy and radio-budget priorities for an importable Moot drop.
 /// Every selected record remains full-bodied because a signed log with a
@@ -85,6 +90,13 @@ struct DelegationEvidence {
     operations: Vec<DropRecord>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct DomainEvidence {
+    version: u16,
+    membership_operations: Vec<DropRecord>,
+    tessera_operations: Vec<DropRecord>,
+}
+
 /// Retention settings supplied by the Moot's governed configuration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MootRetentionSettings {
@@ -125,10 +137,14 @@ pub struct MootCheckpointSnapshot {
 pub struct MootSnapshot {
     pub moot_id: MootId,
     pub governance: MootGovernanceSnapshot,
+    /// Signed, converged membership and its retained-operation health.
+    pub membership: MootGroupSnapshot,
     pub roster: MootRoster,
     pub checkpoint: Option<MootCheckpointSnapshot>,
     /// Signed delegated certificates retained in the current authority fold.
     pub delegated_certificates: usize,
+    /// Signed Tessera operations retained for the Moot's trust projection.
+    pub tessera_operations: usize,
 }
 
 /// A request to evaluate one capability-scoped community action.
@@ -182,6 +198,7 @@ pub struct MootCommandReceipt {
 /// The replicated lane an authored command must be published on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MootLane {
+    Membership,
     Objects,
     Tessera,
 }
@@ -190,6 +207,7 @@ pub enum MootLane {
 /// publication. Gemot stays transport-neutral; the host owns the typed handle.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MootOutboundOperation {
+    Membership(p2panda_core::Operation<MootGroupExt>),
     Object(p2panda_core::Operation<super::MootExt>),
     Tessera(p2panda_core::Operation<TesseraExt>),
 }
@@ -200,6 +218,8 @@ pub struct MootDropImportReceipt {
     pub import: DropImportReport,
     pub constitution_operations: u64,
     pub delegation_operations: u64,
+    pub membership_operations: u64,
+    pub tessera_operations: u64,
     pub snapshot: MootSnapshot,
 }
 
@@ -214,6 +234,8 @@ pub enum MootError {
     Tessera(#[from] TesseraStoreError),
     #[error(transparent)]
     Delegation(#[from] MootDelegationStoreError),
+    #[error(transparent)]
+    Membership(#[from] MootGroupStoreError),
     #[error("moot has no accepted retention checkpoint")]
     CheckpointMissing,
     #[error("moot storage directory: {0}")]
@@ -230,6 +252,8 @@ pub enum MootError {
     ConstitutionEvidenceMalformed,
     #[error("Moot drop carries malformed delegation authority evidence")]
     DelegationEvidenceMalformed,
+    #[error("Moot drop carries malformed auxiliary domain evidence")]
+    DomainEvidenceMalformed,
     #[error("authored operation is absent from its retained lane")]
     OutboundMissing,
 }
@@ -242,6 +266,7 @@ pub struct Moot<B> {
     objects: MootStore<B>,
     tessera: TesseraStore<B>,
     delegations: MootDelegationStore<B>,
+    membership: MootGroupStore<B>,
     retention: MootRetentionSettings,
 }
 
@@ -256,6 +281,7 @@ impl Moot<MemoryBackend> {
             objects: MootStore::in_memory(),
             tessera: TesseraStore::in_memory(),
             delegations: MootDelegationStore::in_memory(moot_id.0),
+            membership: MootGroupStore::in_memory(moot_id.0),
             retention,
         }
     }
@@ -284,6 +310,10 @@ impl Moot<RedbBackend> {
                 directory.as_ref().join("delegations.redb"),
                 moot_id.0,
             )?,
+            membership: super::group::store::MootGroupFileStore::open(
+                directory.as_ref().join("membership.redb"),
+                moot_id.0,
+            )?,
             retention,
         };
         match service.governance.snapshot().await {
@@ -300,6 +330,11 @@ impl<B: Backend + Clone> Moot<B> {
         self.moot_id
     }
 
+    /// Constitution lane for host-composed LogSync publication.
+    pub fn constitution_store(&self) -> MunimentStore<B, ConstitutionExt> {
+        self.governance.sync_store()
+    }
+
     /// Lower store boundary for host-composed LogSync and native-drop adapters.
     pub fn object_store(&self) -> &MootStore<B> {
         &self.objects
@@ -313,6 +348,16 @@ impl<B: Backend + Clone> Moot<B> {
     /// Independent delegation lane for host-composed LogSync publication.
     pub fn delegation_store(&self) -> &MootDelegationStore<B> {
         &self.delegations
+    }
+
+    /// Independent membership lane for host-composed LogSync publication.
+    pub fn membership_store(&self) -> &MootGroupStore<B> {
+        &self.membership
+    }
+
+    /// Current effective p2panda-auth membership.
+    pub async fn membership(&self) -> Result<MootGroup, MootError> {
+        Ok(self.membership.group().await?)
     }
 
     async fn refresh_retention_authority(&self) -> Result<(), MootError> {
@@ -539,6 +584,40 @@ impl<B: Backend + Clone> Moot<B> {
         })
     }
 
+    /// Author a membership change directly under a stable identity key.
+    pub async fn update_membership(
+        &self,
+        actor_seed: [u8; 32],
+        action: MootMembershipAction,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self.membership.author_seed(actor_seed, action).await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Membership,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Author a membership change under a Moot-derived key certified by the
+    /// stable Personae root.
+    pub async fn update_membership_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        action: MootMembershipAction,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self
+            .membership
+            .author_for_identity(identity, action)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Membership,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
     /// Record one Tessera fact through the same aggregate command surface.
     /// The receipt can be resolved with [`outbound`](Self::outbound) and
     /// published by the host on its Tessera LogSync handle.
@@ -568,6 +647,12 @@ impl<B: Backend + Clone> Moot<B> {
     ) -> Result<MootOutboundOperation, MootError> {
         let hash = p2panda_core::Hash::from_bytes(receipt.operation);
         match receipt.lane {
+            MootLane::Membership => self
+                .membership
+                .get(&hash)
+                .await?
+                .map(MootOutboundOperation::Membership)
+                .ok_or(MootError::OutboundMissing),
             MootLane::Objects => self
                 .objects
                 .operation(&hash)
@@ -651,6 +736,24 @@ impl<B: Backend + Clone> Moot<B> {
             bytes: delegation_bytes,
             critical: true,
         });
+        let domains = DomainEvidence {
+            version: DOMAIN_EVIDENCE_VERSION,
+            membership_operations: self.membership.drop_records().await?,
+            tessera_operations: export_topic_operations::<B, TesseraExt, u64>(
+                &self.tessera.sync_store(),
+                &p2panda_core::Topic::from(self.moot_id.0),
+                DropExportProfile::default(),
+            )
+            .await
+            .map_err(|_| MootError::DomainEvidenceMalformed)?,
+        };
+        let domain_bytes = encode_cbor(&domains).map_err(|_| MootError::DomainEvidenceMalformed)?;
+        records.push(DropRecord::Evidence {
+            kind: EvidenceKind::DomainOperations,
+            subject: self.moot_id.0,
+            bytes: domain_bytes,
+            critical: true,
+        });
         let (objects, selection) = self
             .objects
             .export_selected_drop_records(self.moot_id.0, selector, budget)
@@ -718,6 +821,53 @@ impl<B: Backend + Clone> Moot<B> {
         Ok(found.unwrap_or_default())
     }
 
+    fn domain_evidence(&self, records: &[DropRecord]) -> Result<DomainEvidence, MootError> {
+        let mut found = None;
+        for record in records {
+            let DropRecord::Evidence {
+                kind: EvidenceKind::DomainOperations,
+                subject,
+                bytes,
+                critical: true,
+            } = record
+            else {
+                continue;
+            };
+            if *subject != self.moot_id.0 || found.is_some() {
+                return Err(MootError::DomainEvidenceMalformed);
+            }
+            let evidence: DomainEvidence =
+                decode_cbor(&bytes[..]).map_err(|_| MootError::DomainEvidenceMalformed)?;
+            if evidence.version != DOMAIN_EVIDENCE_VERSION
+                || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
+            {
+                return Err(MootError::DomainEvidenceMalformed);
+            }
+            found = Some(evidence);
+        }
+        Ok(found.unwrap_or(DomainEvidence {
+            version: DOMAIN_EVIDENCE_VERSION,
+            membership_operations: Vec::new(),
+            tessera_operations: Vec::new(),
+        }))
+    }
+
+    async fn accept_tessera_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {
+        let mut accepted = 0;
+        for record in records {
+            let Some(operation) = decode_operation_record::<TesseraExt>(record)
+                .map_err(|_| MootError::DomainEvidenceMalformed)?
+            else {
+                continue;
+            };
+            if operation.body.is_none() {
+                return Err(MootError::DomainEvidenceMalformed);
+            }
+            accepted += u64::from(self.tessera.accept(self.moot_id.0, &operation).await?);
+        }
+        Ok(accepted)
+    }
+
     async fn import_aggregate_records(
         &self,
         drop_id: DropId,
@@ -729,6 +879,14 @@ impl<B: Backend + Clone> Moot<B> {
         let delegation_operations = self
             .delegations
             .accept_drop_records(&delegation_evidence)
+            .await?;
+        let domains = self.domain_evidence(&records)?;
+        let membership_operations = self
+            .membership
+            .accept_drop_records(&domains.membership_operations)
+            .await?;
+        let tessera_operations = self
+            .accept_tessera_drop_records(&domains.tessera_operations)
             .await?;
         // The evidence becomes active before the object lane examines its
         // checkpoint chain. This is the dependency order a fresh device needs
@@ -742,6 +900,8 @@ impl<B: Backend + Clone> Moot<B> {
             import,
             constitution_operations,
             delegation_operations,
+            membership_operations,
+            tessera_operations,
             snapshot: self.snapshot().await?,
         })
     }
@@ -835,6 +995,7 @@ impl<B: Backend + Clone> Moot<B> {
 
     pub async fn snapshot(&self) -> Result<MootSnapshot, MootError> {
         let governance = self.governance.snapshot().await?;
+        let membership = self.membership.snapshot().await?;
         let roster = self.objects.roster(self.moot_id.0).await?;
         let checkpoint = self
             .objects
@@ -853,12 +1014,15 @@ impl<B: Backend + Clone> Moot<B> {
             .delegations(&governance.rules)
             .await?
             .certificate_count();
+        let tessera_operations = self.tessera.len().await?;
         Ok(MootSnapshot {
             moot_id: self.moot_id,
             governance,
+            membership,
             roster,
             checkpoint,
             delegated_certificates,
+            tessera_operations,
         })
     }
 }
@@ -871,7 +1035,9 @@ mod tests {
     use crate::moot::tessera::{
         ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
     };
-    use crate::moot::{KeepBound, MootStoreError};
+    use crate::moot::{
+        KeepBound, MootAccessLevel, MootMember, MootMembershipAction, MootStoreError,
+    };
     use identity::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
@@ -1427,6 +1593,139 @@ mod tests {
                 .unwrap(),
             GateDecision::Deny(DenyReason::NoCapability)
         );
+    }
+
+    #[tokio::test]
+    async fn aggregate_drop_reconstructs_all_five_retained_domains_for_late_peer() {
+        let founder = keypair(12);
+        let founder_id = founder.public_key().to_bytes();
+        let member_identity = InMemoryProvider::from_seed([0x61; 32]);
+        let member_root = member_identity.master_public_key().to_bytes();
+        let root_holder = InMemoryProvider::from_seed([0x62; 32]);
+        let delegate = InMemoryProvider::from_seed([0x63; 32]);
+        let root_id = [0xd1; 32];
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.grant(CapabilityGrant {
+            id: root_id,
+            subject: root_holder.master_public_key().to_bytes(),
+            path_prefix: "moot/fauna".into(),
+            not_before_ms: 1,
+            expires_at_ms: Some(100),
+            delegation_depth: 1,
+        });
+
+        let source = Moot::in_memory(ID, founder_id, retention());
+        source
+            .found(founder.to_seed(), None, None, rules.clone(), 1)
+            .await
+            .unwrap();
+        let membership_receipt = source
+            .update_membership_for_identity(
+                &member_identity,
+                MootMembershipAction::Create {
+                    initial_members: vec![MootMember {
+                        member: member_root,
+                        access: MootAccessLevel::Manage,
+                    }],
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            source.outbound(&membership_receipt).await.unwrap(),
+            MootOutboundOperation::Membership(_)
+        ));
+
+        let scope = CapabilityScope {
+            domain: MOOT_DELEGATION_DOMAIN.into(),
+            resource: ID.0.to_vec(),
+            path_prefix: "moot/fauna/notes".into(),
+            actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+        };
+        let signed = SignedDelegationCertificate::issue(
+            &root_holder,
+            DelegationCertificate::new(
+                DelegationParent::Root(root_id),
+                root_holder.master_public_key().to_bytes(),
+                delegate.master_public_key().to_bytes(),
+                scope.clone(),
+                2,
+                3,
+                Some(90),
+                0,
+                [0x64; 32],
+            ),
+        )
+        .unwrap();
+        let delegation_key = root_holder
+            .derive_keypair(&delegation_signing_salt(&scope))
+            .unwrap();
+        source
+            .delegation_store()
+            .author_issue(&delegation_key, &rules, signed)
+            .await
+            .unwrap();
+
+        source
+            .declare(
+                founder.to_seed(),
+                "peer press".into(),
+                "shared place".into(),
+                4,
+            )
+            .await
+            .unwrap();
+        source
+            .join(founder.to_seed(), "founder".into(), 5)
+            .await
+            .unwrap();
+        source
+            .share(
+                founder.to_seed(),
+                [0x65; 32],
+                "text/plain".into(),
+                "field note".into(),
+                6,
+            )
+            .await
+            .unwrap();
+        source
+            .record_tessera(
+                founder.to_seed(),
+                TesseraEvent::GovernanceParticipation {
+                    by: ChainRoot(member_root),
+                    at_ms: 7,
+                },
+            )
+            .await
+            .unwrap();
+        let expected = source.snapshot().await.unwrap();
+
+        let mut bytes = Vec::new();
+        source
+            .export_plain_drop(
+                &mut bytes,
+                DropExportProfile::default(),
+                DropLimits::default(),
+            )
+            .await
+            .unwrap();
+        let late_peer = Moot::in_memory(ID, founder_id, retention());
+        let receipt = late_peer
+            .import_plain_drop(Cursor::new(bytes), DropLimits::default())
+            .await
+            .unwrap();
+
+        assert_eq!(receipt.constitution_operations, 1);
+        assert_eq!(receipt.delegation_operations, 1);
+        assert_eq!(receipt.membership_operations, 1);
+        assert_eq!(receipt.tessera_operations, 1);
+        assert_eq!(receipt.snapshot, expected);
+        assert_eq!(receipt.snapshot.membership.members[0].member, member_root);
+        assert_eq!(receipt.snapshot.roster.members.len(), 1);
+        assert_eq!(receipt.snapshot.roster.fauna.len(), 1);
+        assert_eq!(receipt.snapshot.delegated_certificates, 1);
+        assert_eq!(receipt.snapshot.tessera_operations, 1);
     }
 
     #[tokio::test]

@@ -237,7 +237,7 @@ impl<B: Backend + Clone> TesseraStore<B> {
         }
 
         // Deterministic order, then fold.
-        tagged.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+        tagged.sort_by_key(|entry| (entry.0, entry.1, entry.2));
         let mut ledger = Ledger::new(config);
         for (_, _, _, event) in &tagged {
             ledger.apply(event);

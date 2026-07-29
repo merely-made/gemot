@@ -84,11 +84,13 @@ fn quorum_revision(previous: &Digest, rules_hash: &Digest) -> Digest {
     Digest::blake3(&bytes)
 }
 
+type AmendmentProposal = ([u8; 32], ConstitutionRules, Digest, BTreeSet<[u8; 32]>);
+
 fn accepted_amendment(
     state: &Constitution,
     candidates: &[([u8; 32], [u8; 32], ConstitutionEvent)],
 ) -> Option<([u8; 32], ConstitutionRules, Digest)> {
-    let mut proposals: Vec<([u8; 32], ConstitutionRules, Digest, BTreeSet<[u8; 32]>)> = Vec::new();
+    let mut proposals: Vec<AmendmentProposal> = Vec::new();
     for (hash, author, event) in candidates {
         let ConstitutionEvent::Amended {
             previous,
@@ -186,10 +188,7 @@ impl Constitution {
             revision: Digest::p2panda_operation(*genesis_hash),
         };
 
-        loop {
-            let Some((hash, rules, rules_hash)) = accepted_amendment(&state, &candidates) else {
-                break;
-            };
+        while let Some((hash, rules, rules_hash)) = accepted_amendment(&state, &candidates) {
             let quorum = matches!(state.rules.amendment, AmendmentRule::MemberQuorum { .. });
             state.rules = rules;
             state.revision = if quorum {

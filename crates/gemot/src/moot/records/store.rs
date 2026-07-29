@@ -454,10 +454,10 @@ impl<B: Backend + Clone> MootStore<B> {
             .map(|operation| *operation.hash.as_bytes())
             .collect();
         for record in &records {
-            if let Some(operation) = decode_operation_record::<MootExt>(record)? {
-                if seen.insert(*operation.hash.as_bytes()) {
-                    operations.push(operation);
-                }
+            if let Some(operation) = decode_operation_record::<MootExt>(record)?
+                && seen.insert(*operation.hash.as_bytes())
+            {
+                operations.push(operation);
             }
         }
         let current = self.latest_checkpoint_from_ops(moot_id, &operations)?;

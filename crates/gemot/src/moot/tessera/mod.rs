@@ -29,6 +29,7 @@
 //!   resolves a leaf persona to its chain root + depth, and presents a
 //!   depreciated *effective* score (the Sybil cost of a fresh face), while debt
 //!   carries fully to forks (no laundering).
+//!
 //! Federation-level concord and reciprocity consume these facts from the
 //! separate `moothold` crate; they are not per-Moot Tessera state.
 //! - [`gate`] (Phase 4) — the §8.8 policy slot: tessera [facts](gate::TesseraFacts)

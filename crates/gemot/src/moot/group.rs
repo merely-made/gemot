@@ -1,18 +1,24 @@
 //! P2panda group membership at the Moot authorization seam.
 //!
-//! The host verifies and translates its signed `p2panda-core` operations before
-//! they arrive here. This module then uses `p2panda-auth` to converge the
-//! membership graph. It deliberately carries only a data-scheme group-secret
-//! *identifier*: running the p2panda encryption protocol still belongs to the
-//! host which holds device key bundles and the identity registry.
+//! Signed operations are retained by [`MootGroupStore`] and translated from
+//! Gemot's stable wire grammar into `p2panda-auth` for deterministic
+//! materialization. The module deliberately carries only a data-scheme
+//! group-secret *identifier*: running the p2panda encryption protocol still
+//! belongs to the host which holds device key bundles and the identity
+//! registry.
+
+pub mod store;
+pub mod wire;
 
 use std::collections::BTreeSet;
 
+use identity::DerivedKeyAttestation;
 use p2panda_auth::group::resolver::StrongRemove;
 use p2panda_auth::group::{GroupAction, GroupCrdt, GroupCrdtState};
 use p2panda_auth::traits::{IdentityHandle, Operation, OperationId};
 use p2panda_auth::{Access, AccessLevel};
 use p2panda_encryption::data_scheme::GroupSecretId;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::delegation::MootScopeKeyEpoch;
@@ -32,6 +38,80 @@ impl IdentityHandle for MootGroupHandle {}
 pub struct MootGroupOperationId(pub [u8; 32]);
 
 impl OperationId for MootGroupOperationId {}
+
+/// Stable access vocabulary carried by Gemot membership operations and
+/// snapshots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum MootAccessLevel {
+    Pull,
+    Read,
+    Write,
+    Manage,
+}
+
+impl From<&AccessLevel> for MootAccessLevel {
+    fn from(level: &AccessLevel) -> Self {
+        match level {
+            AccessLevel::Pull => Self::Pull,
+            AccessLevel::Read => Self::Read,
+            AccessLevel::Write => Self::Write,
+            AccessLevel::Manage => Self::Manage,
+        }
+    }
+}
+
+/// One stable Personae root and its resolved Moot access.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MootMember {
+    pub member: [u8; 32],
+    pub access: MootAccessLevel,
+}
+
+/// Durable membership action grammar owned by Gemot.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MootMembershipAction {
+    Create {
+        initial_members: Vec<MootMember>,
+    },
+    Add {
+        member: [u8; 32],
+        access: MootAccessLevel,
+    },
+    Remove {
+        member: [u8; 32],
+    },
+    Promote {
+        member: [u8; 32],
+        access: MootAccessLevel,
+    },
+    Demote {
+        member: [u8; 32],
+        access: MootAccessLevel,
+    },
+}
+
+/// One membership action plus the exact auth frontier its author observed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MootMembershipRecord {
+    pub action: MootMembershipAction,
+    pub dependencies: Vec<[u8; 32]>,
+    /// Master-signed binding when the operation uses a Moot-derived Personae
+    /// key. An absent attestation means the signer is the stable identity.
+    #[serde(default)]
+    pub author_attestation: Option<DerivedKeyAttestation>,
+}
+
+/// Plain materialized membership state exposed through the Moot aggregate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MootGroupSnapshot {
+    pub group: [u8; 32],
+    pub epoch: u64,
+    pub members: Vec<MootMember>,
+    pub auth_heads: Vec<[u8; 32]>,
+    pub retained_operations: usize,
+    pub pending_operations: usize,
+    pub rejected_operations: usize,
+}
 
 /// A verified membership action translated out of a signed host operation.
 ///
@@ -154,11 +234,30 @@ impl MootGroup {
     }
 
     pub fn members(&self) -> Vec<([u8; 32], Access<()>)> {
-        self.state
+        let mut members: Vec<_> = self
+            .state
             .members(self.group)
             .into_iter()
             .map(|(member, access)| (member.0, access))
+            .collect();
+        members.sort_by_key(|(member, _)| *member);
+        members
+    }
+
+    pub fn member_snapshots(&self) -> Vec<MootMember> {
+        self.members()
+            .into_iter()
+            .map(|(member, access)| MootMember {
+                member,
+                access: MootAccessLevel::from(&access.level),
+            })
             .collect()
+    }
+
+    pub fn auth_heads(&self) -> Vec<[u8; 32]> {
+        let mut heads: Vec<_> = self.state.heads().into_iter().map(|head| head.0).collect();
+        heads.sort_unstable();
+        heads
     }
 
     /// Apply one already-authenticated membership operation.
@@ -192,7 +291,7 @@ impl MootGroup {
             epoch: self.epoch,
             membership_changed,
             members: members.into_iter().collect(),
-            auth_heads: self.state.heads().into_iter().map(|head| head.0).collect(),
+            auth_heads: self.auth_heads(),
         })
     }
 
@@ -210,7 +309,7 @@ impl MootGroup {
             epoch: self.epoch,
             secret_id,
             members: members.into_iter().collect(),
-            auth_heads: self.state.heads().into_iter().map(|head| head.0).collect(),
+            auth_heads: self.auth_heads(),
         })
     }
 
