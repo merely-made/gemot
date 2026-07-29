@@ -323,6 +323,38 @@ impl Moot<RedbBackend> {
         }
         Ok(service)
     }
+
+    /// Reopen one already-founded Moot beneath `directory`.
+    ///
+    /// The governance founder is recovered from the retained signed genesis,
+    /// keeping product bindings free of an independently asserted root key.
+    pub async fn open_existing(
+        directory: impl AsRef<Path>,
+        moot_id: MootId,
+        retention: MootRetentionSettings,
+    ) -> Result<Self, MootError> {
+        let service = Self {
+            moot_id,
+            governance: MootGovernance::open_existing(
+                directory.as_ref().join("constitution.redb"),
+                moot_id.0,
+            )
+            .await?,
+            objects: MootStore::at_path(directory.as_ref().join("objects.redb"))?,
+            tessera: TesseraFileStore::open(directory.as_ref().join("tessera.redb"))?,
+            delegations: super::delegation::MootDelegationFileStore::open(
+                directory.as_ref().join("delegations.redb"),
+                moot_id.0,
+            )?,
+            membership: super::group::store::MootGroupFileStore::open(
+                directory.as_ref().join("membership.redb"),
+                moot_id.0,
+            )?,
+            retention,
+        };
+        service.refresh_retention_authority().await?;
+        Ok(service)
+    }
 }
 
 impl<B: Backend + Clone> Moot<B> {

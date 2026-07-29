@@ -97,6 +97,17 @@ impl MootGovernance<RedbBackend> {
             store: ConstitutionStore::open(path, moot_id, founder)?,
         })
     }
+
+    /// Reopen durable governance using the founder proven by its retained,
+    /// signed genesis operation.
+    pub async fn open_existing(
+        path: impl AsRef<Path>,
+        moot_id: [u8; 32],
+    ) -> Result<Self, MootGovernanceError> {
+        Ok(Self {
+            store: ConstitutionStore::open_existing(path, moot_id).await?,
+        })
+    }
 }
 
 impl<B: Backend + Clone> MootGovernance<B> {
