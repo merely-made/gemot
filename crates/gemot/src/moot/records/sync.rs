@@ -42,6 +42,7 @@ impl MootSession {
     async fn join(endpoint: Endpoint, gossip: Gossip, store: MootStore) -> Self {
         let accept_store = store.clone();
         let joined = JoinedSpace::join::<_, MootLogId, _, _>(
+            stickleback::lane_id("gemot/records/v1", MOOT),
             store.sync_store(),
             endpoint,
             gossip,

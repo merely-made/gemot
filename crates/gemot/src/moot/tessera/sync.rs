@@ -47,6 +47,7 @@ impl TesseraSession {
     ) -> Self {
         let accept_store = store.clone();
         let joined = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("gemot/tessera/v1", moot_id),
             store.sync_store(),
             endpoint,
             gossip,

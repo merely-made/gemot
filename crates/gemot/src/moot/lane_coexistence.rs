@@ -1,42 +1,25 @@
-//! Do two Moot lanes converge over one transport pair? **Not yet.**
+//! Two Moot lanes converge over one transport pair, on distinct lane ids.
 //!
-//! Every lane in a Moot subscribes to the same 32-byte Moot id, distinguished
-//! only by its extension type, and every existing lane proof joins exactly one
-//! lane in isolation. A product host joins the whole set at once, so the
-//! combination is load-bearing and was never exercised. It does not work.
+//! ## The defect this file found, diagnosed 2026-07-31
 //!
-//! ## What was measured, 2026-07-31
+//! Every `LogSync` instance used to register the same hardcoded protocol id
+//! (`p2panda/log_sync/v1`) on the shared endpoint, and the endpoint keeps
+//! exactly one handler per id (`BTreeMap::insert`, last writer wins,
+//! silently). So the last-joined lane received ALL inbound sync sessions and
+//! every other lane stopped converging. Symptoms measured before diagnosis:
+//! each lane fine alone, any two lanes broken in both join orders, and
+//! per-lane *topics* useless, because topics live inside the sync protocol
+//! while routing happens at the ALPN, before any topic is read.
 //!
-//! Both tests below are `#[ignore]`d as known failures, not deleted: they are
-//! the receipt for a real blocker and should stay visible and runnable.
+//! The fix is in the p2panda fork: `LogSync::builder().protocol_id(...)`,
+//! surfaced through `JoinedSpace::join`'s required `lane` argument. Every
+//! lane kind sharing an endpoint names itself, scoped to its space id, and
+//! the tests below are the receipt that the combination now converges. The
+//! join-order variant is kept because order was the original symptom: it must
+//! stay green in both orders, not merely in the one that happened to work.
 //!
-//! - Each lane converges **alone**. The single-lane proofs beside this file
-//!   pass, so no individual lane is broken.
-//! - Two lanes over one transport pair **fail**, in both join orders,
-//!   reproducibly and in isolation (three consecutive runs each).
-//! - One early run appeared to pass with constitution joined first. It did not
-//!   reproduce and should be treated as an artifact of two transport tests
-//!   sharing a process, not as evidence that ordering is the mechanism.
-//! - Deriving a **separate topic per lane** was the obvious guess and made
-//!   matters worse: with each lane's overlay registered through `set_topics`,
-//!   both orders failed rather than one. So this is not simply two sessions
-//!   contending for one subscription.
-//!
-//! ## What this blocks, and what it does not
-//!
-//! It blocks joining Gemot's lane set, and therefore the shared-place live
-//! lanes that would sit on top of it. It does not affect any offline path:
-//! admission, authority projection, and retained-state folds never touch a
-//! transport.
-//!
-//! ## Where to look next
-//!
-//! How p2panda's `LogSync` sessions share one `Endpoint` and `Gossip` handle.
-//! `JoinedSpace` spawns a session per lane and each takes its own clone of
-//! `sync_parts()`, so the question is whether that sharing is supported at all
-//! or whether a host must multiplex lanes over a single session. If it is the
-//! latter, the fix is a Gemot-side lane multiplexer, and neither a topic
-//! scheme nor anything in a consuming host.
+//! Upstream p2panda has the same hardcoded id as of 2026-07-31, so this stays
+//! a fork divergence until it is offered upstream.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -68,20 +51,20 @@ struct BothLanes {
 }
 
 impl BothLanes {
-    /// `delegation_first` flips which lane subscribes to the shared topic
-    /// first, which is what distinguishes "the second lane loses" from "the
-    /// delegation lane is broken".
+    /// `delegation_first` flips which lane joins first. Under the original
+    /// defect the last-joined lane stole all inbound sync, so both orders
+    /// staying green is the proof that order no longer matters.
     async fn join(
         transport: &P2pandaTransport,
-        founder_id: [u8; 32],
+        constitution: ConstitutionStore<MemoryBackend>,
+        delegations: MootDelegationStore<MemoryBackend>,
         delegation_first: bool,
     ) -> Self {
-        let constitution = ConstitutionStore::in_memory(MOOT, founder_id);
-        let delegations = MootDelegationStore::in_memory(MOOT);
         if delegation_first {
             let (endpoint, gossip) = transport.sync_parts().expect("delegation sync parts");
             let receiving = delegations.clone();
             let delegation_lane = JoinedSpace::join::<_, u64, _, _>(
+                stickleback::lane_id("gemot/delegation/v1", MOOT),
                 delegations.sync_store(),
                 endpoint,
                 gossip,
@@ -96,6 +79,7 @@ impl BothLanes {
             let (endpoint, gossip) = transport.sync_parts().expect("constitution sync parts");
             let receiving = constitution.clone();
             let constitution_lane = JoinedSpace::join::<_, u64, _, _>(
+                stickleback::lane_id("gemot/constitution/v1", MOOT),
                 constitution.sync_store(),
                 endpoint,
                 gossip,
@@ -118,6 +102,7 @@ impl BothLanes {
         let (endpoint, gossip) = transport.sync_parts().expect("constitution sync parts");
         let receiving = constitution.clone();
         let constitution_lane = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("gemot/constitution/v1", MOOT),
             constitution.sync_store(),
             endpoint,
             gossip,
@@ -133,6 +118,7 @@ impl BothLanes {
         let (endpoint, gossip) = transport.sync_parts().expect("delegation sync parts");
         let receiving = delegations.clone();
         let delegation_lane = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("gemot/delegation/v1", MOOT),
             delegations.sync_store(),
             endpoint,
             gossip,
@@ -165,33 +151,17 @@ async fn peer(seed: u8) -> (Arc<InMemoryProvider>, P2pandaTransport) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "known defect: two lanes over one transport pair do not converge; \
-            see the module docs (2026-07-31)"]
 async fn two_lanes_sharing_one_topic_both_converge() {
     lanes_converge(false).await;
 }
 
-/// The same proof with the join order reversed, and a known failure.
+/// The same proof with the join order reversed.
 ///
-/// **Reproducible, isolated, not flaky.** Constitution-then-delegation
-/// converges; delegation-then-constitution leaves the delegation lane empty
-/// while constitution still arrives. Each lane converges alone, so neither
-/// lane is individually broken: joining two lanes to one topic is
-/// order-sensitive.
-///
-/// Deriving a separate topic per lane was the obvious guess and is **not** the
-/// fix. Tried on 2026-07-31, with each lane's overlay registered through
-/// `set_topics`: it made both orders fail rather than one, so the mechanism is
-/// not simply two sessions contending for a subscription. Diagnosing it means
-/// understanding how p2panda's LogSync sessions share an endpoint and gossip
-/// handle, which is a real investigation rather than a patch.
-///
-/// Ignored rather than deleted or left red: a product host joins the whole
-/// lane set at once, so this is load-bearing, and the receipt should stay
-/// visible and named. Un-ignore it when the mechanism is understood.
+/// Join order was the defect's original symptom: before the per-lane protocol
+/// id, whichever lane registered last on the endpoint received all inbound
+/// sync and the other stalled. Keeping both orders green is what proves the
+/// fix removed the order sensitivity rather than moving it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore = "known defect: two lanes on one topic are order-sensitive; \
-            per-lane topics are not the fix (2026-07-31)"]
 async fn two_lanes_converge_whichever_joins_the_topic_first() {
     lanes_converge(true).await;
 }
@@ -231,13 +201,13 @@ async fn lanes_converge(delegation_first: bool) {
         delegation_depth: 2,
     });
 
-    let alice = BothLanes::join(&alice_transport, root_id, delegation_first).await;
-    let bob = BothLanes::join(&bob_transport, root_id, delegation_first).await;
-
-    // Author on both lanes, so each peer publishes traffic the other lane's
-    // session will also see and must discard without harm.
-    alice
-        .constitution
+    // Author on both lanes BEFORE joining, matching the single-lane proofs and
+    // the product scenario: retained state exists, a late joiner catches up
+    // through initial sync. Post-join authoring reaching live peers is the
+    // publish path's job and a separate proof.
+    let alice_constitution = ConstitutionStore::in_memory(MOOT, root_id);
+    let alice_delegations = MootDelegationStore::in_memory(MOOT);
+    alice_constitution
         .author_genesis(
             root.master_keypair().to_seed(),
             None,
@@ -269,8 +239,7 @@ async fn lanes_converge(delegation_first: bool) {
         ),
     )
     .unwrap();
-    alice
-        .delegations
+    alice_delegations
         .author_issue(
             &root.derive_keypair(&delegation_signing_salt(&scope)).unwrap(),
             &rules,
@@ -278,6 +247,21 @@ async fn lanes_converge(delegation_first: bool) {
         )
         .await
         .unwrap();
+
+    let alice = BothLanes::join(
+        &alice_transport,
+        alice_constitution,
+        alice_delegations,
+        delegation_first,
+    )
+    .await;
+    let bob = BothLanes::join(
+        &bob_transport,
+        ConstitutionStore::in_memory(MOOT, root_id),
+        MootDelegationStore::in_memory(MOOT),
+        delegation_first,
+    )
+    .await;
 
     // Both lanes must arrive. A single shared assertion would let one lane
     // carry the test while the other silently never converged.
