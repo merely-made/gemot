@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority};
 use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
@@ -16,7 +17,7 @@ use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use proofs::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use servitor::Cap;
+use servitor::{Cap, Mode, Subject};
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, CheckpointAuthority, DataKeyring,
     EpochCheckpointBasis, EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts,
@@ -231,12 +232,21 @@ pub struct DeletedMessage {
     pub deleted_at_ms: u64,
 }
 
+/// Current chat state plus the two retained subsets a member cannot see.
+///
+/// `pending_authority` and `revoked` mirror [`crate::CommonsProjection`]: the
+/// operation stays retained and inspectable, its content stays out of the
+/// projection. A surface may report their counts; it must not render them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChatProjection {
     pub channels: Vec<Channel>,
     pub messages: Vec<AuthoredMessage>,
     pub deleted_messages: Vec<DeletedMessage>,
     pub pending: Vec<PendingCausalOperation>,
+    /// Retained facts whose author holds no converged capability yet.
+    pub pending_authority: Vec<AuthorityOperation>,
+    /// Retained facts whose author's capability was withdrawn.
+    pub revoked: Vec<AuthorityOperation>,
 }
 
 /// Current materialized chat state committed by a retention checkpoint.
@@ -841,9 +851,24 @@ impl<B: Backend + Clone> ChatReplica<B> {
         Ok(processor.process(operation).await?.inserted())
     }
 
+    /// Causally closed chat state with structural admission as the authority
+    /// floor. Communal callers should prefer [`Self::projection_with_authority`].
     pub async fn projection(&self) -> Result<ChatProjection, ChatError> {
+        self.projection_with_authority(&AllowAllAuthority).await
+    }
+
+    /// Chat state classified by the caller's converged authority view.
+    ///
+    /// Product ports must use this for communal projection. The authority view
+    /// receives retained Personae/Gemot facts; session, relay, and transport
+    /// identity never enter the decision. This folds the full retained history,
+    /// so a withdrawn capability retracts that author's whole contribution.
+    pub async fn projection_with_authority<A: CommonsAuthority>(
+        &self,
+        authority: &A,
+    ) -> Result<ChatProjection, ChatError> {
         let records = self.load_data_operations().await?;
-        project_records(&self.keys, &records)
+        project_records(&self.keys, self.space_id, &records, authority)
     }
 
     async fn load_data_operations(&self) -> Result<Vec<StoredChatOperation>, ChatError> {
@@ -934,7 +959,11 @@ impl<B: Backend + Clone> ChatReplica<B> {
             .collect();
         let mut causal_frontier = observed_frontier(&effective_entries)?;
         causal_frontier.sort_unstable();
-        let projection = project_records(&self.keys, &records)?;
+        // Retention commits retained facts, not the current authority verdict:
+        // an epoch held for `AuthorityReevaluation` must stay decryptable so a
+        // later capability change can be re-applied. The checkpoint carries the
+        // revision it was sealed under instead.
+        let projection = project_records(&self.keys, self.space_id, &records, &AllowAllAuthority)?;
 
         let mut author_frontiers = BTreeMap::<[u8; 32], ChatAuthorFrontier>::new();
         for entry in &effective_entries {
@@ -1017,11 +1046,29 @@ impl<B: Backend + Clone> ChatReplica<B> {
 
     /// Rebuild current state from the latest checkpoint plus retained tail.
     pub async fn projection_from_checkpoint(&self) -> Result<ChatProjection, ChatError> {
+        self.projection_from_checkpoint_with_authority(&AllowAllAuthority)
+            .await
+    }
+
+    /// Checkpoint-rooted rebuild with authority applied to the retained tail.
+    ///
+    /// See [`project_checkpoint_tail`]: the committed prefix keeps the
+    /// authority revision it was sealed under.
+    pub async fn projection_from_checkpoint_with_authority<A: CommonsAuthority>(
+        &self,
+        authority: &A,
+    ) -> Result<ChatProjection, ChatError> {
         let Some(stored) = self.latest_checkpoint().await? else {
-            return self.projection().await;
+            return self.projection_with_authority(authority).await;
         };
         let records = self.load_data_operations().await?;
-        project_checkpoint_tail(&self.keys, &stored.checkpoint, &records)
+        project_checkpoint_tail(
+            &self.keys,
+            self.space_id,
+            &stored.checkpoint,
+            &records,
+            authority,
+        )
     }
 
     /// Compute the dry-run epoch proposal from Commons-owned retention facts.
@@ -1235,7 +1282,13 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
                         .filter(|record| record.log_id == CHAT_LOG)
                         .cloned()
                         .collect();
-                    let Ok(projection) = project_records(&keys, &data_records) else {
+                    // Admission is structural: a synced operation is stored
+                    // whatever the current authority verdict says about its
+                    // author, so revocation stays a projection decision that a
+                    // later re-evaluation can reverse.
+                    let Ok(projection) =
+                        project_records(&keys, space_id, &data_records, &AllowAllAuthority)
+                    else {
                         return false;
                     };
                     let projected_message_authors = projection
@@ -1361,21 +1414,61 @@ fn latest_checkpoint_from_records(
     Ok(current)
 }
 
-fn project_records(
+/// Classify one decrypted record against the caller's converged authority.
+///
+/// An author's verdict is one evaluation of one stable Personae root, so a
+/// message and its own later edit or deletion always classify together. That
+/// keeps [`apply_event`]'s "mutation must reference a projected original"
+/// invariant intact when a subject's capability is withdrawn.
+fn classify_record(
+    authority: &impl CommonsAuthority,
+    capability: &Cap,
+    operation: &Operation<ChatExt>,
+    author: [u8; 32],
+) -> (AuthorityState, AuthorityOperation) {
+    (
+        authority.classify(Subject(author), capability, Mode::Write),
+        AuthorityOperation {
+            operation: *operation.hash.as_bytes(),
+            subject: author,
+            capability: capability.clone(),
+        },
+    )
+}
+
+fn project_records<A: CommonsAuthority>(
     keys: &DataKeyring,
+    space_id: [u8; 32],
     records: &[StoredChatOperation],
+    authority: &A,
 ) -> Result<ChatProjection, ChatError> {
     let causal = causal_projection(&causal_entries(records))?;
+    let capability = chat_write_capability(space_id);
     let mut channels = BTreeMap::new();
     let mut messages = Vec::new();
     let mut deleted_messages = Vec::new();
+    let mut pending_authority = Vec::new();
+    let mut revoked = Vec::new();
     for index in causal.order {
-        let (event, author) = decode_event_record(keys, &records[index].operation)?;
+        let operation = &records[index].operation;
+        let (event, author) = decode_event_record(keys, operation)?;
+        let (state, classified) = classify_record(authority, &capability, operation, author);
+        match state {
+            AuthorityState::Pending => {
+                pending_authority.push(classified);
+                continue;
+            }
+            AuthorityState::Revoked => {
+                revoked.push(classified);
+                continue;
+            }
+            AuthorityState::Effective => {}
+        }
         apply_event(
             &mut channels,
             &mut messages,
             &mut deleted_messages,
-            &records[index].operation,
+            operation,
             author,
             event,
         )?;
@@ -1385,13 +1478,24 @@ fn project_records(
         messages,
         deleted_messages,
         pending: causal.pending,
+        pending_authority,
+        revoked,
     })
 }
 
-fn project_checkpoint_tail(
+/// Fold the retained tail onto a checkpoint-committed prefix.
+///
+/// Authority filtering reaches the tail only. The prefix was sealed under the
+/// checkpoint's own `authority_revision`, so a capability withdrawn afterwards
+/// does not retract content this checkpoint already committed. Callers that
+/// need withdrawal to apply to the whole history must fold from
+/// [`ChatReplica::projection_with_authority`] instead.
+fn project_checkpoint_tail<A: CommonsAuthority>(
     keys: &DataKeyring,
+    space_id: [u8; 32],
     checkpoint: &ChatCheckpoint,
     records: &[StoredChatOperation],
+    authority: &A,
 ) -> Result<ChatProjection, ChatError> {
     let tail_records = records_after_checkpoint(checkpoint, records);
     let checkpoint_dependencies: BTreeSet<_> = checkpoint
@@ -1440,13 +1544,29 @@ fn project_checkpoint_tail(
         .collect();
     let mut messages = checkpoint.snapshot.messages.clone();
     let mut deleted_messages = checkpoint.snapshot.deleted_messages.clone();
+    let capability = chat_write_capability(space_id);
+    let mut pending_authority = Vec::new();
+    let mut revoked = Vec::new();
     for index in causal.order {
-        let (event, author) = decode_event_record(keys, &tail_records[index].operation)?;
+        let operation = &tail_records[index].operation;
+        let (event, author) = decode_event_record(keys, operation)?;
+        let (state, classified) = classify_record(authority, &capability, operation, author);
+        match state {
+            AuthorityState::Pending => {
+                pending_authority.push(classified);
+                continue;
+            }
+            AuthorityState::Revoked => {
+                revoked.push(classified);
+                continue;
+            }
+            AuthorityState::Effective => {}
+        }
         apply_event(
             &mut channels,
             &mut messages,
             &mut deleted_messages,
-            &tail_records[index].operation,
+            operation,
             author,
             event,
         )?;
@@ -1456,6 +1576,8 @@ fn project_checkpoint_tail(
         messages,
         deleted_messages,
         pending: causal.pending,
+        pending_authority,
+        revoked,
     })
 }
 
@@ -1926,6 +2048,218 @@ mod tests {
             AuthorityState::Revoked
         );
         assert_eq!(relay.sync_store().operation_count().await.unwrap(), 2);
+    }
+
+    /// Root a chat write capability in the founder's constitution and delegate
+    /// it to `subject`, optionally withdrawing it with a signed revocation.
+    fn chat_authority_fixture(
+        founder: &InMemoryProvider,
+        subject: [u8; 32],
+        revoke: bool,
+    ) -> (MootDelegations, ConstitutionRules) {
+        let needed = cap_path(&chat_write_capability(SPACE));
+        let mut rules = ConstitutionRules::founder_only(founder.master_public_key().to_bytes());
+        rules.grant(CapabilityGrant {
+            id: ROOT_GRANT,
+            subject: founder.master_public_key().to_bytes(),
+            path_prefix: needed.clone(),
+            not_before_ms: 10,
+            expires_at_ms: Some(1_000),
+            delegation_depth: 2,
+        });
+        let delegation = SignedDelegationCertificate::issue(
+            founder,
+            DelegationCertificate::new(
+                DelegationParent::Root(ROOT_GRANT),
+                founder.master_public_key().to_bytes(),
+                subject,
+                CapabilityScope {
+                    domain: MOOT_DELEGATION_DOMAIN.into(),
+                    resource: MOOT.to_vec(),
+                    path_prefix: needed,
+                    actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+                },
+                15,
+                20,
+                Some(900),
+                0,
+                [1; 32],
+            ),
+        )
+        .unwrap();
+        let delegation_id = delegation.certificate.id();
+        let scope = delegation.certificate.scope.clone();
+        let mut delegations = MootDelegations::new();
+        assert!(
+            delegations
+                .accept_certificate(MOOT, &rules, delegation)
+                .unwrap()
+        );
+        if revoke {
+            let revocation = SignedDelegationRevocation::issue(
+                founder,
+                DelegationRevocation::new(
+                    delegation_id,
+                    founder.master_public_key().to_bytes(),
+                    scope,
+                    60,
+                    [2; 32],
+                ),
+            )
+            .unwrap();
+            assert!(delegations.accept_revocation(revocation).unwrap());
+        }
+        (delegations, rules)
+    }
+
+    fn gemot_view<'a>(
+        delegations: &'a MootDelegations,
+        rules: &'a ConstitutionRules,
+    ) -> GemotAuthorityView<'a> {
+        GemotAuthorityView {
+            authority: MootAuthority {
+                delegations,
+                rules,
+                moot_id: MOOT,
+                now_ms: 50,
+            },
+        }
+    }
+
+    async fn seeded_author(
+        writer: &InMemoryProvider,
+    ) -> (ChatReplica<MemoryBackend>, Operation<ChatExt>) {
+        let (keys, _) = paired_keys();
+        let mut author = ChatReplica::in_memory_for_identity(SPACE, writer, keys).unwrap();
+        author
+            .author(ChatEvent::Channel(Channel {
+                id: "hall".into(),
+                title: "Hall".into(),
+            }))
+            .await
+            .unwrap();
+        let message = author
+            .author(ChatEvent::Message(Message {
+                channel: "hall".into(),
+                body: "shared truth".into(),
+                sent_at_ms: 1,
+                reply_to: None,
+            }))
+            .await
+            .unwrap();
+        (author, message)
+    }
+
+    #[tokio::test]
+    async fn revoked_chat_author_leaves_the_projection_but_stays_retained() {
+        let founder = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let subject = writer.master_public_key().to_bytes();
+        let (author, message) = seeded_author(&writer).await;
+
+        let (granted, rules) = chat_authority_fixture(&founder, subject, false);
+        let effective = author
+            .projection_with_authority(&gemot_view(&granted, &rules))
+            .await
+            .unwrap();
+        assert_eq!(effective.messages.len(), 1);
+        assert_eq!(effective.channels.len(), 1);
+        assert!(effective.pending_authority.is_empty());
+        assert!(effective.revoked.is_empty());
+
+        let (withdrawn, rules) = chat_authority_fixture(&founder, subject, true);
+        let filtered = author
+            .projection_with_authority(&gemot_view(&withdrawn, &rules))
+            .await
+            .unwrap();
+        assert!(filtered.messages.is_empty(), "revoked content must not project");
+        assert!(filtered.channels.is_empty());
+        assert!(filtered.pending_authority.is_empty());
+        assert_eq!(filtered.revoked.len(), 2);
+        assert!(
+            filtered
+                .revoked
+                .iter()
+                .any(|operation| operation.operation == *message.hash.as_bytes())
+        );
+        assert!(
+            filtered
+                .revoked
+                .iter()
+                .all(|operation| operation.subject == subject)
+        );
+
+        // Filtering is a projection decision, not erasure: the retained facts
+        // stay stored and a re-evaluation can still reach them.
+        assert_eq!(author.sync_store().operation_count().await.unwrap(), 2);
+        assert_eq!(author.projection().await.unwrap().messages.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn chat_author_without_a_grant_is_pending_not_revoked() {
+        let founder = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let stranger = InMemoryProvider::from_seed([0x73; 32]);
+        let (author, _) = seeded_author(&writer).await;
+
+        // The capability is delegated to someone else, so this author never
+        // held it. That is "not yet admitted", not "withdrawn".
+        let (delegations, rules) =
+            chat_authority_fixture(&founder, stranger.master_public_key().to_bytes(), false);
+        let projection = author
+            .projection_with_authority(&gemot_view(&delegations, &rules))
+            .await
+            .unwrap();
+        assert!(projection.messages.is_empty());
+        assert!(projection.revoked.is_empty());
+        assert_eq!(projection.pending_authority.len(), 2);
+        assert!(
+            projection
+                .pending_authority
+                .iter()
+                .all(|operation| operation.subject == writer.master_public_key().to_bytes())
+        );
+    }
+
+    #[tokio::test]
+    async fn revoked_author_mutations_filter_with_their_original() {
+        // An edit or deletion referencing a filtered-out original would fail
+        // `apply_event`'s projected-original check. One verdict per stable root
+        // is what keeps the fold from turning revocation into a hard error.
+        let founder = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let subject = writer.master_public_key().to_bytes();
+        let (mut author, message) = seeded_author(&writer).await;
+        author
+            .edit_message(*message.hash.as_bytes(), "second draft".into(), 2)
+            .await
+            .unwrap();
+        let doomed = author
+            .author(ChatEvent::Message(Message {
+                channel: "hall".into(),
+                body: "retracted".into(),
+                sent_at_ms: 3,
+                reply_to: None,
+            }))
+            .await
+            .unwrap();
+        author
+            .delete_message(*doomed.hash.as_bytes(), 4)
+            .await
+            .unwrap();
+
+        let (withdrawn, rules) = chat_authority_fixture(&founder, subject, true);
+        let filtered = author
+            .projection_with_authority(&gemot_view(&withdrawn, &rules))
+            .await
+            .unwrap();
+        assert!(filtered.messages.is_empty());
+        assert!(
+            filtered.deleted_messages.is_empty(),
+            "a filtered deletion must not surface its retracted original either"
+        );
+        assert_eq!(filtered.revoked.len(), 5);
+        assert!(filtered.pending_authority.is_empty());
     }
 
     #[tokio::test]
