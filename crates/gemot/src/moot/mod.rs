@@ -22,6 +22,10 @@ pub mod constitution;
 pub mod delegation;
 pub mod group;
 mod id;
+/// Cross-lane proof: every lane shares the Moot id as its topic, so the
+/// combination needs its own receipt rather than one-lane-at-a-time ones.
+#[cfg(test)]
+mod lane_coexistence;
 pub mod records;
 mod service;
 pub mod tessera;
