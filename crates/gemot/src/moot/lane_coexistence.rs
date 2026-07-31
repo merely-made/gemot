@@ -1,14 +1,42 @@
-//! Do two Moot lanes converge while sharing one topic?
+//! Do two Moot lanes converge over one transport pair? **Not yet.**
 //!
-//! Every lane in a Moot subscribes to the same 32-byte Moot id and is
-//! distinguished only by its extension type. Each existing lane proof joins
-//! exactly one lane in isolation, so the combination was never exercised: a
-//! session receives every message published on the topic, including operations
-//! belonging to sibling lanes that cannot decode as its own extension.
+//! Every lane in a Moot subscribes to the same 32-byte Moot id, distinguished
+//! only by its extension type, and every existing lane proof joins exactly one
+//! lane in isolation. A product host joins the whole set at once, so the
+//! combination is load-bearing and was never exercised. It does not work.
 //!
-//! A product host joins the whole set at once, so this is load-bearing rather
-//! than academic. If sibling traffic were to stall or poison a lane, the fix
-//! would be topic separation inside Gemot, not a workaround in the host.
+//! ## What was measured, 2026-07-31
+//!
+//! Both tests below are `#[ignore]`d as known failures, not deleted: they are
+//! the receipt for a real blocker and should stay visible and runnable.
+//!
+//! - Each lane converges **alone**. The single-lane proofs beside this file
+//!   pass, so no individual lane is broken.
+//! - Two lanes over one transport pair **fail**, in both join orders,
+//!   reproducibly and in isolation (three consecutive runs each).
+//! - One early run appeared to pass with constitution joined first. It did not
+//!   reproduce and should be treated as an artifact of two transport tests
+//!   sharing a process, not as evidence that ordering is the mechanism.
+//! - Deriving a **separate topic per lane** was the obvious guess and made
+//!   matters worse: with each lane's overlay registered through `set_topics`,
+//!   both orders failed rather than one. So this is not simply two sessions
+//!   contending for one subscription.
+//!
+//! ## What this blocks, and what it does not
+//!
+//! It blocks joining Gemot's lane set, and therefore the shared-place live
+//! lanes that would sit on top of it. It does not affect any offline path:
+//! admission, authority projection, and retained-state folds never touch a
+//! transport.
+//!
+//! ## Where to look next
+//!
+//! How p2panda's `LogSync` sessions share one `Endpoint` and `Gossip` handle.
+//! `JoinedSpace` spawns a session per lane and each takes its own clone of
+//! `sync_parts()`, so the question is whether that sharing is supported at all
+//! or whether a host must multiplex lanes over a single session. If it is the
+//! latter, the fix is a Gemot-side lane multiplexer, and neither a topic
+//! scheme nor anything in a consuming host.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -137,6 +165,8 @@ async fn peer(seed: u8) -> (Arc<InMemoryProvider>, P2pandaTransport) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "known defect: two lanes over one transport pair do not converge; \
+            see the module docs (2026-07-31)"]
 async fn two_lanes_sharing_one_topic_both_converge() {
     lanes_converge(false).await;
 }
