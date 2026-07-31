@@ -27,6 +27,11 @@ use stickleback::{
     propose_epoch_pruning, validate_causal_metadata,
 };
 
+/// This chat profile's sync-lane kind, combined with the space id through
+/// `stickleback::lane_id`. Both peers derive the same protocol id from it, and
+/// it must differ from every other lane kind sharing an endpoint.
+pub const COMMONS_CHAT_LANE: &str = "commons/chat/v1";
+
 const CHAT_LOG: u64 = 0;
 const CHAT_CHECKPOINT_LOG: u64 = 1;
 const CHAT_AUTHORED_VERSION: u16 = 1;
@@ -1261,6 +1266,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
             .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?;
         let checkpoint_authority = self.checkpoint_authority.clone();
         JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id(COMMONS_CHAT_LANE, space_id),
             store,
             endpoint,
             gossip,

@@ -180,6 +180,12 @@ fn stable_subject(
     .map_err(|error| Reject::new(error.code(), error.to_string()))
 }
 
+/// The shared-graph sync-lane kind, combined with the container id through
+/// `stickleback::lane_id`. Distinct from [`chat::COMMONS_CHAT_LANE`] because
+/// the two replicas are separate LogSync sessions on one endpoint, and the
+/// endpoint routes inbound sync by exactly this identifier.
+pub const COMMONS_GRAPH_LANE: &str = "commons/graph/v1";
+
 /// Typed write capability implied by every batch for one container.
 pub fn commons_write_capability(container: [u8; 32]) -> Cap {
     let hex: String = container.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -1045,6 +1051,7 @@ mod tests {
         let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
         let a_store = alice.sync_store();
         let alice_space = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id(COMMONS_GRAPH_LANE, CONTAINER),
             alice.sync_store(),
             a_ep,
             a_gossip,
@@ -1060,6 +1067,7 @@ mod tests {
         let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
         let b_store = bob.sync_store();
         let bob_space = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id(COMMONS_GRAPH_LANE, CONTAINER),
             bob.sync_store(),
             b_ep,
             b_gossip,

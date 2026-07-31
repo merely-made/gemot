@@ -23,6 +23,7 @@ impl ConstitutionSession {
         let (endpoint, gossip) = transport.sync_parts().expect("constitution sync parts");
         let receiving_store = store.clone();
         let joined = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("gemot/constitution/v1", MOOT),
             store.sync_store(),
             endpoint,
             gossip,

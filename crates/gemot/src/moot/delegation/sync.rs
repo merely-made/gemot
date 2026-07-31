@@ -29,6 +29,7 @@ impl DelegationSession {
         let (endpoint, gossip) = transport.sync_parts().expect("delegation sync parts");
         let receiving_store = store.clone();
         let joined = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("gemot/delegation/v1", MOOT),
             store.sync_store(),
             endpoint,
             gossip,
