@@ -26,6 +26,7 @@ mod id;
 /// combination needs its own receipt rather than one-lane-at-a-time ones.
 #[cfg(test)]
 mod lane_coexistence;
+mod lanes;
 pub mod records;
 mod service;
 pub mod tessera;
@@ -46,6 +47,10 @@ pub use group::{
     MootMembershipRecord, P2pandaGroupKeyEpoch, P2pandaScopeKeyEpoch,
 };
 pub use id::MootId;
+pub use lanes::{
+    GEMOT_CONSTITUTION_LANE, GEMOT_DELEGATION_LANE, GEMOT_MEMBERSHIP_LANE, GEMOT_RECORDS_LANE,
+    GEMOT_TESSERA_LANE, MootLanes,
+};
 pub use records::{
     AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry,
     GovernedCheckpointAuthority, KeepBound, LogFrontier, Member, MootEvent, MootExt, MootLogId,

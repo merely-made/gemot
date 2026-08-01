@@ -166,6 +166,112 @@ async fn two_lanes_converge_whichever_joins_the_topic_first() {
     lanes_converge(true).await;
 }
 
+/// The product-shaped join: one call, all five lanes, a late peer catching up
+/// on retained governance. This is `Moot::join_lanes`' receipt, and the shape
+/// Turnstone's place worker holds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_late_peer_catches_up_on_the_whole_lane_set() {
+    use super::MootRetentionSettings;
+    use super::records::{AvailabilityPolicy, ErasurePolicy, KeepBound, PolicyRevision};
+    use super::service::Moot;
+
+    let (alice_provider, alice_transport) = peer(0x76).await;
+    let (bob_provider, bob_transport) = peer(0x77).await;
+    let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
+    let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
+
+    let overlay = sync_overlay_topic(MOOT);
+    alice_transport
+        .add_peer(bob_transport.endpoint_addr().await.unwrap())
+        .await
+        .unwrap();
+    alice_transport.set_topics(bob_id, &[overlay]).await.unwrap();
+    bob_transport
+        .add_peer(alice_transport.endpoint_addr().await.unwrap())
+        .await
+        .unwrap();
+    bob_transport
+        .set_topics(alice_id, &[overlay])
+        .await
+        .unwrap();
+
+    let retention = MootRetentionSettings {
+        revision: PolicyRevision(proofs::Digest::blake3(b"lane-set-receipt")),
+        availability: AvailabilityPolicy {
+            promised_floor: KeepBound::Forever,
+        },
+        erasure: ErasurePolicy {
+            history_ceiling: KeepBound::Forever,
+        },
+    };
+    let root = InMemoryProvider::from_seed([0x78; 32]);
+    let root_id = root.master_public_key().to_bytes();
+
+    // Alice's Moot holds retained governance before any lane joins.
+    let alice_moot = Moot::in_memory(super::MootId(MOOT), root_id, retention.clone());
+    alice_moot
+        .found(
+            root.master_keypair().to_seed(),
+            None,
+            None,
+            ConstitutionRules::founder_only(root_id),
+            1,
+        )
+        .await
+        .unwrap();
+    alice_moot
+        .membership_store()
+        .author_for_identity(
+            &root,
+            super::MootMembershipAction::Create {
+                initial_members: vec![super::MootMember {
+                    member: root_id,
+                    access: super::MootAccessLevel::Manage,
+                }],
+            },
+        )
+        .await
+        .unwrap();
+
+    let (a_endpoint, a_gossip) = alice_transport.sync_parts().unwrap();
+    let _alice_lanes = alice_moot.join_lanes(a_endpoint, a_gossip).await.unwrap();
+
+    let bob_moot = Moot::in_memory(super::MootId(MOOT), root_id, retention);
+    let (b_endpoint, b_gossip) = bob_transport.sync_parts().unwrap();
+    let bob_lanes = bob_moot.join_lanes(b_endpoint, b_gossip).await.unwrap();
+
+    let converged = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let governed = bob_moot.snapshot().await;
+            if let Ok(snapshot) = governed
+                && snapshot.membership.members.len() == 1
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    })
+    .await;
+    assert!(
+        converged.is_ok(),
+        "the late peer did not converge on retained governance"
+    );
+    let snapshot = bob_moot.snapshot().await.unwrap();
+    assert_eq!(snapshot.governance.founder, root_id);
+    assert_eq!(snapshot.membership.members.len(), 1);
+    // Every lane reports its own sync activity: a host status surface must be
+    // able to say WHICH lane is behind, not that "some lane" is.
+    let status = bob_lanes.sync_status();
+    assert!(
+        status[0].ops_received >= 1,
+        "constitution lane received genesis"
+    );
+    assert!(
+        status[2].ops_received >= 1,
+        "membership lane received the create"
+    );
+}
+
 async fn lanes_converge(delegation_first: bool) {
     let (alice_provider, alice_transport) = peer(0x70).await;
     let (bob_provider, bob_transport) = peer(0x71).await;
