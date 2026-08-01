@@ -11,6 +11,8 @@
 //! lanes (or two Moots' same lane) sharing one id would silently starve each
 //! other (see `lane_coexistence`).
 
+use std::sync::{Arc, Mutex};
+
 use muniment::Backend;
 use p2panda_core::Operation;
 use stickleback::{Endpoint, Gossip, JoinError, JoinedSpace, SyncStatus, lane_id};
@@ -49,6 +51,18 @@ impl MootLanes {
             self.membership.sync_status(),
             self.records.sync_status(),
             self.tessera.sync_status(),
+        ]
+    }
+
+    /// Shared counter handles, in the same lane order, for a host watching
+    /// arrivals from a task that cannot borrow the lanes.
+    pub fn status_handles(&self) -> [Arc<Mutex<SyncStatus>>; 5] {
+        [
+            self.constitution.status_handle(),
+            self.delegation.status_handle(),
+            self.membership.status_handle(),
+            self.records.status_handle(),
+            self.tessera.status_handle(),
         ]
     }
 }
