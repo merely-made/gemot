@@ -118,6 +118,15 @@ impl<B: Backend + Clone> MootGovernance<B> {
         self.store.sync_store()
     }
 
+    /// Admit one signed constitution operation after governance preflight.
+    /// The constitution lane's accept closure; delegates to the store.
+    pub async fn accept(
+        &self,
+        operation: &p2panda_core::Operation<crate::moot::constitution::ConstitutionExt>,
+    ) -> Result<bool, MootGovernanceError> {
+        Ok(self.store.accept(operation).await?)
+    }
+
     /// Establish the first accepted constitution.
     pub async fn found(
         &self,

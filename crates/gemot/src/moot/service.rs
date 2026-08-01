@@ -382,6 +382,11 @@ impl<B: Backend + Clone> Moot<B> {
         &self.delegations
     }
 
+    /// The governance service, for the constitution lane's accept path.
+    pub fn governance(&self) -> &MootGovernance<B> {
+        &self.governance
+    }
+
     /// Independent membership lane for host-composed LogSync publication.
     pub fn membership_store(&self) -> &MootGroupStore<B> {
         &self.membership

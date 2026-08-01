@@ -717,6 +717,35 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
         self.store.clone()
     }
 
+    /// Join this container's live lane, draining received operations through
+    /// the same structural admission local authoring uses. The counterpart to
+    /// [`chat::ChatReplica::join`], so a host holds handles instead of
+    /// assembling p2panda sessions.
+    pub async fn join(
+        &self,
+        endpoint: p2panda_net::Endpoint,
+        gossip: p2panda_net::Gossip,
+    ) -> Result<stickleback::JoinedSpace<CommonsExt>, stickleback::JoinError> {
+        let accept_store = self.store.clone();
+        let container = self.container;
+        stickleback::JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id(COMMONS_GRAPH_LANE, container),
+            self.sync_store(),
+            endpoint,
+            gossip,
+            container,
+            move |operation: Operation<CommonsExt>| {
+                let store = accept_store.clone();
+                async move {
+                    accept_into(&store, container, &operation)
+                        .await
+                        .unwrap_or(false)
+                }
+            },
+        )
+        .await
+    }
+
     /// This replica's writer identity.
     pub fn writer(&self) -> WriterId {
         self.writer
