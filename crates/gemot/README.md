@@ -1,276 +1,113 @@
 # gemot
 
-`gemot` is the assembly crate for the [mere](https://crates.io/crates/mere)
-browser: the community and federation layer, across every tier of mere's
-social-graph scale.
+Community and assembly layer for the [mere](https://crates.io/crates/mere)
+workspace. A *moot* is one persistent, themed, federatable graph-view
+community. `gemot` owns a Moot's lifecycle, governance, membership, public
+records, trust facts, and replication lanes. Tier 3 federation lives in the
+sibling [`moothold`](https://crates.io/crates/moothold) crate.
 
-*Gemot* is the Old English word for the assembly itself (as in *witena-gemot*,
-the meeting of the wise), and it is the word *moot* descends from. The crate is
-the gemot; the groups it convenes are moots.
+Tier vocabulary used throughout: **orrery** (t1, a user's own root graph view),
+**moot** (t2), **moothold** (t3, a holding of moots), **coalition** (t4, a
+cluster of mootholds; not implemented). The crate was named `moothold` before
+2026-07; the tier kept the name, the crate did not.
 
-Renamed from `moothold` (2026-07-14). That name was a tier, not a layer: this
-crate implements **all four** tiers (orrery, moot, moothold, coalition), so
-naming it after the third one described a part as the whole. The tier keeps its
-name; the crate no longer borrows it.
+## Modules
 
-A *moot* is a single persistent themed federatable graph-view community
-(t2). A *moothold* is a federation of moots (t3) — *a holding of moots*,
-in the Anglo-Saxon sense (cf. *household*, *stronghold*, *freehold*). A
-*coalition* (t4) is a sovereign cluster of mootholds, a future tier that
-provides organizing defaults member mootholds can adopt or override.
+`gemot::moot` is the whole public surface, plus the crate-root consts `VERSION`
+and `STAGE`. Every row below is a path under `gemot::moot`.
 
-The big bet: **moots are a durable, crowd-hostable substrate for
-decentralized communities to take root in and interoperate across.**
-Communities should outlive any single host, span protocols, and travel
-with their members.
+| Module | Contents |
+| --- | --- |
+| (root) | `Moot`, `MootFile`, `MootId`, `MootSnapshot`, `MootCommandReceipt`, `MootLane`, `MootOutboundOperation`, `MootError`, `MootLanes` and the five `GEMOT_*_LANE` ids |
+| `constitution` | `Constitution` fold, `ConstitutionEvent`, `ConstitutionRules`, `AmendmentRule`, `CapabilityGrant`, `GovernedAction`, `authorize_governed`, `MootGovernance`, `ConstitutionStore` / `ConstitutionFileStore`, `ConstitutionExt` |
+| `delegation` | `MootDelegations` fold over Personae `SignedDelegationCertificate` / `SignedDelegationRevocation`, `MootDelegationProjection`, `MootScopeKeyEpoch`, `MOOT_DELEGATION_DOMAIN`, `MOOT_ACT_ACTION`, `MootDelegationStore`, `MootDelegationExt` |
+| `group` | p2panda-auth membership: `MootGroup`, `MootMember`, `MootMembershipRecord`, `MootAccessLevel`, `MootMembershipAction`, `MootGroupTransition`, `P2pandaGroupKeyEpoch`, `P2pandaScopeKeyEpoch`, `MootGroupStore`, `MootGroupExt`, `membership_identity_salt` |
+| `records` | The public record lane: `Declaration`, `Member`, `FaunaEntry`, `MootRoster`, `MootEvent`, `MootStore`, `MootExt`, `MootLogId`, plus retention (`MootRetentionPolicy`, `RetentionCheckpoint`, `KeepBound`, `LogFrontier`, `AvailabilityPolicy`, `ErasurePolicy`, `GovernedCheckpointAuthority`, `PolicyRevision`) |
+| `tessera` | Trust receipts: `TesseraEvent`, `ChainRoot`, `CommitmentId`, `Scope`, `Ledger`, `TesseraConfig`, `PersonaChains`, `PersonaId`, the policy slot (`TesseraFacts`, `GateConfig`, `GateDecision`, `Policy`, `DenyReason`, `authorize`, `may_act`), `TesseraStore`, `TesseraExt`, and `persona_vault` for vault-derived persona keys |
+| `typed_authorization` | `TypedMootAuthorization` answers gemot's `MootAuthorizationProvider` from parsed `servitor::Cap`s; `MootAuthority` presents the same certificates as a `servitor::AuthorityProvider` |
 
-## Moot layout
+Each domain module has the same shape: an event grammar, a deterministic fold,
+a `*Store` over `muniment`, and a `*Ext` p2panda operation extension with its
+own `to_operation_seed` and `from_operation`. Constitution, delegation,
+records, and tessera also export `verify`; the membership lane validates
+through its store instead.
 
-`Moot` is the public community aggregate and owns the namespace below. The
-modules make its five retained domains explicit without making callers
-assemble them themselves:
+## The `Moot` aggregate
 
-```text
-gemot::moot
-├── constitution  signed governance law, folds, checkpoints, and sync
-├── delegation    signed attenuated authority and revocation
-├── group         signed p2panda-auth membership and key epochs
-├── records       the public community object and retention lane
-└── tessera       trust facts, persona lineage, storage, and sync
-```
+`Moot<B>` (`B: muniment::Backend`) is the command and snapshot boundary over
+all five domains. `MootFile` is the redb-backed alias.
 
-`moot::Moot` composes those lanes at the command, snapshot, and native-drop
-boundary. `records` retains compatibility re-exports for the raw object lane;
-new code should enter through the aggregate unless it is deliberately working
-at a lane boundary.
+| Area | Items |
+| --- | --- |
+| Open | `in_memory`, `open`, `open_existing`, `moot_id` |
+| Stores | `constitution_store`, `object_store`, `tessera_store`, `delegation_store`, `membership_store`, `governance` |
+| Governance | `found`, `amend`, `authorize`, `authorize_constitution_grant` |
+| Delegation | `delegations`, `delegation_projections`, `delegation_scope_key_epochs`, `authorize_current_delegated`, `authorize_delegated` |
+| Records | `declare`, `join`, `share`, `authorized_fauna`, `checkpoint`, `prune_current` |
+| Membership | `membership`, `update_membership`, `update_membership_for_identity` |
+| Tessera | `record_tessera` |
+| Drops | `export_plain_drop`, `export_protected_drop`, `import_plain_drop`, `import_protected_drop` |
+| Views | `snapshot`, `outbound` |
 
-## What `gemot` owns
+Commands return a `MootCommandReceipt` naming the operation hash, the `MootLane`
+it belongs on, and a refreshed `MootSnapshot`. `outbound` resolves a receipt to
+a typed `MootOutboundOperation` for the host to publish.
 
-Moots are **graph views that link to and store** community resources —
-*not* protocol-translation layers. The crate's job is coordination,
-governance, routing, and durable memory; foreign protocols stay
-themselves and members reach them via thin clients.
+## Replication
 
-- **The graph view itself** — persistent, shared, signed, replicated. The
-  moot's "table of contents."
-- **Members + capabilities** — who's in, what scope they have. Capability
-  scopes are meadowcap-shaped: signed credentials over `(subspace,
-  path-prefix, time-interval, mode)`, delegable in subsets, time-bounded.
-- **Pinned content** — engrams, archives, page snapshots, files,
-  content-addressed via BLAKE3 and replicated via iroh-blobs.
-- **Resource pointers** — links to Matrix rooms, IRC channels, Nostr
-  feeds, Gemini capsules, websites, anything addressable. Each is a
-  graph node with a URL and a protocol tag; `mooting-*` adapters help
-  members open them.
-- **Hosting commitments** — signed events naming who's running which
-  service, with heartbeats and successor chains. **Voluntary; never
-  imposed.** Tessera rewards follow-through and penalizes ghosting.
-- **Engram fauna** — durable contributions accumulated over time,
-  forming the moot's culture / geist.
-- **Tier transitions** — moot → moothold (federation), moothold →
-  coalition. Each transition is a first-class governance
-  event.
-- **Forking primitives** — all structures are forkable. A fork copies
-  graph state, inherits some/all members per the fork's terms, commits
-  its own pin set, declares its governance.
-
-## Naming
-
-The crate is called `gemot`. The product term *moothold* refers
-specifically to **Tier 3** (federation of moots) per the
-[2026-05-07 moot-tiers brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md).
-Earlier docs may use *moothold* as an umbrella term — that's the older
-framing.
-
-The Anglo-Saxon *-hold* (household, stronghold, freehold) connotes a
-**holding of bounded units**. A federation of moots is literally a
-holding-of-moots. Tier 4, **coalition**, is the sovereign cluster of
-mootholds (originally named *demesne* for the Latin sense of a
-directly-controlled domain; renamed 2026-06-04 because *demesne* sounds like
-*domain*, which already names the domain layer).
-
-## The tier framework
-
-| Tier | Term | What it is | Storage model |
-| --- | --- | --- | --- |
-| **T1** | **orrery** | A user's root graph view. *"Your orrery is your moot."* | Personal eidetic. |
-| **T2** | **moot** | A persistent themed federatable graph-view community. | Voluntary pin pool. Dissolves if nobody pins. |
-| **T3** | **moothold** | A federation of moots. | ILL-shaped reciprocity between member moots. |
-| **T4** | **coalition** | A sovereign cluster of mootholds. | Coalition-wide reciprocity ledger; per-moothold override; fork-out always possible. |
-
-**Practical t2 ceiling: 5K–10K active members** before a moothold of
-related moots is healthier than a single mega-moot. T4 is a future tier;
-t1–t3 are sufficient for personal / communal / topical-federation
-scales.
-
-## Voluntary hosting
-
-The most important architectural commitment in the design: **no hosting
-is ever imposed on anyone.** Tessera-weighted voting governs how a
-community uses its resources or apportions capabilities; it does NOT
-distribute burdens. Burdens are picked up voluntarily.
-
-- **Honey:** reputation accrues through follow-through.
-- **Stick:** reputation is lost when public commitments are not
-  fulfilled — *visible-failure-to-follow-through*, never coercion.
-  Saying no costs nothing.
-- **Cheesecloth pinning:** liveness for static content emerges from
-  overlapping individually-unreliable contributions. Casual hosting is
-  enough; nobody owes 24/7 uptime.
-- **Lapse and revive is a normal life cycle.** If nobody pins, content
-  is offline; members' eidetic still has copies; re-host at a new
-  address whenever you want. *Whether something is currently online is
-  not its total existence.*
-- **Capability scopes are tessera-gated.** What you can pledge is capped
-  by your reputation, preventing rug-pulls and rep-farming exploits.
-
-For live services (Matrix homeservers, IRC daemons, real-time chat),
-single-leadership commitments with named successors apply rather than
-cheesecloth — those need at least one continuous host with graceful
-failover.
-
-## ILL-shaped reciprocity at t3 / t4
-
-At Tier 3 and above, member structures contribute storage / compute /
-replication shares to the federation; reciprocity credits accrue
-proportional to contribution and reputation. The model is **library
-interlibrary loan**, not crypto-economic:
-
-- Capacity-based, not cash-based.
-- Reciprocity is reputational, not monetary.
-- Identity is institutional (the moot's track record, not its founder's
-  clout).
-- Resists cash exploitation: you can't deposit money to make the
-  federation preserve your stuff; you have to be a participating
-  institution with capacity.
-
-A moothold is **instantiated** via stake + agreement: members of a
-forming moothold pay a real infrastructure cost (their old laptop
-running a mooting server, their bandwidth, their pinned storage
-allocation) and mutually agree (signed events) to establish the
-federation. Once stakes are met, the structure goes live; if any stake
-lapses with no successor, that portion goes offline until someone puts
-it back up.
-
-## How it relates to other workspace crates
+A Moot replicates over five independent LogSync lanes, all subscribing to the
+Moot id as topic:
 
 ```text
-                 Turnstone community UI
-                            │
-                            ▼
-                          gemot
-              (this crate; tier 1–3 lifecycle,
-               graph view, pins, tessera, capabilities,
-               fauna, federation, forking)
-                            │
-        ┌───────────────────┼─────────────────────┐
-        ▼                   ▼                     ▼
-     mooting          identity        transport
-   (protocol-core +    (members,            (moot streams,
-    thin client        capabilities,        gossip topics,
-    orchestration      chain-rooted         iroh-blobs for
-    for foreign        personas)            pinned content,
-    resources)                              optional Veilid)
-
-   bidirectional thin clients (siblings of mooting):
-     mooting-mere | mooting-matrix | mooting-nostr |
-     mooting-atproto | mooting-activitypub | …
-
-   outbound-only bridges (separate, for non-hostable / publish-only):
-     mere-bridge-{matrix, nostr, activitypub, atproto, irc, …}
+gemot/constitution/v1   GEMOT_CONSTITUTION_LANE
+gemot/delegation/v1     GEMOT_DELEGATION_LANE
+gemot/membership/v1     GEMOT_MEMBERSHIP_LANE
+gemot/records/v1        GEMOT_RECORDS_LANE
+gemot/tessera/v1        GEMOT_TESSERA_LANE
 ```
 
-- [`mooting`](https://crates.io/crates/mooting) — the protocol-core.
-  Defines `MootProtocol` (small surface for moot-internal coordination
-  over MereEvents) plus client orchestration for foreign-protocol
-  resources linked from a moot.
-- [`identity`](https://crates.io/crates/identity) — moot
-  members are identified by master pubkey or chain-rooted persona
-  pubkeys. Tessera accrues against the chain root, not the leaf
-  persona; capabilities are signed Ed25519 credentials.
-- [`transport`](https://crates.io/crates/transport) —
-  moot-scoped streams (per-moot ALPN), iroh-gossip topics for
-  cross-member event broadcast, iroh-blobs for content-addressed
-  pinning. Optional Veilid backend activates when a moot declares a
-  privacy-required transport policy.
-- [`murm`](https://crates.io/crates/murm) — bilateral / small-group
-  conversations. gemot handles many-to-many federation. A moot may
-  use murm-style cabals for private sub-channels.
-- [`eidetic`](https://crates.io/crates/eidetic) — owner-private memory
-  substrate. Pinned content and engrams cached locally via eidetic's
-  `Store`; cross-moot replication is moothold's job. The Tier 1 orrery
-  lives entirely on eidetic.
-- **`mooting-*` adapter crates** (planned) — thin protocol clients per
-  foreign protocol that members can use to interact with linked
-  resources. Bidirectional, but they don't translate foreign protocols
-  into moot-shape — they help members **reach** foreign resources.
-- **`mere-bridge-*` crates** (planned) — outbound-only Pattern B
-  bridges, distinct from `mooting-*` adapters. For systems that can't
-  host moot semantics or where mere only wants to publish.
-- [`moothold`](https://crates.io/crates/moothold) — Tier 3 federation:
-  direct concords, reciprocity, and cross-Moot resource coordination.
-- [`mere`](https://crates.io/crates/mere) — supplies the reusable graph-browser
-  library; Turnstone composes Gemot and Moothold into the product.
+`Moot::join_lanes(endpoint, gossip)` joins all five through
+`stickleback::JoinedSpace` and returns `MootLanes`, whose `sync_status()` and
+`status_handles()` report per-lane state. The host owns the endpoint and gossip
+handles and publishes authored operations; gemot's own code names no network
+session type.
+
+## Dependencies
+
+`p2panda-core`, `p2panda-auth`, `p2panda-store` (0.7), and `p2panda-encryption`
+(`data_scheme`) for signed operations, group materialization, and group-secret
+ids. `stickleback` for `MunimentStore`, `OperationProcessor`, `JoinedSpace`, and
+native drops. `muniment` (`redb`) for durable backing. `identity` (the
+`personae` package, renamed by the workspace alias) for keypairs, derived-key
+attestations, and delegation certificates. `servitor` for the typed
+capability vocabulary. `mooting` for `RecognitionContext`, used by
+`MootRoster::recognition_context`. `proofs`, `serde`, `redb`, `thiserror`.
+
+`p2panda-net`, `p2panda-sync`, `transport`, `chartulary`, and `tokio` are
+dev-dependencies only, for the two-peer convergence tests and the `moot-peer`
+example, which play the host. `p2panda-net` is still in the normal build graph
+transitively through `stickleback`. The crate declares no cargo features.
+
+## Consumers
+
+`moothold` (tier 3 federation) and `commons-spine` (the technical Commons
+profile) consume gemot inside this workspace.
 
 ## Status
 
-Pre-1.0. Signed Moot declarations, membership, fauna, deterministic roster
-folds, Tessera, constitutional governance, shared muniment stores,
-constitution-bound retention checkpoints, prefix pruning, and host-composed
-sync proofs are implemented. The aggregate `Moot` service composes governance,
-membership, object, and Tessera commands, snapshots, checkpointing, pruning,
-and authority rotation. Its constitution and membership stores are explicit
-host-composed sync seams. Plain and protected aggregate drops carry
-constitution, delegation, membership, object, and Tessera operations, then
-refresh the complete materialized view on a fresh recipient. A receipt resolves
-to an explicit typed outbound operation for the host to publish. The signed
-admission rule evaluates an injected
-membership/capability provider. Founder-governed signed grants narrow that
-provider's live decision. Quorum amendments and a p2panda-auth group adapter
-are implemented. Membership operations use a Gemot-owned wire grammar,
-survive durable reopen, and verify a derived writer's Personae root attestation
-before entering the fold. The adapter binds resolved membership changes to a
-host-owned p2panda-encryption group-secret epoch without importing private key
-material into Gemot. Independent Personae-signed certificates now attenuate
-constitutional grant roots through a Gemot fold, including cascading
-certificate and root revocation. Their signed p2panda lane survives durable
-reopen, materializes correctly across out-of-order arrival, and catches up a
-late peer over upstream p2panda 0.7 / Iroh 1.0. Aggregate native drops carry the
-lane as critical capability-chain evidence. The service exposes deterministic
-read-only participant projections and revocation-derived scope-key epochs for a
-host to bind to p2panda-encryption secrets. The next slices land per the
+Pre-1.0. Implemented: signed Moot declarations, deterministic roster folds,
+fauna, constitutional governance with quorum amendments, a p2panda-auth
+membership adapter with derived-key attestation and group-secret epochs,
+Personae-signed delegation certificates with cascading revocation, Tessera
+events plus the ledger and gate projections, constitution-bound retention
+checkpoints, prefix pruning, and plain and protected native drops that
+reconstruct all five domains on a fresh recipient.
+
+Not built yet: tier transitions, hosting commitments with heartbeats, pin
+tracking, and the `mooting-*` foreign-protocol adapters. Milestones are listed
+in the
 [moot-tiers brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
-§13:
-
-- **T1 milestone**: orrery as a one-member moot-of-self with local
-  pin tracking, public node sharing.
-- **T2 milestone**: two-member moot; signed stake + agreement; engram
-  authoring + pinning; live-service hosting commitments with
-  heartbeats.
-- **T3 milestone**: two moots federate into a moothold; reciprocity
-  pledges; cross-moot pin requests via the reciprocity ledger.
-- **T4 (coalition)**: deferred until t3 is solid.
-
-Forward direction:
-
-- **Voluntary commitment + reputational stakes** — public signed
-  commitments, heartbeats, clean handoffs, tessera-gated scopes.
-- **Cheesecloth pinning + leadership commitments** — hybrid model;
-  archives use cheesecloth, live services use named-successor
-  leadership.
-- **Tessera against chain root** — reputation accrues against the
-  master identity; pseudonymous personas inherit a depreciated
-  fraction.
-- **Capability delegation (meadowcap-shaped)** — moot-scoped capability
-  tokens, delegable in subsets, time-bounded.
-- **Optional privacy transport** — moots can declare a Veilid-required
-  policy; member clients enforce it.
-- **First-seen aggregation across mootholds** — tessera-aware federation
-  corroborates provenance claims; deduplicated content credits the
-  original submitter.
-- **Settings, not hardcodes** — heartbeat cadence, capability decay,
-  pinning quotas, vote thresholds, reciprocity ratios all per-tier
-  configurable.
+§13.
 
 ## License
 
