@@ -13,7 +13,7 @@ publish = false
 chartulary = { path = "../../eidetic/chartulary" }
 codicil = { path = "../../eidetic/codicil" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
-personae = { path = "../../persona/personae" }
+personae = { path = "../../dramatis/personae" }
 proofs = { package = "mere-proofs", path = "../../system/proofs" }
 servitor = { path = "../../servitor" }
 stickleback = { path = "../../stickleback" }
