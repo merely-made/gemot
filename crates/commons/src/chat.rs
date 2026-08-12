@@ -2178,7 +2178,10 @@ mod tests {
             .projection_with_authority(&gemot_view(&withdrawn, &rules))
             .await
             .unwrap();
-        assert!(filtered.messages.is_empty(), "revoked content must not project");
+        assert!(
+            filtered.messages.is_empty(),
+            "revoked content must not project"
+        );
         assert!(filtered.channels.is_empty());
         assert!(filtered.pending_authority.is_empty());
         assert_eq!(filtered.revoked.len(), 2);
