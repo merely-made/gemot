@@ -185,7 +185,10 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
         .add_peer(bob_transport.endpoint_addr().await.unwrap())
         .await
         .unwrap();
-    alice_transport.set_topics(bob_id, &[overlay]).await.unwrap();
+    alice_transport
+        .set_topics(bob_id, &[overlay])
+        .await
+        .unwrap();
     bob_transport
         .add_peer(alice_transport.endpoint_addr().await.unwrap())
         .await
@@ -283,7 +286,10 @@ async fn lanes_converge(delegation_first: bool) {
         .add_peer(bob_transport.endpoint_addr().await.unwrap())
         .await
         .unwrap();
-    alice_transport.set_topics(bob_id, &[overlay]).await.unwrap();
+    alice_transport
+        .set_topics(bob_id, &[overlay])
+        .await
+        .unwrap();
     bob_transport
         .add_peer(alice_transport.endpoint_addr().await.unwrap())
         .await
@@ -347,7 +353,9 @@ async fn lanes_converge(delegation_first: bool) {
     .unwrap();
     alice_delegations
         .author_issue(
-            &root.derive_keypair(&delegation_signing_salt(&scope)).unwrap(),
+            &root
+                .derive_keypair(&delegation_signing_salt(&scope))
+                .unwrap(),
             &rules,
             signed,
         )
@@ -417,7 +425,12 @@ async fn lanes_converge(delegation_first: bool) {
 
     // Sibling traffic must not have been absorbed as this lane's own.
     assert_eq!(
-        bob.constitution.constitution().await.unwrap().unwrap().rules,
+        bob.constitution
+            .constitution()
+            .await
+            .unwrap()
+            .unwrap()
+            .rules,
         rules
     );
     assert_eq!(

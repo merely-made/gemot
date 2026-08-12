@@ -236,7 +236,7 @@ async fn main() -> Result<(), String> {
     // gemot owns no p2panda-net; the host wires the pump.
     let accept_store = store.clone();
     let joined: JoinedSpace<MootExt> = JoinedSpace::join::<_, MootLogId, _, _>(
-            stickleback::lane_id("gemot/records/v1", moot_id),
+        stickleback::lane_id("gemot/records/v1", moot_id),
         store.sync_store(),
         endpoint,
         gossip,
