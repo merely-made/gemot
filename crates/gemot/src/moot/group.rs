@@ -15,8 +15,14 @@ use std::collections::BTreeSet;
 use identity::DerivedKeyAttestation;
 use p2panda_auth::group::resolver::StrongRemove;
 use p2panda_auth::group::{GroupAction, GroupCrdt, GroupCrdtState};
-use p2panda_auth::traits::{IdentityHandle, Operation, OperationId};
+use p2panda_auth::traits::Operation;
+// p2panda 0.7 moved these two out of `p2panda-auth`: an actor is now
+// `p2panda_core::identity::Author` (the `IdentityHandle` name is gone), and
+// `OperationId` lives with the operation substrate in `p2panda-core`. Only the
+// import moved; both bounds mean what they meant.
 use p2panda_auth::{Access, AccessLevel};
+use p2panda_core::identity::Author;
+use p2panda_core::traits::OperationId;
 use p2panda_encryption::data_scheme::GroupSecretId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -28,10 +34,14 @@ use super::service::{
 use super::tessera::TesseraFacts;
 
 /// A local identity wrapper required by p2panda-auth's generic group graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// Serde rides here because p2panda 0.7's `Author` requires it, where the old
+/// `IdentityHandle` did not: an actor is now something the substrate can put
+/// on the wire itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MootGroupHandle(pub [u8; 32]);
 
-impl IdentityHandle for MootGroupHandle {}
+impl Author for MootGroupHandle {}
 
 /// A local operation-id wrapper required by p2panda-auth's group graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
