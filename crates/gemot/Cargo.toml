@@ -67,7 +67,18 @@ chartulary.workspace = true
 # reads the subscription; `macros` + `rt-multi-thread` run the async tests;
 # tempfile backs the persistent-store reopen test.
 transport.workspace = true
-p2panda-net = "0.7.0"
+# Every p2panda-net feature except `sqlite`. The address book runs on
+# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
+# backend (and sqlx with it) stays out of the graph entirely. Feature
+# unification means EVERY consumer has to opt out, not just one.
+p2panda-net = { version = "0.7.0", default-features = false, features = [
+  "address_book",
+  "iroh_endpoint",
+  "iroh_mdns",
+  "discovery",
+  "gossip",
+  "sync",
+] }
 p2panda-sync = "0.7.0"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"

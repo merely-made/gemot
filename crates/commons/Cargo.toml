@@ -20,7 +20,18 @@ stickleback = { path = "../../stickleback" }
 gemot = { workspace = true }
 p2panda-core = "0.7.0"
 p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
-p2panda-net = "0.7.0"
+# Every p2panda-net feature except `sqlite`. The address book runs on
+# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
+# backend (and sqlx with it) stays out of the graph entirely. Feature
+# unification means EVERY consumer has to opt out, not just one.
+p2panda-net = { version = "0.7.0", default-features = false, features = [
+  "address_book",
+  "iroh_endpoint",
+  "iroh_mdns",
+  "discovery",
+  "gossip",
+  "sync",
+] }
 p2panda-store = { version = "0.7.0", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
