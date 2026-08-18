@@ -11,7 +11,7 @@
 //! authority.
 //!
 //! [`TypedMootAuthorization`] closes that: the request's `capability_path`
-//! is parsed as a servitor [`Cap`] **at the seam** (D2's rule — strings are
+//! is parsed as a shared [`Cap`] **at the seam** (D2's rule — strings are
 //! parsed at boundaries, never compared inside a decision) and answered from
 //! the moot's delegation certificates through the same `power/...` /
 //! `scope/...` encoding servitor writes. A moot capability check and a
@@ -36,7 +36,8 @@
 //! raw [`MootDelegations::covers`]; there is no silent bridge between the
 //! vocabularies, because a silent bridge is the F1 ambiguity again.
 
-use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
+use capability::{Cap, Mode};
+use servitor::{AuthorityProvider, Subject, cap_path};
 
 use super::constitution::ConstitutionRules;
 use super::delegation::MootDelegations;
@@ -135,13 +136,14 @@ mod tests {
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
     use crate::moot::tessera::gate::TesseraFacts;
+    use capability::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{
         CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
         DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,
     };
     use identity::{IdentityProvider, InMemoryProvider};
-    use servitor::{Gate, GateError, ScopePath};
+    use servitor::{Gate, GateError};
 
     const MOOT: [u8; 32] = [9; 32];
     const ROOT_GRANT: [u8; 32] = [7; 32];
@@ -284,6 +286,40 @@ mod tests {
                 .inputs(&request(subject, "scope:curate"))
                 .capability_covers,
             "a scope spelled like the power is not the power"
+        );
+    }
+
+    #[test]
+    fn facet_namespaces_use_the_shared_order_at_the_moot_tier() {
+        let holder = InMemoryProvider::from_seed([1; 32]);
+        let member = InMemoryProvider::from_seed([2; 32]);
+        let (delegations, rules, _) =
+            typed_moot_for(&holder, &member, &Cap::facet("web.").unwrap());
+        let provider = TypedMootAuthorization {
+            membership: &MemberOnly,
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+        };
+        let subject = member.master_public_key().to_bytes();
+
+        assert!(
+            provider
+                .inputs(&request(subject, "facet:web.viewer"))
+                .capability_covers,
+            "the web namespace covers one of its facets"
+        );
+        assert!(
+            !provider
+                .inputs(&request(subject, "facet:website.viewer"))
+                .capability_covers,
+            "dot segments, not raw string prefixes, define containment"
+        );
+        assert!(
+            !provider
+                .inputs(&request(subject, "facet:denizen.binding"))
+                .capability_covers,
+            "a different facet family is outside the grant"
         );
     }
 
