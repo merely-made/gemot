@@ -24,9 +24,11 @@ p2panda-auth = { version = "0.7.0", default-features = false }
 p2panda-encryption = { version = "0.7.0", default-features = false, features = ["data_scheme"] }
 identity.workspace = true
 # The typed capability vocabulary (capability-model OQ3, ruled 2026-07-24):
-# the moot authorization seam parses request paths as servitor Caps and
+# the moot authorization seam parses request paths through the shared leaf
+# algebra and
 # answers them from delegation certificates through the same power/scope
 # encoding the denizen tier writes — one capability question, two tiers.
+capability.workspace = true
 servitor.workspace = true
 stickleback = { workspace = true }
 proofs.workspace = true

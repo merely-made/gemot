@@ -24,7 +24,7 @@ and `STAGE`. Every row below is a path under `gemot::moot`.
 | `group` | p2panda-auth membership: `MootGroup`, `MootMember`, `MootMembershipRecord`, `MootAccessLevel`, `MootMembershipAction`, `MootGroupTransition`, `P2pandaGroupKeyEpoch`, `P2pandaScopeKeyEpoch`, `MootGroupStore`, `MootGroupExt`, `membership_identity_salt` |
 | `records` | The public record lane: `Declaration`, `Member`, `FaunaEntry`, `MootRoster`, `MootEvent`, `MootStore`, `MootExt`, `MootLogId`, plus retention (`MootRetentionPolicy`, `RetentionCheckpoint`, `KeepBound`, `LogFrontier`, `AvailabilityPolicy`, `ErasurePolicy`, `GovernedCheckpointAuthority`, `PolicyRevision`) |
 | `tessera` | Trust receipts: `TesseraEvent`, `ChainRoot`, `CommitmentId`, `Scope`, `Ledger`, `TesseraConfig`, `PersonaChains`, `PersonaId`, the policy slot (`TesseraFacts`, `GateConfig`, `GateDecision`, `Policy`, `DenyReason`, `authorize`, `may_act`), `TesseraStore`, `TesseraExt`, and `persona_vault` for vault-derived persona keys |
-| `typed_authorization` | `TypedMootAuthorization` answers gemot's `MootAuthorizationProvider` from parsed `servitor::Cap`s; `MootAuthority` presents the same certificates as a `servitor::AuthorityProvider` |
+| `typed_authorization` | `TypedMootAuthorization` answers gemot's `MootAuthorizationProvider` from the shared `mere-capability` algebra; `MootAuthority` presents the same certificates as a `servitor::AuthorityProvider` |
 
 Each domain module has the same shape: an event grammar, a deterministic fold,
 a `*Store` over `muniment`, and a `*Ext` p2panda operation extension with its
@@ -79,8 +79,9 @@ session type.
 ids. `stickleback` for `MunimentStore`, `OperationProcessor`, `JoinedSpace`, and
 native drops. `muniment` (`redb`) for durable backing. `identity` (the
 `personae` package, renamed by the workspace alias) for keypairs, derived-key
-attestations, and delegation certificates. `servitor` for the typed
-capability vocabulary. `mooting` for `RecognitionContext`, used by
+attestations, and delegation certificates. `mere-capability` for the shared
+typed vocabulary; `servitor` for the denizen-gate adapter. `mooting` for
+`RecognitionContext`, used by
 `MootRoster::recognition_context`. `proofs`, `serde`, `redb`, `thiserror`.
 
 `p2panda-net`, `p2panda-sync`, `transport`, `chartulary`, and `tokio` are
