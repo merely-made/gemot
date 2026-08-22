@@ -32,6 +32,7 @@ pub mod chat;
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};
 use codicil::Codicil;
 use muniment::Backend;
+use p2panda_core::operation::validate_operation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
@@ -140,18 +141,16 @@ pub fn to_operation_with_attestation(
         writer_attestation,
     };
     let body_bytes = encode_cbor(&record).expect("a commons record always CBOR-encodes");
-    let body = Body::new(&body_bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: CommonsExt { container },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&body_bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(&body_bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(&signing_key, CommonsExt { container });
     let hash = header.hash();
     Operation {
         hash,
@@ -244,10 +243,14 @@ impl OperationPolicy<CommonsExt> for CommonsPolicy {
                 "operation addresses a different container",
             ));
         }
-        if !operation.header.verify() {
+        // The signature itself is already guaranteed: p2panda 0.7.1 verifies it
+        // inside `Header::decode` and made `Header::verify` test-only, so an
+        // `Operation` reaching here was decoded (verified) or locally signed.
+        // The body commitment and log rules still need checking.
+        if validate_operation(operation).is_err() || operation.hash != operation.header.hash() {
             return Err(Reject::new(
-                "bad-signature",
-                "operation signature is invalid",
+                "bad-operation",
+                "operation header or body commitment is invalid",
             ));
         }
         let record = from_operation(operation)

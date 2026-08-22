@@ -90,8 +90,13 @@ fn verify(fixture_path: &str, received_path: &str) -> Result<(), Box<dyn std::er
     let record = decode_cbor(received.as_slice())?;
     let operation = decode_operation_record::<ChatExt>(&record)?
         .ok_or("canonical record did not contain an operation")?;
-    if *operation.hash.as_bytes() != fixture.operation || !operation.header.verify() {
-        return Err("received operation identity or signature is invalid".into());
+    // The signature was already checked: `decode_operation_record` decodes the
+    // header through `Header::decode`, which verifies before returning it. The
+    // body commitment and log rules are still worth asserting here.
+    if *operation.hash.as_bytes() != fixture.operation
+        || p2panda_core::operation::validate_operation(&operation).is_err()
+    {
+        return Err("received operation identity or body commitment is invalid".into());
     }
     let body = operation.body.ok_or("received operation body is absent")?;
     let envelope: GroupCiphertext = decode_cbor(body.to_bytes().as_slice())?;

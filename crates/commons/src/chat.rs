@@ -760,22 +760,21 @@ impl<B: Backend + Clone> ChatReplica<B> {
             .seal(&plaintext, &p2panda_encryption::Rng::default())?;
         let body_bytes =
             encode_cbor(&envelope).map_err(|error| ChatError::Wire(error.to_string()))?;
-        let body = Body::new(&body_bytes);
-        let mut header = Header {
-            version: 1,
-            verifying_key: author,
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink: backlink.map(Hash::from),
-            extensions: ChatExt {
-                space_id: self.space_id,
-                class,
-                parents,
-            },
-        };
-        header.sign(&signing_key);
+        let body = Body::from_bytes(&body_bytes);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. The builder derives verifying_key from the
+        // signing key -- the same value `author` already held.
+        let header = Header::builder()
+            .body(&body_bytes)
+            .seq_num(seq_num)
+            .backlink(backlink.map(Hash::from))
+            .build(&signing_key, ChatExt {
+                    space_id: self.space_id,
+                    class,
+                    parents,
+                });
         let operation = Operation {
             hash: header.hash(),
             header,
@@ -919,22 +918,21 @@ impl<B: Backend + Clone> ChatReplica<B> {
         debug_assert_eq!(envelope.epoch, checkpoint.current_epoch);
         let body_bytes =
             encode_cbor(&envelope).map_err(|error| ChatError::Wire(error.to_string()))?;
-        let body = Body::new(&body_bytes);
-        let mut header = Header {
-            version: 1,
-            verifying_key: author,
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink: backlink.map(Hash::from),
-            extensions: ChatExt {
-                space_id: self.space_id,
-                class: ChatClass::Checkpoint,
-                parents: checkpoint.causal_frontier.clone(),
-            },
-        };
-        header.sign(&signing_key);
+        let body = Body::from_bytes(&body_bytes);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. The builder derives verifying_key from the
+        // signing key -- the same value `author` already held.
+        let header = Header::builder()
+            .body(&body_bytes)
+            .seq_num(seq_num)
+            .backlink(backlink.map(Hash::from))
+            .build(&signing_key, ChatExt {
+                    space_id: self.space_id,
+                    class: ChatClass::Checkpoint,
+                    parents: checkpoint.causal_frontier.clone(),
+                });
         let operation = Operation {
             hash: header.hash(),
             header,
@@ -1792,23 +1790,21 @@ mod tests {
             .keys
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
-        let body = Body::new(&encode_cbor(&envelope).unwrap());
+        let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
         let signing_key = SigningKey::from_bytes(&signing_seed);
-        let mut header = Header {
-            version: 1,
-            verifying_key: signing_key.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink: backlink.map(Hash::from),
-            extensions: ChatExt {
-                space_id: replica.space_id,
-                class: ChatClass::Checkpoint,
-                parents: checkpoint.causal_frontier.clone(),
-            },
-        };
-        header.sign(&signing_key);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(seq_num)
+            .backlink(backlink.map(Hash::from))
+            .build(&signing_key, ChatExt {
+                    space_id: replica.space_id,
+                    class: ChatClass::Checkpoint,
+                    parents: checkpoint.causal_frontier.clone(),
+                });
         Operation {
             hash: header.hash(),
             header,
@@ -1829,23 +1825,21 @@ mod tests {
             .keys
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
-        let body = Body::new(&encode_cbor(&envelope).unwrap());
+        let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
         let signing_key = SigningKey::from_bytes(&signing_seed);
-        let mut header = Header {
-            version: 1,
-            verifying_key: signing_key.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink: backlink.map(Hash::from),
-            extensions: ChatExt {
-                space_id: replica.space_id,
-                class: event.class(),
-                parents,
-            },
-        };
-        header.sign(&signing_key);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(seq_num)
+            .backlink(backlink.map(Hash::from))
+            .build(&signing_key, ChatExt {
+                    space_id: replica.space_id,
+                    class: event.class(),
+                    parents,
+                });
         Operation {
             hash: header.hash(),
             header,
@@ -1865,23 +1859,21 @@ mod tests {
             .keys
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
-        let body = Body::new(&encode_cbor(&envelope).unwrap());
+        let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
         let signing_key = SigningKey::from_bytes(&signing_seed);
-        let mut header = Header {
-            version: 1,
-            verifying_key: signing_key.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num: 0,
-            backlink: None,
-            extensions: ChatExt {
-                space_id: replica.space_id,
-                class: record.payload.class(),
-                parents: Vec::new(),
-            },
-        };
-        header.sign(&signing_key);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(0)
+            .backlink(None)
+            .build(&signing_key, ChatExt {
+                    space_id: replica.space_id,
+                    class: record.payload.class(),
+                    parents: Vec::new(),
+                });
         Operation {
             hash: header.hash(),
             header,
@@ -2939,9 +2931,14 @@ mod tests {
         assert_eq!(received, expected);
         let decoded_record: DropRecord = decode_cbor(received.as_slice()).unwrap();
         assert_eq!(decoded_record, canonical_record);
+        // `decode_operation_record` goes through `Header::decode`, which
+        // verifies the signature before it will return a header, so reaching
+        // this unwrap IS the signature assertion. The body commitment and log
+        // rules still get asserted explicitly.
         let decoded = decode_operation_record::<ChatExt>(&decoded_record)
             .unwrap()
             .unwrap();
-        assert!(decoded.header.verify());
+        assert!(p2panda_core::operation::validate_operation(&decoded).is_ok());
+        assert_eq!(decoded.hash, decoded.header.hash());
     }
 }

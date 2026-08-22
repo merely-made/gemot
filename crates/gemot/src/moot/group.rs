@@ -17,12 +17,12 @@ use p2panda_auth::group::resolver::StrongRemove;
 use p2panda_auth::group::{GroupAction, GroupCrdt, GroupCrdtState};
 use p2panda_auth::traits::Operation;
 // p2panda 0.7 moved these two out of `p2panda-auth`: an actor is now
-// `p2panda_core::identity::Author` (the `IdentityHandle` name is gone), and
+// `p2panda_core::Author` (the `IdentityHandle` name is gone), and
 // `OperationId` lives with the operation substrate in `p2panda-core`. Only the
-// import moved; both bounds mean what they meant.
+// import moved; both bounds mean what they meant. 0.7.1 then moved `Author`
+// again, from `identity` to `traits`, where it sits beside `OperationId`.
 use p2panda_auth::{Access, AccessLevel};
-use p2panda_core::identity::Author;
-use p2panda_core::traits::OperationId;
+use p2panda_core::traits::{Author, OperationId};
 use p2panda_encryption::data_scheme::GroupSecretId;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

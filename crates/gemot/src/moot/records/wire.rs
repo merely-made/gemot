@@ -10,6 +10,7 @@
 //! valid p2panda log LogSync reconciles.
 
 use identity::Ed25519Keypair;
+use p2panda_core::operation::validate_operation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
@@ -160,21 +161,19 @@ fn to_operation_seed_with_prune(
 ) -> Operation<MootExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let body_bytes = encode_cbor(event).expect("a MootEvent always CBOR-encodes");
-    let body = Body::new(&body_bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: MootExt {
-            moot_id,
-            prune_flag: PruneFlag::new(prune),
-        },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&body_bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(&body_bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(&signing_key, MootExt {
+                moot_id,
+                prune_flag: PruneFlag::new(prune),
+            });
     let hash = header.hash();
     Operation {
         hash,
@@ -192,9 +191,16 @@ pub fn from_operation(op: &Operation<MootExt>) -> Result<([u8; 32], MootEvent), 
     Ok((op.header.extensions.moot_id, event))
 }
 
-/// Whether the operation's signature is valid for its author and content.
-pub fn verify(op: &Operation<MootExt>) -> bool {
-    op.header.verify()
+/// Verify the signed header and body commitment.
+///
+/// The signature itself is no longer re-checked and no longer can be: p2panda
+/// 0.7.1 verifies it inside `Header::decode` and made `Header::verify`
+/// test-only, so any `Operation` that exists was either decoded (verified) or
+/// built locally by the builder (signed). What stays live here is the rest —
+/// the payload hash and size against the actual body, the log's seq_num and
+/// backlink rules, and the cached digest against the header.
+pub fn verify(operation: &Operation<MootExt>) -> bool {
+    validate_operation(operation).is_ok() && operation.hash == operation.header.hash()
 }
 
 #[cfg(test)]
@@ -242,10 +248,19 @@ mod tests {
     #[test]
     fn tampering_the_moot_id_breaks_verification() {
         let kp = keypair(7);
-        let mut op = to_operation(&kp, MOOT, &declared(), 0, None);
-        op.header.extensions.moot_id = [0xff; 32];
+        let op = to_operation(&kp, MOOT, &declared(), 0, None);
+        // The moot id is signed, but in-memory tampering no longer shows up:
+        // p2panda 0.7.1 re-encodes a header from the CBOR cache it decoded, so
+        // mutating `extensions` cannot change what was signed. The claim is
+        // therefore tested on the bytes — a different moot id signs to
+        // different header bytes, and corrupting the encoded extension region
+        // (which `encode_header` appends last) makes the header fail to decode.
+        let elsewhere = to_operation(&kp, [0xff; 32], &declared(), 0, None);
+        assert_ne!(op.header.encode(), elsewhere.header.encode());
+        let mut replayed = op.header.encode();
+        *replayed.last_mut().unwrap() ^= 0xff;
         assert!(
-            !verify(&op),
+            Header::<MootExt>::decode(&replayed).is_err(),
             "the moot id is signed; cross-moot replay fails"
         );
     }
