@@ -61,18 +61,16 @@ pub fn to_operation_seed(
 ) -> Operation<MootGroupExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let bytes = encode_cbor(record).expect("a membership record always CBOR-encodes");
-    let body = Body::new(&bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: MootGroupExt { moot_id },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(&bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(&signing_key, MootGroupExt { moot_id });
     let hash = header.hash();
     Operation {
         hash,

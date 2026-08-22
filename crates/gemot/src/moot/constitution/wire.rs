@@ -47,18 +47,16 @@ pub fn to_operation_seed(
 ) -> Operation<ConstitutionExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let bytes = encode_cbor(event).expect("a constitution event always CBOR-encodes");
-    let body = Body::new(&bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: ConstitutionExt { moot_id },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(&bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(&signing_key, ConstitutionExt { moot_id });
     let hash = header.hash();
     Operation {
         hash,
@@ -108,12 +106,20 @@ mod tests {
         assert_eq!(from_operation(&operation).unwrap(), event);
         assert!(verify(&operation));
 
-        let mut replay = operation;
-        replay.header.extensions.moot_id = [9; 32];
-        assert!(!verify(&replay));
+        // The moot id is signed, but in-memory tampering no longer shows up:
+        // p2panda 0.7.1 re-encodes a header from the CBOR cache it decoded, so
+        // mutating `extensions` cannot change what was signed. The claim is
+        // therefore tested on the bytes — a different moot id signs to
+        // different header bytes, and corrupting the encoded extension region
+        // (which `encode_header` appends last) makes the header fail to decode.
+        let elsewhere = to_operation(&keypair, [9; 32], &event, 0, None);
+        assert_ne!(operation.header.encode(), elsewhere.header.encode());
+        let mut replayed = operation.header.encode();
+        *replayed.last_mut().unwrap() ^= 0xff;
+        assert!(Header::<ConstitutionExt>::decode(&replayed).is_err());
 
         let mut tampered = to_operation(&keypair, moot_id, &event, 0, None);
-        tampered.body = Some(Body::new(b"different constitution"));
+        tampered.body = Some(Body::from_bytes(b"different constitution"));
         assert!(!verify(&tampered));
     }
 }
