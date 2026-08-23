@@ -24,7 +24,7 @@ p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_sc
 # stickleback's muniment-backed store, so p2panda-store's bundled SQLite
 # backend (and sqlx with it) stays out of the graph entirely. Feature
 # unification means EVERY consumer has to opt out, not just one.
-p2panda-net = { version = "0.7.0", default-features = false, features = [
+p2panda-net = { package = "mere-p2panda-net", version = "0.7.1", default-features = false, features = [
   "address_book",
   "iroh_endpoint",
   "iroh_mdns",
