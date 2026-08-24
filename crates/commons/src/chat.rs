@@ -770,11 +770,14 @@ impl<B: Backend + Clone> ChatReplica<B> {
             .body(&body_bytes)
             .seq_num(seq_num)
             .backlink(backlink.map(Hash::from))
-            .build(&signing_key, ChatExt {
+            .build(
+                &signing_key,
+                ChatExt {
                     space_id: self.space_id,
                     class,
                     parents,
-                });
+                },
+            );
         let operation = Operation {
             hash: header.hash(),
             header,
@@ -928,11 +931,14 @@ impl<B: Backend + Clone> ChatReplica<B> {
             .body(&body_bytes)
             .seq_num(seq_num)
             .backlink(backlink.map(Hash::from))
-            .build(&signing_key, ChatExt {
+            .build(
+                &signing_key,
+                ChatExt {
                     space_id: self.space_id,
                     class: ChatClass::Checkpoint,
                     parents: checkpoint.causal_frontier.clone(),
-                });
+                },
+            );
         let operation = Operation {
             hash: header.hash(),
             header,
@@ -1800,11 +1806,14 @@ mod tests {
             .body(body.as_bytes())
             .seq_num(seq_num)
             .backlink(backlink.map(Hash::from))
-            .build(&signing_key, ChatExt {
+            .build(
+                &signing_key,
+                ChatExt {
                     space_id: replica.space_id,
                     class: ChatClass::Checkpoint,
                     parents: checkpoint.causal_frontier.clone(),
-                });
+                },
+            );
         Operation {
             hash: header.hash(),
             header,
@@ -1835,11 +1844,14 @@ mod tests {
             .body(body.as_bytes())
             .seq_num(seq_num)
             .backlink(backlink.map(Hash::from))
-            .build(&signing_key, ChatExt {
+            .build(
+                &signing_key,
+                ChatExt {
                     space_id: replica.space_id,
                     class: event.class(),
                     parents,
-                });
+                },
+            );
         Operation {
             hash: header.hash(),
             header,
@@ -1869,11 +1881,14 @@ mod tests {
             .body(body.as_bytes())
             .seq_num(0)
             .backlink(None)
-            .build(&signing_key, ChatExt {
+            .build(
+                &signing_key,
+                ChatExt {
                     space_id: replica.space_id,
                     class: record.payload.class(),
                     parents: Vec::new(),
-                });
+                },
+            );
         Operation {
             hash: header.hash(),
             header,
