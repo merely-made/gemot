@@ -41,9 +41,12 @@ pub fn to_operation_seed(
         .body(&bytes)
         .seq_num(seq_num)
         .backlink(backlink.map(Hash::from))
-        .build(&signing_key, MootholdExt {
+        .build(
+            &signing_key,
+            MootholdExt {
                 moothold_id: moothold_id.0,
-            });
+            },
+        );
     let hash = header.hash();
     Operation {
         hash,

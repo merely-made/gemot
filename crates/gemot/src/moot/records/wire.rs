@@ -10,8 +10,8 @@
 //! valid p2panda log LogSync reconciles.
 
 use identity::Ed25519Keypair;
-use p2panda_core::operation::validate_operation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -170,10 +170,13 @@ fn to_operation_seed_with_prune(
         .body(&body_bytes)
         .seq_num(seq_num)
         .backlink(backlink.map(Hash::from))
-        .build(&signing_key, MootExt {
+        .build(
+            &signing_key,
+            MootExt {
                 moot_id,
                 prune_flag: PruneFlag::new(prune),
-            });
+            },
+        );
     let hash = header.hash();
     Operation {
         hash,
