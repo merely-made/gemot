@@ -804,11 +804,27 @@ impl<B: Backend + Clone> Moot<B> {
         Ok(records)
     }
 
-    fn constitution_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
+    /// Extract at most one critical evidence section of `kind` addressed to
+    /// this Moot.
+    ///
+    /// Every section obeys the same three rules -- one occurrence, our subject,
+    /// and a body that round-trips to exactly the bytes it arrived as, so an
+    /// importer cannot be handed a re-encoding that means something else. The
+    /// three callers differ only in the wire type, its version and the error
+    /// they report, so the rules live here once rather than in three copies
+    /// that could drift apart.
+    fn evidence_section<T: Serialize + for<'a> Deserialize<'a>>(
+        &self,
+        records: &[DropRecord],
+        kind: EvidenceKind,
+        version: u16,
+        version_of: impl Fn(&T) -> u16,
+        malformed: impl Fn() -> MootError,
+    ) -> Result<Option<T>, MootError> {
         let mut found = None;
         for record in records {
             let DropRecord::Evidence {
-                kind: EvidenceKind::CheckpointAuthorization,
+                kind: record_kind,
                 subject,
                 bytes,
                 critical: true,
@@ -816,77 +832,62 @@ impl<B: Backend + Clone> Moot<B> {
             else {
                 continue;
             };
-            if *subject != self.moot_id.0 || found.is_some() {
-                return Err(MootError::ConstitutionEvidenceMalformed);
-            }
-            let evidence: ConstitutionEvidence =
-                decode_cbor(&bytes[..]).map_err(|_| MootError::ConstitutionEvidenceMalformed)?;
-            if evidence.version != CONSTITUTION_EVIDENCE_VERSION
-                || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
-            {
-                return Err(MootError::ConstitutionEvidenceMalformed);
-            }
-            found = Some(evidence.operations);
-        }
-        found.ok_or(MootError::ConstitutionEvidenceMissing)
-    }
-
-    fn delegation_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
-        let mut found = None;
-        for record in records {
-            let DropRecord::Evidence {
-                kind: EvidenceKind::CapabilityChain,
-                subject,
-                bytes,
-                critical: true,
-            } = record
-            else {
+            if *record_kind != kind {
                 continue;
-            };
-            if *subject != self.moot_id.0 || found.is_some() {
-                return Err(MootError::DelegationEvidenceMalformed);
             }
-            let evidence: DelegationEvidence =
-                decode_cbor(&bytes[..]).map_err(|_| MootError::DelegationEvidenceMalformed)?;
-            if evidence.version != DELEGATION_EVIDENCE_VERSION
+            if *subject != self.moot_id.0 || found.is_some() {
+                return Err(malformed());
+            }
+            let evidence: T = decode_cbor(&bytes[..]).map_err(|_| malformed())?;
+            if version_of(&evidence) != version
                 || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
             {
-                return Err(MootError::DelegationEvidenceMalformed);
-            }
-            found = Some(evidence.operations);
-        }
-        Ok(found.unwrap_or_default())
-    }
-
-    fn domain_evidence(&self, records: &[DropRecord]) -> Result<DomainEvidence, MootError> {
-        let mut found = None;
-        for record in records {
-            let DropRecord::Evidence {
-                kind: EvidenceKind::DomainOperations,
-                subject,
-                bytes,
-                critical: true,
-            } = record
-            else {
-                continue;
-            };
-            if *subject != self.moot_id.0 || found.is_some() {
-                return Err(MootError::DomainEvidenceMalformed);
-            }
-            let evidence: DomainEvidence =
-                decode_cbor(&bytes[..]).map_err(|_| MootError::DomainEvidenceMalformed)?;
-            if evidence.version != DOMAIN_EVIDENCE_VERSION
-                || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
-            {
-                return Err(MootError::DomainEvidenceMalformed);
+                return Err(malformed());
             }
             found = Some(evidence);
         }
-        Ok(found.unwrap_or(DomainEvidence {
-            version: DOMAIN_EVIDENCE_VERSION,
-            membership_operations: Vec::new(),
-            tessera_operations: Vec::new(),
-        }))
+        Ok(found)
+    }
+
+    fn constitution_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
+        self.evidence_section::<ConstitutionEvidence>(
+            records,
+            EvidenceKind::CheckpointAuthorization,
+            CONSTITUTION_EVIDENCE_VERSION,
+            |evidence| evidence.version,
+            || MootError::ConstitutionEvidenceMalformed,
+        )?
+        .map(|evidence| evidence.operations)
+        .ok_or(MootError::ConstitutionEvidenceMissing)
+    }
+
+    fn delegation_evidence(&self, records: &[DropRecord]) -> Result<Vec<DropRecord>, MootError> {
+        Ok(self
+            .evidence_section::<DelegationEvidence>(
+                records,
+                EvidenceKind::CapabilityChain,
+                DELEGATION_EVIDENCE_VERSION,
+                |evidence| evidence.version,
+                || MootError::DelegationEvidenceMalformed,
+            )?
+            .map(|evidence| evidence.operations)
+            .unwrap_or_default())
+    }
+
+    fn domain_evidence(&self, records: &[DropRecord]) -> Result<DomainEvidence, MootError> {
+        Ok(self
+            .evidence_section::<DomainEvidence>(
+                records,
+                EvidenceKind::DomainOperations,
+                DOMAIN_EVIDENCE_VERSION,
+                |evidence| evidence.version,
+                || MootError::DomainEvidenceMalformed,
+            )?
+            .unwrap_or(DomainEvidence {
+                version: DOMAIN_EVIDENCE_VERSION,
+                membership_operations: Vec::new(),
+                tessera_operations: Vec::new(),
+            }))
     }
 
     async fn accept_tessera_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {

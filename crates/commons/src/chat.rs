@@ -4,6 +4,7 @@
 //! the second consumer of Stickleback's causal projection seam after Knot.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority};
 use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
@@ -412,7 +413,9 @@ pub enum ChatReplicaIdentityError {
 #[derive(Clone)]
 struct ChatPolicy {
     space_id: [u8; 32],
-    key_state: Vec<u8>,
+    /// Shared so the sync-lane accept closure hands each admission the same
+    /// serialized keyring instead of copying it per operation.
+    key_state: Arc<Vec<u8>>,
     projected_message_authors: BTreeMap<[u8; 32], [u8; 32]>,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     current_checkpoint: Option<StoredChatCheckpoint>,
@@ -438,7 +441,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
         })?;
         let envelope = decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice())
             .map_err(|error| Reject::new("invalid-chat-ciphertext", error.to_string()))?;
-        let keys = DataKeyring::from_bytes(&self.key_state)
+        let keys = DataKeyring::from_bytes(self.key_state.as_slice())
             .map_err(|error| Reject::new("invalid-chat-key-state", error.to_string()))?;
         let log_id = match operation.header.extensions.class {
             ChatClass::Channel
@@ -746,8 +749,21 @@ impl<B: Backend + Clone> ChatReplica<B> {
     }
 
     pub async fn author(&mut self, event: ChatEvent) -> Result<Operation<ChatExt>, ChatError> {
-        let records = self.load_data_operations().await?;
-        let entries = causal_entries(&records);
+        let retained = self.load_retained().await?;
+        self.author_onto(event, retained).await
+    }
+
+    /// Author one event onto an already-loaded retained history.
+    ///
+    /// The frontier scan and the admission of the resulting operation read the
+    /// same snapshot -- nothing else can have written to this replica in between
+    /// -- so authoring costs one store load rather than one per check.
+    async fn author_onto(
+        &mut self,
+        event: ChatEvent,
+        retained: RetainedChatRecords,
+    ) -> Result<Operation<ChatExt>, ChatError> {
+        let entries = causal_entries(&retained.data);
         let parents = observed_frontier(&entries)?;
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
         let author = signing_key.verifying_key();
@@ -783,7 +799,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             header,
             body: Some(body),
         };
-        self.accept(&operation).await?;
+        self.accept_onto(&operation, retained).await?;
         Ok(operation)
     }
 
@@ -794,12 +810,16 @@ impl<B: Backend + Clone> ChatReplica<B> {
         body: String,
         edited_at_ms: u64,
     ) -> Result<Operation<ChatExt>, ChatError> {
-        self.ensure_owned_projected_message(original).await?;
-        self.author(ChatEvent::MessageEdit(MessageEdit {
-            original,
-            body,
-            edited_at_ms,
-        }))
+        let retained = self.load_retained().await?;
+        self.ensure_owned_projected_message(&retained.data, original)?;
+        self.author_onto(
+            ChatEvent::MessageEdit(MessageEdit {
+                original,
+                body,
+                edited_at_ms,
+            }),
+            retained,
+        )
         .await
     }
 
@@ -809,16 +829,25 @@ impl<B: Backend + Clone> ChatReplica<B> {
         original: [u8; 32],
         deleted_at_ms: u64,
     ) -> Result<Operation<ChatExt>, ChatError> {
-        self.ensure_owned_projected_message(original).await?;
-        self.author(ChatEvent::MessageDelete(MessageDelete {
-            original,
-            deleted_at_ms,
-        }))
+        let retained = self.load_retained().await?;
+        self.ensure_owned_projected_message(&retained.data, original)?;
+        self.author_onto(
+            ChatEvent::MessageDelete(MessageDelete {
+                original,
+                deleted_at_ms,
+            }),
+            retained,
+        )
         .await
     }
 
-    async fn ensure_owned_projected_message(&self, original: [u8; 32]) -> Result<(), ChatError> {
-        let projection = self.projection().await?;
+    fn ensure_owned_projected_message(
+        &self,
+        data_records: &[StoredChatOperation],
+        original: [u8; 32],
+    ) -> Result<(), ChatError> {
+        let projection =
+            project_records(&self.keys, self.space_id, data_records, &AllowAllAuthority)?;
         let message = projection
             .messages
             .iter()
@@ -837,24 +866,28 @@ impl<B: Backend + Clone> ChatReplica<B> {
     }
 
     pub async fn accept(&self, operation: &Operation<ChatExt>) -> Result<bool, ChatError> {
-        let current_checkpoint = self.latest_checkpoint().await?;
-        let projected_message_authors = self
-            .projection()
-            .await?
-            .messages
-            .into_iter()
-            .map(|message| (message.operation, message.author))
-            .collect();
-        let processor = OperationProcessor::new(
-            self.store.clone(),
-            ChatPolicy {
-                space_id: self.space_id,
-                key_state: self.keys.to_bytes()?,
-                projected_message_authors,
-                checkpoint_authority: self.checkpoint_authority.clone(),
-                current_checkpoint,
-            },
-        );
+        let retained = self.load_retained().await?;
+        self.accept_onto(operation, retained).await
+    }
+
+    /// Admit one operation against an already-loaded retained history.
+    ///
+    /// Both admission inputs -- the latest checkpoint and the current projected
+    /// message authors -- come out of one load and one decode of the retained
+    /// history. They used to be two independent full replays of it.
+    async fn accept_onto(
+        &self,
+        operation: &Operation<ChatExt>,
+        retained: RetainedChatRecords,
+    ) -> Result<bool, ChatError> {
+        let policy = chat_policy(
+            self.space_id,
+            &self.keys,
+            Arc::new(self.keys.to_bytes()?),
+            self.checkpoint_authority.clone(),
+            retained,
+        )?;
+        let processor = OperationProcessor::new(self.store.clone(), policy);
         Ok(processor.process(operation).await?.inserted())
     }
 
@@ -1253,6 +1286,10 @@ impl<B: Backend + Clone> ChatReplica<B> {
     async fn load_operations(&self) -> Result<Vec<StoredChatOperation>, ChatError> {
         load_operations_from_store(&self.store, self.space_id).await
     }
+
+    async fn load_retained(&self) -> Result<RetainedChatRecords, ChatError> {
+        Ok(split_chat_records(self.load_operations().await?))
+    }
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
@@ -1264,10 +1301,18 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
         let store = self.sync_store();
         let accept_store = self.store.clone();
         let space_id = self.space_id;
-        let key_state = self
-            .keys
-            .to_bytes()
-            .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?;
+        let key_state = Arc::new(
+            self.keys
+                .to_bytes()
+                .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?,
+        );
+        // Parsed once for the lane, not once per synced operation: the keyring
+        // is fixed for the life of the join, so re-deriving it per admission
+        // bought nothing.
+        let keys = Arc::new(
+            DataKeyring::from_bytes(key_state.as_slice())
+                .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?,
+        );
         let checkpoint_authority = self.checkpoint_authority.clone();
         JoinedSpace::join::<_, u64, _, _>(
             stickleback::lane_id(COMMONS_CHAT_LANE, space_id),
@@ -1278,53 +1323,23 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
             move |operation: Operation<ChatExt>| {
                 let accept_store = accept_store.clone();
                 let key_state = key_state.clone();
+                let keys = keys.clone();
                 let checkpoint_authority = checkpoint_authority.clone();
                 async move {
-                    let Ok(keys) = DataKeyring::from_bytes(&key_state) else {
-                        return false;
-                    };
                     let Ok(records) = load_operations_from_store(&accept_store, space_id).await
                     else {
                         return false;
                     };
-                    let data_records: Vec<_> = records
-                        .iter()
-                        .filter(|record| record.log_id == CHAT_LOG)
-                        .cloned()
-                        .collect();
-                    // Admission is structural: a synced operation is stored
-                    // whatever the current authority verdict says about its
-                    // author, so revocation stays a projection decision that a
-                    // later re-evaluation can reverse.
-                    let Ok(projection) =
-                        project_records(&keys, space_id, &data_records, &AllowAllAuthority)
-                    else {
+                    let Ok(policy) = chat_policy(
+                        space_id,
+                        &keys,
+                        key_state,
+                        checkpoint_authority,
+                        split_chat_records(records),
+                    ) else {
                         return false;
                     };
-                    let projected_message_authors = projection
-                        .messages
-                        .into_iter()
-                        .map(|message| (message.operation, message.author))
-                        .collect();
-                    let checkpoints = records
-                        .into_iter()
-                        .filter(|record| record.log_id == CHAT_CHECKPOINT_LOG)
-                        .collect();
-                    let Ok(current_checkpoint) =
-                        latest_checkpoint_from_records(space_id, &keys, checkpoints)
-                    else {
-                        return false;
-                    };
-                    let processor = OperationProcessor::new(
-                        accept_store,
-                        ChatPolicy {
-                            space_id,
-                            key_state,
-                            projected_message_authors,
-                            checkpoint_authority,
-                            current_checkpoint,
-                        },
-                    );
+                    let processor = OperationProcessor::new(accept_store, policy);
                     matches!(processor.process(&operation).await, Ok(out) if out.inserted())
                 }
             },
@@ -1333,9 +1348,64 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
     }
 }
 
-fn causal_entries(records: &[StoredChatOperation]) -> Vec<CausalEntry<u64>> {
+/// The retained history split by log, loaded once.
+///
+/// Admitting one operation needs the data log (for the projected message
+/// authors) and the checkpoint log (for the current checkpoint). Both used to
+/// be fetched by their own full store read.
+struct RetainedChatRecords {
+    data: Vec<StoredChatOperation>,
+    checkpoints: Vec<StoredChatOperation>,
+}
+
+fn split_chat_records(records: Vec<StoredChatOperation>) -> RetainedChatRecords {
+    let mut data = Vec::new();
+    let mut checkpoints = Vec::new();
+    for record in records {
+        match record.log_id {
+            CHAT_LOG => data.push(record),
+            CHAT_CHECKPOINT_LOG => checkpoints.push(record),
+            _ => {}
+        }
+    }
+    RetainedChatRecords { data, checkpoints }
+}
+
+/// Assemble the admission policy from one decode of the retained history.
+fn chat_policy(
+    space_id: [u8; 32],
+    keys: &DataKeyring,
+    key_state: Arc<Vec<u8>>,
+    checkpoint_authority: Option<ChatCheckpointAuthority>,
+    retained: RetainedChatRecords,
+) -> Result<ChatPolicy, ChatError> {
+    // The checkpoint chain is read before the projection so a broken chain
+    // still reports itself first, as it did when these were two separate
+    // replays of the history.
+    let current_checkpoint = latest_checkpoint_from_records(space_id, keys, retained.checkpoints)?;
+    // Admission is structural: an operation is stored whatever the current
+    // authority verdict says about its author, so revocation stays a projection
+    // decision that a later re-evaluation can reverse.
+    let projected_message_authors =
+        project_records(keys, space_id, &retained.data, &AllowAllAuthority)?
+            .messages
+            .into_iter()
+            .map(|message| (message.operation, message.author))
+            .collect();
+    Ok(ChatPolicy {
+        space_id,
+        key_state,
+        projected_message_authors,
+        checkpoint_authority,
+        current_checkpoint,
+    })
+}
+
+fn causal_entries<'a>(
+    records: impl IntoIterator<Item = &'a StoredChatOperation>,
+) -> Vec<CausalEntry<u64>> {
     records
-        .iter()
+        .into_iter()
         .map(|record| {
             CausalEntry::from_operation(
                 &record.operation,
