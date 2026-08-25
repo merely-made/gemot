@@ -29,7 +29,7 @@
 pub mod call;
 pub mod chat;
 
-use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};
+use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
 use codicil::Codicil;
 use muniment::Backend;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -42,10 +42,9 @@ use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, MunimentStore, OperationPolicy,
+    Admission, CausalEntry, CausalError, CausalIndex, CausalLimits, MunimentStore, OperationPolicy,
     OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
-    causal_projection, happens_before, observed_frontier, stable_writer_subject,
-    validate_causal_metadata,
+    causal_projection, observed_frontier, stable_writer_subject, validate_causal_metadata,
 };
 
 /// One log per author. The commons has no second log class (no separate
@@ -347,19 +346,47 @@ fn causal_journal(
     let entries = causal_entries(records);
     let projection = causal_projection(&entries)?;
     let effective: BTreeSet<_> = projection.order.iter().copied().collect();
+    let causal = CausalIndex::new(&entries);
+    let removals = removal_index(records, &effective);
     let mut journal = Codicil::new();
     for index in projection.order {
-        journal.append(remove_wins_batch(records, &entries, &effective, index));
+        journal.append(remove_wins_batch(
+            records, &entries, &causal, &removals, index,
+        ));
     }
     Ok((journal, projection.pending))
 }
 
+/// Which effective records remove each node identity.
+///
+/// Built once per fold and shared by every batch. Rediscovering it per insert
+/// edit meant rescanning every record for every edit, which is where the fold's
+/// quadratic term came from.
+type RemovalIndex<'a> = BTreeMap<&'a <Container as Identified>::Id, Vec<usize>>;
+
+fn removal_index<'a>(records: &'a [StoredRecord], effective: &BTreeSet<usize>) -> RemovalIndex<'a> {
+    let mut removals = RemovalIndex::new();
+    for index in effective {
+        for edit in &records[*index].record.batch.edits {
+            if let GraphEdit::RemoveNode(id) = edit {
+                removals.entry(id).or_default().push(*index);
+            }
+        }
+    }
+    removals
+}
+
 /// Suppress only inserts concurrent with a removal of the same identity.
 /// Causally later inserts remain deliberate recreation.
+///
+/// `causal` and `removals` are built once per fold by the caller: this asks a
+/// reachability question per insert edit per competing removal, and rebuilding
+/// either of them here made the fold cubic in record count.
 fn remove_wins_batch(
     records: &[StoredRecord],
     entries: &[CausalEntry<u64>],
-    effective: &BTreeSet<usize>,
+    causal: &CausalIndex<'_, u64>,
+    removals: &RemovalIndex<'_>,
     index: usize,
 ) -> CommonsBatch {
     let operation = entries[index].operation;
@@ -368,20 +395,15 @@ fn remove_wins_batch(
         let GraphEdit::InsertNode(node) = edit else {
             return true;
         };
-        !records.iter().enumerate().any(|(other_index, other)| {
-            if other_index == index || !effective.contains(&other_index) {
-                return false;
-            }
-            let removes_same_node =
-                other.record.batch.edits.iter().any(
-                    |candidate| matches!(candidate, GraphEdit::RemoveNode(id) if id == &node.id),
-                );
-            if !removes_same_node {
-                return false;
-            }
-            let removal = entries[other_index].operation;
-            !happens_before(entries, removal, operation)
-                && !happens_before(entries, operation, removal)
+        !removals.get(&node.id).is_some_and(|candidates| {
+            candidates.iter().any(|&other_index| {
+                if other_index == index {
+                    return false;
+                }
+                let removal = entries[other_index].operation;
+                !causal.happens_before(removal, operation)
+                    && !causal.happens_before(operation, removal)
+            })
         })
     });
     batch
@@ -597,8 +619,16 @@ pub async fn materialize_with_authority<
         }
     }
     let effective_set: BTreeSet<_> = effective.iter().copied().collect();
+    let causal_index = CausalIndex::new(&entries);
+    let removals = removal_index(&records, &effective_set);
     for index in effective {
-        journal.append(remove_wins_batch(&records, &entries, &effective_set, index));
+        journal.append(remove_wins_batch(
+            &records,
+            &entries,
+            &causal_index,
+            &removals,
+            index,
+        ));
     }
     Ok(CommonsProjection {
         graph: GraphLog::replay(journal),
