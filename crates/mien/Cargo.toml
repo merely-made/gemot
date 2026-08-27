@@ -1,0 +1,12 @@
+[package]
+name = "mien"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation. A mien is a persona's standing as one moot sees it: reputation in the Mere platform's moot tier, which is per-moot primary with no global score. A viewer moot folds its own ledger together with the moots it concords, one hop and no further, under a composition policy it chooses. A mien is therefore always someone's view of someone, never an objective fact about them."
+readme = "README.md"
+keywords = ["reputation", "standing", "moot", "federation", "trust"]
+categories = ["algorithms"]
+
+[dependencies]
