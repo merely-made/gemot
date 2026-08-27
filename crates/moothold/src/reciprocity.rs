@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Inter-moot reciprocity credits — Phase 5 (the t3 ILL facet).
 //!
 //! The federation's give-and-take, kept as credits rather than cash. A moot earns
