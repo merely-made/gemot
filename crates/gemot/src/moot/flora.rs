@@ -7,8 +7,9 @@
 //! FLORA: social receipts for federated LoRA rounds.
 //!
 //! This is specifically the FLoRA stacking contract: each participant's `A`
-//! factor is stacked vertically, `B` horizontally, and the participant scale
-//! is applied to `B` only. That supports heterogeneous ranks; the global rank
+//! factor is stacked vertically, `B` horizontally, and each participant's
+//! round weight is combined with that adapter's `alpha / rank` and applied to
+//! `B` only. That supports heterogeneous ranks; the global rank
 //! is the exact sum and must fit the signed round budget. Gemot carries only
 //! artifact references and social receipts. Distillery/ESP executes tensors,
 //! Mesh owns jobs and leases, and Eidetic/Muniment stores bytes. Training corpus
@@ -42,16 +43,19 @@ pub struct FloraRoundId(pub [u8; 32]);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FloraParticipant {
     /// FLoRA rank allocated to this contribution.
-    pub rank: u32,
-    /// Scale applied by the tensor executor to this participant's B factor.
-    /// It is deliberately not duplicated onto A.
-    pub scale: FloraScale,
+    pub rank: u16,
+    /// Round contribution weight. The tensor executor computes
+    /// `weight * source_alpha / source_rank` and applies that value to `B`
+    /// exactly once; it is deliberately not duplicated onto `A`.
+    pub weight: FloraWeight,
 }
 
-/// Exact rational participant scale. Tensor execution owns its numeric dtype.
+/// Exact rational round weight. Tensor execution owns its numeric dtype.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FloraScale {
+pub struct FloraWeight {
+    /// Positive numerator of the participant's round weight.
     pub numerator: u32,
+    /// Positive denominator of the participant's round weight.
     pub denominator: u32,
 }
 
@@ -75,21 +79,24 @@ pub struct FloraRoundSpec {
     /// Exact base-model artifact this adapter targets.
     pub base_model: ArtifactRef,
     /// Explicit ceiling for the sum of all participant ranks.
-    pub rank_budget: u32,
+    pub rank_budget: u16,
     /// Keyed by participant identity; each contribution keeps its own rank and
-    /// scale, permitting heterogeneous ranks without compression.
+    /// weight, permitting heterogeneous ranks without compression.
     pub participants: BTreeMap<[u8; 32], FloraParticipant>,
 }
 
 impl FloraRoundSpec {
-    pub fn global_rank(&self) -> Result<u32, FloraValidationError> {
-        let mut total = 0_u32;
+    pub fn global_rank(&self) -> Result<u16, FloraValidationError> {
+        let mut total = 0_u16;
         for participant in self.participants.values() {
             if participant.rank == 0 {
                 return Err(FloraValidationError::ZeroParticipantRank);
             }
-            if participant.scale.denominator == 0 {
-                return Err(FloraValidationError::ZeroScaleDenominator);
+            if participant.weight.numerator == 0 {
+                return Err(FloraValidationError::ZeroWeightNumerator);
+            }
+            if participant.weight.denominator == 0 {
+                return Err(FloraValidationError::ZeroWeightDenominator);
             }
             total = total
                 .checked_add(participant.rank)
@@ -100,7 +107,7 @@ impl FloraRoundSpec {
 
     /// Reject invalid rank declarations rather than silently truncating,
     /// rebalancing, or compressing an adapter.
-    pub fn validate(&self) -> Result<u32, FloraValidationError> {
+    pub fn validate(&self) -> Result<u16, FloraValidationError> {
         if self.rank_budget == 0 {
             return Err(FloraValidationError::ZeroRankBudget);
         }
@@ -126,12 +133,14 @@ pub enum FloraValidationError {
     NoParticipants,
     #[error("a FLORA participant rank must be non-zero")]
     ZeroParticipantRank,
-    #[error("a FLORA participant scale denominator must be non-zero")]
-    ZeroScaleDenominator,
-    #[error("FLORA global rank overflowed u32")]
+    #[error("a FLORA participant weight numerator must be non-zero")]
+    ZeroWeightNumerator,
+    #[error("a FLORA participant weight denominator must be non-zero")]
+    ZeroWeightDenominator,
+    #[error("FLORA global rank overflowed the current u16 adapter contract")]
     RankOverflow,
     #[error("FLORA global rank {global_rank} exceeds explicit budget {budget}")]
-    RankBudgetExceeded { global_rank: u32, budget: u32 },
+    RankBudgetExceeded { global_rank: u16, budget: u16 },
 }
 
 /// Exact out-of-band references to one participant's LoRA factors and its
@@ -150,7 +159,7 @@ pub struct FloraContributionReceipt {
 pub struct FloraCandidateArtifact {
     pub round: FloraRoundId,
     pub adapter: ArtifactRef,
-    pub global_rank: u32,
+    pub global_rank: u16,
     /// This must name the complete signed participant set. A partial set would
     /// change the FLoRA rank, so it is not silently accepted.
     pub contributors: BTreeSet<[u8; 32]>,
@@ -201,7 +210,7 @@ pub struct FloraFact {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloraRoundProjection {
     pub spec: FloraRoundSpec,
-    pub global_rank: u32,
+    pub global_rank: u16,
     pub contributions: BTreeMap<[u8; 32], FloraContributionReceipt>,
     pub viable_candidates: Vec<FloraCandidateArtifact>,
     pub revoked: bool,
@@ -498,7 +507,7 @@ mod tests {
                     [2; 32],
                     FloraParticipant {
                         rank: 2,
-                        scale: FloraScale {
+                        weight: FloraWeight {
                             numerator: 8,
                             denominator: 2,
                         },
@@ -508,7 +517,7 @@ mod tests {
                     [3; 32],
                     FloraParticipant {
                         rank: 3,
-                        scale: FloraScale {
+                        weight: FloraWeight {
                             numerator: 1,
                             denominator: 1,
                         },

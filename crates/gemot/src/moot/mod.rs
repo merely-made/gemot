@@ -102,7 +102,7 @@ pub use delegation::{
 pub use flora::{
     FloraCandidateArtifact, FloraContributionReceipt, FloraEvent, FloraExt, FloraFileStore,
     FloraParticipant, FloraProjection, FloraRoundId, FloraRoundProjection, FloraRoundSpec,
-    FloraScale, FloraStacking, FloraStore, FloraStoreError, FloraValidationError,
+    FloraStacking, FloraStore, FloraStoreError, FloraValidationError, FloraWeight,
 };
 pub use group::store::{MootGroupFileStore, MootGroupStore, MootGroupStoreError};
 pub use group::wire::{MootGroupExt, MootGroupWireError, membership_identity_salt};

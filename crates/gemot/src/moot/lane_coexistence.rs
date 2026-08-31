@@ -45,7 +45,7 @@ use super::delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore,
 };
 use super::{
-    ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraScale,
+    ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraWeight,
     TulpaEvent, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion,
 };
 use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
@@ -277,7 +277,7 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
                         root_id,
                         FloraParticipant {
                             rank: 3,
-                            scale: FloraScale {
+                            weight: FloraWeight {
                                 numerator: 1,
                                 denominator: 1,
                             },
