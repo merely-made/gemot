@@ -458,6 +458,11 @@ impl<B: Backend + Clone> FloraStore<B> {
         Ok(self.store.operation_count().await?)
     }
 
+    /// Whether this store currently contains no FLORA operations.
+    pub async fn is_empty(&self) -> Result<bool, FloraStoreError> {
+        Ok(self.store.operation_count().await? == 0)
+    }
+
     pub async fn fold_moot(&self, moot_id: [u8; 32]) -> Result<FloraProjection, FloraStoreError> {
         let logs: BTreeMap<VerifyingKey, Vec<u64>> =
             self.store.resolve(&Topic::from(moot_id)).await?;
@@ -540,9 +545,11 @@ mod tests {
                 budget: 4,
             })
         );
-        assert!(FloraStacking::A_VERTICALLY_STACKED);
-        assert!(FloraStacking::B_HORIZONTALLY_STACKED);
-        assert!(FloraStacking::SCALE_B_ONLY);
+        const {
+            assert!(FloraStacking::A_VERTICALLY_STACKED);
+            assert!(FloraStacking::B_HORIZONTALLY_STACKED);
+            assert!(FloraStacking::SCALE_B_ONLY);
+        }
     }
 
     #[test]
