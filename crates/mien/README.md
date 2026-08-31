@@ -14,7 +14,7 @@ particular. That is exactly the invariant this tier is built on, and it is
 why the name is not `standing` or `score`, which both suggest a fact about
 the persona rather than a view held by a moot.
 
-Accrual and depreciation are tessera-denominated; the mien is what a moot
+Accrual and depreciation are standing-denominated; the mien is what a moot
 reads off its ledger, alone or composed.
 
 Not the proof of who you are — that is
@@ -22,7 +22,7 @@ Not the proof of who you are — that is
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace under
 `crates/moot/`. No implementation yet; the working code is in `moothold`'s
-concord module and `gemot`'s tessera store.
+concord module and `gemot`'s standing store.
 
 ## License
 

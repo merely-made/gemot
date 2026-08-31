@@ -27,7 +27,7 @@
 //! Upstream p2panda has the same hardcoded id as of 2026-07-31, so this stays
 //! a fork divergence until it is offered upstream.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -44,6 +44,11 @@ use super::constitution::{CapabilityGrant, ConstitutionExt, ConstitutionRules, C
 use super::delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore,
 };
+use super::{
+    ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraScale,
+    TulpaEvent, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion,
+};
+use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
 
 const MOOT: [u8; 32] = [0x7c; 32];
 const ROOT_GRANT: [u8; 32] = [0x7d; 32];
@@ -172,7 +177,7 @@ async fn two_lanes_converge_whichever_joins_the_topic_first() {
     lanes_converge(true).await;
 }
 
-/// The product-shaped join: one call, all five lanes, a late peer catching up
+/// The product-shaped join: one call, all seven lanes, a late peer catching up
 /// on retained governance. This is `Moot::join_lanes`' receipt, and the shape
 /// Turnstone's place worker holds.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -241,6 +246,49 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
         )
         .await
         .unwrap();
+    alice_moot
+        .record_tulpa(
+            root.master_keypair().to_seed(),
+            TulpaEvent::Proposed {
+                proposal: TulpaProposalId([0x79; 32]),
+                action: TulpaProposal::Adopt {
+                    tulpa: TulpaId([0x7a; 32]),
+                    version: TulpaVersion([0x7b; 32]),
+                    artifact: ArtifactRef::blake3(b"two-peer Tulpa receipt"),
+                },
+                recognition: RecognitionContext::new(
+                    RecognitionPolicy::AnyEligible,
+                    ElectorateSnapshot::new(MOOT, [0x7c; 32], [root_id]),
+                ),
+                at_ms: 2,
+            },
+        )
+        .await
+        .unwrap();
+    alice_moot
+        .record_flora(
+            root.master_keypair().to_seed(),
+            FloraEvent::RoundProposed {
+                spec: FloraRoundSpec {
+                    round: FloraRoundId([0x7d; 32]),
+                    base_model: ArtifactRef::blake3(b"two-peer base model"),
+                    rank_budget: 3,
+                    participants: BTreeMap::from([(
+                        root_id,
+                        FloraParticipant {
+                            rank: 3,
+                            scale: FloraScale {
+                                numerator: 1,
+                                denominator: 1,
+                            },
+                        },
+                    )]),
+                },
+                at_ms: 3,
+            },
+        )
+        .await
+        .unwrap();
 
     let (a_endpoint, a_gossip) = alice_transport.sync_parts().unwrap();
     let _alice_lanes = alice_moot.join_lanes(a_endpoint, a_gossip).await.unwrap();
@@ -254,6 +302,8 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
             let governed = bob_moot.snapshot().await;
             if let Ok(snapshot) = governed
                 && snapshot.membership.members.len() == 1
+                && snapshot.tulpa.facts.len() == 1
+                && snapshot.flora.rounds.len() == 1
             {
                 break;
             }
@@ -268,6 +318,8 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
     let snapshot = bob_moot.snapshot().await.unwrap();
     assert_eq!(snapshot.governance.founder, root_id);
     assert_eq!(snapshot.membership.members.len(), 1);
+    assert_eq!(snapshot.tulpa.facts.len(), 1);
+    assert_eq!(snapshot.flora.rounds.len(), 1);
     // Every lane reports its own sync activity: a host status surface must be
     // able to say WHICH lane is behind, not that "some lane" is.
     let status = bob_lanes.sync_status();
@@ -279,6 +331,11 @@ async fn a_late_peer_catches_up_on_the_whole_lane_set() {
         status[2].ops_received >= 1,
         "membership lane received the create"
     );
+    assert!(
+        status[5].ops_received >= 1,
+        "Tulpa lane received the proposal"
+    );
+    assert!(status[6].ops_received >= 1, "FLORA lane received the round");
 }
 
 async fn lanes_converge(delegation_first: bool) {

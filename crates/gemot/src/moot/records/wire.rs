@@ -6,7 +6,7 @@
 
 //! Moot operation-wire bridge — object events as signed p2panda operations.
 //!
-//! Mirrors the tessera and mesh wires: a [`MootEvent`] rides the synced
+//! Mirrors the standing and mesh wires: a [`MootEvent`] rides the synced
 //! event-DAG as a signed `Operation<MootExt>`; the moot id is the signed
 //! addressing extension, so an event for one moot cannot replay into
 //! another; the author signs at its per-author log position, forming a

@@ -6,8 +6,9 @@
 
 //! A Moot community and its bounded record lanes.
 //!
-//! [`Moot`] is the command and snapshot boundary. Its five retained domains are
-//! [`constitution`], [`delegation`], [`group`], [`records`], and [`tessera`].
+//! [`Moot`] is the command and snapshot boundary. Its retained domains are
+//! [`constitution`], [`delegation`], [`group`], [`records`], [`standing`],
+//! [`tulpa`], and [`flora`].
 //! Hosts may adapt the signed wire/store types for LogSync, but Gemot owns
 //! neither a network session nor a UI runtime.
 //!
@@ -21,8 +22,10 @@
 //! winning signed join operations, so unrelated fauna does not invalidate
 //! recognition contexts.
 
+pub mod artifact;
 pub mod constitution;
 pub mod delegation;
+pub mod flora;
 pub mod group;
 mod id;
 /// Cross-lane proof: every lane shares the Moot id as its topic, so the
@@ -32,15 +35,74 @@ mod lane_coexistence;
 mod lanes;
 pub mod records;
 mod service;
-pub mod tessera;
+pub mod standing;
+pub mod tulpa;
 pub mod typed_authorization;
 
+/// Read-only source-compatibility bridge for callers moving from the former
+/// Tessera spelling. The signed event and extension layouts are unchanged, so
+/// an existing `tessera.redb` corpus can be read as Standing facts. New
+/// publication must use [`standing`] and `gemot/standing/v1`.
+#[deprecated(note = "use gemot::moot::standing; the public lane is gemot/standing/v1")]
+pub mod tessera {
+    pub use super::standing::*;
+
+    pub mod event {
+        pub use super::super::standing::event::*;
+        pub type TesseraEvent = super::super::standing::event::StandingEvent;
+    }
+
+    pub mod gate {
+        pub use super::super::standing::gate::*;
+        pub type TesseraFacts = super::super::standing::gate::StandingFacts;
+    }
+
+    pub mod ledger {
+        pub use super::super::standing::ledger::*;
+        pub type TesseraConfig = super::super::standing::ledger::StandingConfig;
+    }
+
+    pub mod persona_chain {
+        pub use super::super::standing::persona_chain::*;
+    }
+
+    pub mod persona_vault {
+        pub use super::super::standing::persona_vault::*;
+    }
+
+    pub mod store {
+        pub use super::super::standing::store::*;
+        pub type TesseraFileStore = super::super::standing::store::StandingFileStore;
+        pub type TesseraStore<B> = super::super::standing::store::StandingStore<B>;
+        pub type TesseraStoreError = super::super::standing::store::StandingStoreError;
+    }
+
+    pub mod wire {
+        pub use super::super::standing::wire::*;
+        pub type TesseraExt = super::super::standing::wire::StandingExt;
+    }
+
+    pub type TesseraEvent = super::standing::StandingEvent;
+    pub type TesseraFacts = super::standing::StandingFacts;
+    pub type TesseraConfig = super::standing::StandingConfig;
+    pub type TesseraFileStore = super::standing::StandingFileStore;
+    pub type TesseraStore<B> = super::standing::StandingStore<B>;
+    pub type TesseraStoreError = super::standing::StandingStoreError;
+    pub type TesseraExt = super::standing::StandingExt;
+}
+
+pub use artifact::ArtifactRef;
 pub use constitution::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
 };
 pub use delegation::{
     MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationError, MootDelegationProjection,
     MootDelegations, MootScopeKeyEpoch,
+};
+pub use flora::{
+    FloraCandidateArtifact, FloraContributionReceipt, FloraEvent, FloraExt, FloraFileStore,
+    FloraParticipant, FloraProjection, FloraRoundId, FloraRoundProjection, FloraRoundSpec,
+    FloraScale, FloraStacking, FloraStore, FloraStoreError, FloraValidationError,
 };
 pub use group::store::{MootGroupFileStore, MootGroupStore, MootGroupStoreError};
 pub use group::wire::{MootGroupExt, MootGroupWireError, membership_identity_salt};
@@ -51,8 +113,8 @@ pub use group::{
 };
 pub use id::MootId;
 pub use lanes::{
-    GEMOT_CONSTITUTION_LANE, GEMOT_DELEGATION_LANE, GEMOT_MEMBERSHIP_LANE, GEMOT_RECORDS_LANE,
-    GEMOT_TESSERA_LANE, MootLanes,
+    GEMOT_CONSTITUTION_LANE, GEMOT_DELEGATION_LANE, GEMOT_FLORA_LANE, GEMOT_MEMBERSHIP_LANE,
+    GEMOT_RECORDS_LANE, GEMOT_STANDING_LANE, GEMOT_TULPA_LANE, MootLanes,
 };
 pub use records::{
     AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry,
@@ -65,5 +127,9 @@ pub use service::{
     Moot, MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,
     MootCheckpointSnapshot, MootCommandReceipt, MootDropImportReceipt, MootDropSelector, MootError,
     MootFile, MootLane, MootOutboundOperation, MootRetentionSettings, MootSnapshot,
+};
+pub use tulpa::{
+    AdoptedTulpaVersion, TulpaEvent, TulpaExt, TulpaFact, TulpaFileStore, TulpaId, TulpaProjection,
+    TulpaProposal, TulpaProposalId, TulpaStore, TulpaStoreError, TulpaVersion,
 };
 pub use typed_authorization::{MootAuthority, TypedMootAuthorization};

@@ -4,12 +4,12 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Two-peer convergence for the tessera lane.
+//! Two-peer convergence for the standing lane.
 //!
 //! After the sibling-posture purity split, gemot no longer owns p2panda-net:
 //! the pump (the LogSync session + the [`stickleback::SyncedSpace`] drain) is
-//! **host-composed**, and tessera keeps only the store, wire-level admission,
-//! and ledger fold. The tessera lane is receive-only (authoring is a direct
+//! **host-composed**, and standing keeps only the store, wire-level admission,
+//! and ledger fold. The standing lane is receive-only (authoring is a direct
 //! `store.insert`, no live publish), so the host just builds the session, drives
 //! it, and folds. These tests play the host so the lane's convergence stays
 //! covered without a production `SyncedMoot` type.
@@ -25,43 +25,43 @@ use p2panda_net::{Endpoint, Gossip};
 use stickleback::JoinedSpace;
 use transport::{P2pandaTransport, PeerID};
 
-use crate::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-use crate::moot::tessera::ledger::{Ledger, TesseraConfig};
-use crate::moot::tessera::store::{TesseraStore, TesseraStoreError};
-use crate::moot::tessera::wire::{TesseraExt, to_operation};
+use crate::moot::standing::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
+use crate::moot::standing::ledger::{Ledger, StandingConfig};
+use crate::moot::standing::store::{StandingStore, StandingStoreError};
+use crate::moot::standing::wire::{StandingExt, to_operation};
 
 const MOOT: [u8; 32] = [0x33; 32];
 
-/// A host-composed tessera session: the store to fold and the joined LogSync
-/// session. The tessera lane is receive-only, so nothing publishes on the
+/// A host-composed standing session: the store to fold and the joined LogSync
+/// session. The standing lane is receive-only, so nothing publishes on the
 /// live lane.
-struct TesseraSession {
-    store: TesseraStore<MemoryBackend>,
+struct StandingSession {
+    store: StandingStore<MemoryBackend>,
     moot_id: [u8; 32],
-    joined: JoinedSpace<TesseraExt>,
+    joined: JoinedSpace<StandingExt>,
 }
 
-impl TesseraSession {
+impl StandingSession {
     async fn join(
         endpoint: Endpoint,
         gossip: Gossip,
-        store: TesseraStore<MemoryBackend>,
+        store: StandingStore<MemoryBackend>,
         moot_id: [u8; 32],
     ) -> Self {
         let accept_store = store.clone();
         let joined = JoinedSpace::join::<_, u64, _, _>(
-            stickleback::lane_id("gemot/tessera/v1", moot_id),
+            stickleback::lane_id("gemot/standing/v1", moot_id),
             store.sync_store(),
             endpoint,
             gossip,
             moot_id,
-            move |op: Operation<TesseraExt>| {
+            move |op: Operation<StandingExt>| {
                 let store = accept_store.clone();
                 async move { matches!(store.accept(moot_id, &op).await, Ok(true)) }
             },
         )
         .await
-        .expect("tessera join");
+        .expect("standing join");
         Self {
             store,
             moot_id,
@@ -69,16 +69,16 @@ impl TesseraSession {
         }
     }
 
-    async fn ledger(&self, config: TesseraConfig) -> Result<Ledger, TesseraStoreError> {
+    async fn ledger(&self, config: StandingConfig) -> Result<Ledger, StandingStoreError> {
         self.store.fold_moot(self.moot_id, config).await
     }
 }
 
 /// A `commit -> fulfil -> govern` chained log for `kp` (scores 11).
-fn commit_fulfil_govern(kp: &Ed25519Keypair) -> Vec<Operation<TesseraExt>> {
+fn commit_fulfil_govern(kp: &Ed25519Keypair) -> Vec<Operation<StandingExt>> {
     let by = ChainRoot(kp.public_key().to_bytes());
     let cid = CommitmentId([0xc1; 32]);
-    let e0 = TesseraEvent::CommitmentMade {
+    let e0 = StandingEvent::CommitmentMade {
         by,
         commitment: cid,
         scope: Scope("host/cluster".into()),
@@ -86,19 +86,19 @@ fn commit_fulfil_govern(kp: &Ed25519Keypair) -> Vec<Operation<TesseraExt>> {
         duration_ms: None,
         at_ms: 1_000,
     };
-    let e1 = TesseraEvent::CommitmentFulfilled {
+    let e1 = StandingEvent::CommitmentFulfilled {
         by,
         commitment: cid,
         at_ms: 1_050,
     };
-    let e2 = TesseraEvent::GovernanceParticipation { by, at_ms: 1_100 };
+    let e2 = StandingEvent::GovernanceParticipation { by, at_ms: 1_100 };
     let op0 = to_operation(kp, MOOT, &e0, 0, None);
     let op1 = to_operation(kp, MOOT, &e1, 1, Some(*op0.hash.as_bytes()));
     let op2 = to_operation(kp, MOOT, &e2, 2, Some(*op1.hash.as_bytes()));
     vec![op0, op1, op2]
 }
 
-/// Two real p2panda-net peers: A holds a tessera log before B connects, B
+/// Two real p2panda-net peers: A holds a standing log before B connects, B
 /// catches up over LogSync, and both fold their stores to the same score.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_moots_converge_on_the_same_scores() {
@@ -120,9 +120,9 @@ async fn two_moots_converge_on_the_same_scores() {
         .await
         .expect("bind bob");
 
-    // The tessera author is a derived persona key; the transport runs on the
+    // The standing author is a derived persona key; the transport runs on the
     // master key. Peer A authors, peer B only receives.
-    let author = alice_provider.derive_keypair(b"tessera-author").unwrap();
+    let author = alice_provider.derive_keypair(b"standing-author").unwrap();
     let author_root = ChainRoot(author.public_key().to_bytes());
 
     // LogSync joins gossip on the derived overlay topic — tag peers with it.
@@ -138,22 +138,22 @@ async fn two_moots_converge_on_the_same_scores() {
         .unwrap();
     bob_t.set_topics(alice_id, &[overlay]).await.unwrap();
 
-    // Alice holds a 3-event tessera log before bob connects (offline catch-up).
-    let alice_store = TesseraStore::in_memory();
+    // Alice holds a 3-event standing log before bob connects (offline catch-up).
+    let alice_store = StandingStore::in_memory();
     for op in commit_fulfil_govern(&author) {
         alice_store.insert(&op).await.unwrap();
     }
-    let bob_store = TesseraStore::in_memory();
+    let bob_store = StandingStore::in_memory();
 
     let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
     let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
-    let alice_moot = TesseraSession::join(a_ep, a_gossip, alice_store, MOOT).await;
-    let bob_moot = TesseraSession::join(b_ep, b_gossip, bob_store, MOOT).await;
+    let alice_moot = StandingSession::join(a_ep, a_gossip, alice_store, MOOT).await;
+    let bob_moot = StandingSession::join(b_ep, b_gossip, bob_store, MOOT).await;
 
     // Bob catches up over LogSync and folds the synced log to score 11.
     let converged = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
-            let ledger = bob_moot.ledger(TesseraConfig::default()).await.unwrap();
+            let ledger = bob_moot.ledger(StandingConfig::default()).await.unwrap();
             if ledger.score(&author_root, 5_000) == 11 {
                 break;
             }
@@ -163,17 +163,17 @@ async fn two_moots_converge_on_the_same_scores() {
     .await;
     assert!(
         converged.is_ok(),
-        "bob converged on alice's tessera score over LogSync within the timeout"
+        "bob converged on alice's standing score over LogSync within the timeout"
     );
 
     // Both peers compute the identical score from their own stores.
     let alice_score = alice_moot
-        .ledger(TesseraConfig::default())
+        .ledger(StandingConfig::default())
         .await
         .unwrap()
         .score(&author_root, 5_000);
     let bob_score = bob_moot
-        .ledger(TesseraConfig::default())
+        .ledger(StandingConfig::default())
         .await
         .unwrap()
         .score(&author_root, 5_000);
@@ -192,7 +192,7 @@ async fn two_moots_converge_on_the_same_scores() {
     // The manual checkpoint returns quickly (already synced).
     let round = bob_moot.joined.resync().await;
     println!(
-        "tessera resync checkpoint: items_received={}",
+        "standing resync checkpoint: items_received={}",
         round.items_received
     );
 }
@@ -219,7 +219,7 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
         .await
         .expect("bind bob");
 
-    let author = alice_provider.derive_keypair(b"tessera-author").unwrap();
+    let author = alice_provider.derive_keypair(b"standing-author").unwrap();
     let author_root = ChainRoot(author.public_key().to_bytes());
 
     // Bootstrap by ticket: each side parses the other's ticket (learning its
@@ -242,21 +242,21 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
         .await
         .unwrap();
 
-    let alice_store = TesseraStore::in_memory();
+    let alice_store = StandingStore::in_memory();
     for op in commit_fulfil_govern(&author) {
         alice_store.insert(&op).await.unwrap();
     }
-    let bob_store = TesseraStore::in_memory();
+    let bob_store = StandingStore::in_memory();
 
     let (a_ep, a_gossip) = alice_t.sync_parts().expect("alice sync parts");
     let (b_ep, b_gossip) = bob_t.sync_parts().expect("bob sync parts");
-    let alice_moot = TesseraSession::join(a_ep, a_gossip, alice_store, MOOT).await;
-    let bob_moot = TesseraSession::join(b_ep, b_gossip, bob_store, MOOT).await;
+    let alice_moot = StandingSession::join(a_ep, a_gossip, alice_store, MOOT).await;
+    let bob_moot = StandingSession::join(b_ep, b_gossip, bob_store, MOOT).await;
 
     let converged = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let score = bob_moot
-                .ledger(TesseraConfig::default())
+                .ledger(StandingConfig::default())
                 .await
                 .unwrap()
                 .score(&author_root, 5_000);
@@ -272,12 +272,12 @@ async fn two_moots_converge_bootstrapped_by_ticket() {
         "bob converged on alice's score via a ticket-bootstrapped connection"
     );
     let alice_score = alice_moot
-        .ledger(TesseraConfig::default())
+        .ledger(StandingConfig::default())
         .await
         .unwrap()
         .score(&author_root, 5_000);
     let bob_score = bob_moot
-        .ledger(TesseraConfig::default())
+        .ledger(StandingConfig::default())
         .await
         .unwrap()
         .score(&author_root, 5_000);

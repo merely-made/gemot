@@ -141,7 +141,7 @@ mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-    use crate::moot::tessera::gate::TesseraFacts;
+    use crate::moot::standing::gate::StandingFacts;
     use capability::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{
@@ -163,7 +163,7 @@ mod tests {
         fn inputs(&self, _request: &MootAuthorizationRequest) -> MootAuthorizationInputs {
             MootAuthorizationInputs {
                 capability_covers: false,
-                facts: TesseraFacts {
+                facts: StandingFacts {
                     is_member: true,
                     ..Default::default()
                 },

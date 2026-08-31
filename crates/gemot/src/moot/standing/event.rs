@@ -4,9 +4,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Tessera event grammar — the authoritative layer.
+//! Standing event grammar — the authoritative layer.
 //!
-//! Tessera-affecting events are signed operations on the event-DAG (the same
+//! Standing-affecting events are signed operations on the event-DAG (the same
 //! wire as murm posts, addressed by space). This module is the *logical* event
 //! form — the decoded shape the [ledger](super::ledger) folds — decoupled from
 //! the operation wire, which a later phase bridges exactly as Murm's
@@ -14,8 +14,8 @@
 //!
 //! **No negative is ever self-issued.** A lapse (silent disappearance past a
 //! commitment's cadence) is *derived* by the ledger from missing heartbeats,
-//! never self-reported. A [`Censure`](TesseraEvent::Censure) and its forgiveness
-//! [`Pardon`](TesseraEvent::Pardon) are issued by a moot's *governance*, never by
+//! never self-reported. A [`Censure`](StandingEvent::Censure) and its forgiveness
+//! [`Pardon`](StandingEvent::Pardon) are issued by a moot's *governance*, never by
 //! the subject. So a persona can neither make themselves look bad nor clear their
 //! own bad standing; both directions come from outside them. (Governance
 //! authorisation is an ingestion concern, like signature validation; the fold
@@ -28,7 +28,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A persona-chain **root** — the stable identity tessera accrues against (not
+/// A persona-chain **root** — the stable identity standing accrues against (not
 /// the leaf persona). Phase 1 treats it as an opaque key; Phase 2 wires it to
 /// the persona chain (`master + persona_id`, root-linked), so a user's standing
 /// follows them across persona forks.
@@ -44,20 +44,20 @@ pub struct CommitmentId(pub [u8; 32]);
 /// The structural scope of a commitment — the cluster-path the pledge covers
 /// (host this cluster, pin this path). Phase 1 carries it as metadata; the
 /// structural cluster-path *capability* it pairs with is the §8.8 caps work
-/// (the cap says *where*, tessera says *whether, right now*).
+/// (the cap says *where*, standing says *whether, right now*).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Scope(pub String);
 
 /// One basis point = 1/10_000. A `Vouch` fraction of `5_000` lends half.
 pub const BASIS_POINTS: u32 = 10_000;
 
-/// A signed tessera event. Most are positive assertions a subject makes about
+/// A signed standing event. Most are positive assertions a subject makes about
 /// their own commitment or participation; the community-issued [`Pardon`](Self::Pardon)
 /// and [`Censure`](Self::Censure) are the exception (a moot's governance restoring
 /// or removing standing). The self-inflicted stick, lapse, is *derived* by the
 /// [ledger](super::ledger), not emitted.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TesseraEvent {
+pub enum StandingEvent {
     /// A pledge: host a service, pin a cluster, take a role. Opens a commitment
     /// the owner must keep alive with heartbeats and close cleanly.
     CommitmentMade {
@@ -78,7 +78,7 @@ pub enum TesseraEvent {
         commitment: CommitmentId,
         at_ms: u64,
     },
-    /// The commitment was kept — closes it and raises the owner's tessera.
+    /// The commitment was kept — closes it and raises the owner's standing.
     CommitmentFulfilled {
         by: ChainRoot,
         commitment: CommitmentId,
@@ -133,18 +133,18 @@ pub enum TesseraEvent {
     },
 }
 
-impl TesseraEvent {
+impl StandingEvent {
     /// The event's author-asserted timestamp (ms).
     pub fn at_ms(&self) -> u64 {
         match self {
-            TesseraEvent::CommitmentMade { at_ms, .. }
-            | TesseraEvent::Heartbeat { at_ms, .. }
-            | TesseraEvent::CommitmentFulfilled { at_ms, .. }
-            | TesseraEvent::CleanHandoff { at_ms, .. }
-            | TesseraEvent::Vouch { at_ms, .. }
-            | TesseraEvent::GovernanceParticipation { at_ms, .. }
-            | TesseraEvent::Pardon { at_ms, .. }
-            | TesseraEvent::Censure { at_ms, .. } => *at_ms,
+            StandingEvent::CommitmentMade { at_ms, .. }
+            | StandingEvent::Heartbeat { at_ms, .. }
+            | StandingEvent::CommitmentFulfilled { at_ms, .. }
+            | StandingEvent::CleanHandoff { at_ms, .. }
+            | StandingEvent::Vouch { at_ms, .. }
+            | StandingEvent::GovernanceParticipation { at_ms, .. }
+            | StandingEvent::Pardon { at_ms, .. }
+            | StandingEvent::Censure { at_ms, .. } => *at_ms,
         }
     }
 }
@@ -158,7 +158,7 @@ mod tests {
         let root = ChainRoot([1; 32]);
         let cid = CommitmentId([2; 32]);
         let events = [
-            TesseraEvent::CommitmentMade {
+            StandingEvent::CommitmentMade {
                 by: root,
                 commitment: cid,
                 scope: Scope("a/b".into()),
@@ -166,43 +166,43 @@ mod tests {
                 duration_ms: None,
                 at_ms: 1,
             },
-            TesseraEvent::Heartbeat {
+            StandingEvent::Heartbeat {
                 by: root,
                 commitment: cid,
                 at_ms: 2,
             },
-            TesseraEvent::CommitmentFulfilled {
+            StandingEvent::CommitmentFulfilled {
                 by: root,
                 commitment: cid,
                 at_ms: 3,
             },
-            TesseraEvent::CleanHandoff {
+            StandingEvent::CleanHandoff {
                 from: root,
                 to: ChainRoot([9; 32]),
                 commitment: cid,
                 at_ms: 4,
             },
-            TesseraEvent::Vouch {
+            StandingEvent::Vouch {
                 voucher: root,
                 newcomer: ChainRoot([9; 32]),
                 fraction_bp: 5_000,
                 at_ms: 5,
             },
-            TesseraEvent::GovernanceParticipation { by: root, at_ms: 6 },
-            TesseraEvent::Pardon {
+            StandingEvent::GovernanceParticipation { by: root, at_ms: 6 },
+            StandingEvent::Pardon {
                 by: ChainRoot([50; 32]),
                 target: root,
                 weight: 10,
                 at_ms: 7,
             },
-            TesseraEvent::Censure {
+            StandingEvent::Censure {
                 by: ChainRoot([50; 32]),
                 target: root,
                 weight: 10,
                 at_ms: 8,
             },
         ];
-        let stamps: Vec<u64> = events.iter().map(TesseraEvent::at_ms).collect();
+        let stamps: Vec<u64> = events.iter().map(StandingEvent::at_ms).collect();
         assert_eq!(stamps, vec![1, 2, 3, 4, 5, 6, 7, 8]);
     }
 }

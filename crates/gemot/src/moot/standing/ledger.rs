@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The tessera projection — folds events into a per-chain-root score.
+//! The standing projection — folds events into a per-chain-root score.
 //!
 //! Standing is event-sourced: the signed events are authoritative, the score is
 //! a projection (the same content-authoritative / experience-derived rule the
@@ -20,12 +20,12 @@
 
 use std::collections::HashMap;
 
-use crate::moot::tessera::event::{BASIS_POINTS, ChainRoot, CommitmentId, TesseraEvent};
+use crate::moot::standing::event::{BASIS_POINTS, ChainRoot, CommitmentId, StandingEvent};
 
 /// Tunable weights and curves for the score. Per-moot configurable — the plan
 /// keeps no global hardcoded reputation economy — these are the defaults.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TesseraConfig {
+pub struct StandingConfig {
     /// Reward for keeping a commitment (`CommitmentFulfilled`).
     pub fulfil_reward: i64,
     /// Penalty applied while a commitment is lapsed (silent past its cadence).
@@ -34,14 +34,14 @@ pub struct TesseraConfig {
     pub governance_reward: i64,
     /// Fraction (basis points) of a chain root's *positive* standing a forked
     /// persona presents, applied once per generation from the root — the Sybil
-    /// cost of a fresh face. See [`crate::moot::tessera::persona_chain`].
+    /// cost of a fresh face. See [`crate::moot::standing::persona_chain`].
     pub depreciation_bp: u16,
     /// Fraction (basis points) of a censure that loops back onto each persona who
     /// vouched for the censured one — the accountability cost of vouching. Phase 3.
     pub vouch_loopback_bp: u16,
 }
 
-impl Default for TesseraConfig {
+impl Default for StandingConfig {
     fn default() -> Self {
         Self {
             fulfil_reward: 10,
@@ -78,14 +78,14 @@ impl Commitment {
     }
 }
 
-/// The folded tessera ledger: open commitments plus non-lapse accruals.
+/// The folded standing ledger: open commitments plus non-lapse accruals.
 ///
 /// Lapse penalties are *not* folded in; they are applied at score time because
 /// they depend on the clock. Build one with [`Ledger::from_events`] (or
 /// [`Ledger::apply`] incrementally), then read [`Ledger::scores`] for a moment.
 #[derive(Clone, Debug)]
 pub struct Ledger {
-    config: TesseraConfig,
+    config: StandingConfig,
     commitments: HashMap<CommitmentId, Commitment>,
     /// Fulfilment + governance + vouch accruals (everything except lapse).
     accruals: HashMap<ChainRoot, i64>,
@@ -96,7 +96,7 @@ pub struct Ledger {
 
 impl Ledger {
     /// An empty ledger with the given weights.
-    pub fn new(config: TesseraConfig) -> Self {
+    pub fn new(config: StandingConfig) -> Self {
         Self {
             config,
             commitments: HashMap::new(),
@@ -106,12 +106,12 @@ impl Ledger {
     }
 
     /// This ledger's weights (read by the persona-chain depreciation curve).
-    pub fn config(&self) -> &TesseraConfig {
+    pub fn config(&self) -> &StandingConfig {
         &self.config
     }
 
     /// Fold a whole event sequence (in causal / DAG order).
-    pub fn from_events(config: TesseraConfig, events: &[TesseraEvent]) -> Self {
+    pub fn from_events(config: StandingConfig, events: &[StandingEvent]) -> Self {
         let mut ledger = Self::new(config);
         for event in events {
             ledger.apply(event);
@@ -133,9 +133,9 @@ impl Ledger {
     }
 
     /// Fold one event into the ledger.
-    pub fn apply(&mut self, event: &TesseraEvent) {
+    pub fn apply(&mut self, event: &StandingEvent) {
         match event {
-            TesseraEvent::CommitmentMade {
+            StandingEvent::CommitmentMade {
                 by,
                 commitment,
                 cadence_ms,
@@ -151,7 +151,7 @@ impl Ledger {
                     closed: false,
                 });
             }
-            TesseraEvent::Heartbeat {
+            StandingEvent::Heartbeat {
                 by,
                 commitment,
                 at_ms,
@@ -163,7 +163,7 @@ impl Ledger {
                     }
                 }
             }
-            TesseraEvent::CommitmentFulfilled { by, commitment, .. } => {
+            StandingEvent::CommitmentFulfilled { by, commitment, .. } => {
                 // Scope the &mut borrow (closing the commitment) before the
                 // accrual, which is a fresh borrow of `self`.
                 let fulfilled = match self.open_owned_by(commitment, by) {
@@ -177,7 +177,7 @@ impl Ledger {
                     *self.accruals.entry(*by).or_default() += self.config.fulfil_reward;
                 }
             }
-            TesseraEvent::CleanHandoff {
+            StandingEvent::CleanHandoff {
                 from,
                 to,
                 commitment,
@@ -190,7 +190,7 @@ impl Ledger {
                     c.last_alive_ms = *at_ms;
                 }
             }
-            TesseraEvent::Vouch {
+            StandingEvent::Vouch {
                 voucher,
                 newcomer,
                 fraction_bp,
@@ -211,10 +211,10 @@ impl Ledger {
                     *self.accruals.entry(*newcomer).or_default() += lent;
                 }
             }
-            TesseraEvent::GovernanceParticipation { by, .. } => {
+            StandingEvent::GovernanceParticipation { by, .. } => {
                 *self.accruals.entry(*by).or_default() += self.config.governance_reward;
             }
-            TesseraEvent::Pardon {
+            StandingEvent::Pardon {
                 by, target, weight, ..
             } => {
                 // Community forgiveness. You cannot pardon yourself, so a
@@ -224,7 +224,7 @@ impl Ledger {
                     *self.accruals.entry(*target).or_default() += *weight as i64;
                 }
             }
-            TesseraEvent::Censure {
+            StandingEvent::Censure {
                 by, target, weight, ..
             } => {
                 if by != target {
@@ -283,7 +283,7 @@ impl Ledger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::tessera::event::Scope;
+    use crate::moot::standing::event::Scope;
 
     fn root(n: u8) -> ChainRoot {
         ChainRoot([n; 32])
@@ -291,8 +291,8 @@ mod tests {
     fn cid(n: u8) -> CommitmentId {
         CommitmentId([n; 32])
     }
-    fn made(by: ChainRoot, commitment: CommitmentId, cadence_ms: u64, at_ms: u64) -> TesseraEvent {
-        TesseraEvent::CommitmentMade {
+    fn made(by: ChainRoot, commitment: CommitmentId, cadence_ms: u64, at_ms: u64) -> StandingEvent {
+        StandingEvent::CommitmentMade {
             by,
             commitment,
             scope: Scope("session".into()),
@@ -307,10 +307,10 @@ mod tests {
         let a = root(1);
         let c = cid(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: a,
                     commitment: c,
                     at_ms: 50,
@@ -329,7 +329,7 @@ mod tests {
     fn silent_commitment_lapses_after_cadence() {
         let a = root(1);
         let c = cid(1);
-        let ledger = Ledger::from_events(TesseraConfig::default(), &[made(a, c, 100, 0)]);
+        let ledger = Ledger::from_events(StandingConfig::default(), &[made(a, c, 100, 0)]);
         // Within cadence: not yet lapsed.
         assert_eq!(ledger.score(&a, 100), 0);
         // Past cadence with no heartbeat: the stick.
@@ -341,14 +341,14 @@ mod tests {
     fn heartbeats_keep_it_alive_then_lapse_and_revive() {
         let a = root(1);
         let c = cid(1);
-        let mut ledger = Ledger::new(TesseraConfig::default());
+        let mut ledger = Ledger::new(StandingConfig::default());
         ledger.apply(&made(a, c, 100, 0));
-        ledger.apply(&TesseraEvent::Heartbeat {
+        ledger.apply(&StandingEvent::Heartbeat {
             by: a,
             commitment: c,
             at_ms: 80,
         });
-        ledger.apply(&TesseraEvent::Heartbeat {
+        ledger.apply(&StandingEvent::Heartbeat {
             by: a,
             commitment: c,
             at_ms: 160,
@@ -358,7 +358,7 @@ mod tests {
         // Goes silent: lapsed well past the last heartbeat + cadence.
         assert_eq!(ledger.score(&a, 400), -20);
         // Revive: a fresh heartbeat un-lapses it as of a later-but-close clock.
-        ledger.apply(&TesseraEvent::Heartbeat {
+        ledger.apply(&StandingEvent::Heartbeat {
             by: a,
             commitment: c,
             at_ms: 410,
@@ -377,10 +377,10 @@ mod tests {
         let c = cid(1);
         // A pledges, hands off to B cleanly, then B ghosts it.
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CleanHandoff {
+                StandingEvent::CleanHandoff {
                     from: a,
                     to: b,
                     commitment: c,
@@ -400,16 +400,16 @@ mod tests {
         let b = root(2);
         let c = cid(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 made(a, c, 100, 0),
-                TesseraEvent::CleanHandoff {
+                StandingEvent::CleanHandoff {
                     from: a,
                     to: b,
                     commitment: c,
                     at_ms: 50,
                 },
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: b,
                     commitment: c,
                     at_ms: 80,
@@ -430,16 +430,16 @@ mod tests {
         let stranger = root(9);
         let c = cid(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 made(a, c, 100, 0),
                 // A stranger's heartbeat + fulfilment must not count.
-                TesseraEvent::Heartbeat {
+                StandingEvent::Heartbeat {
                     by: stranger,
                     commitment: c,
                     at_ms: 90,
                 },
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: stranger,
                     commitment: c,
                     at_ms: 95,
@@ -456,10 +456,10 @@ mod tests {
     fn governance_participation_rewards() {
         let a = root(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
-                TesseraEvent::GovernanceParticipation { by: a, at_ms: 1 },
-                TesseraEvent::GovernanceParticipation { by: a, at_ms: 2 },
+                StandingEvent::GovernanceParticipation { by: a, at_ms: 1 },
+                StandingEvent::GovernanceParticipation { by: a, at_ms: 2 },
             ],
         );
         assert_eq!(ledger.score(&a, 10), 2);
@@ -471,16 +471,16 @@ mod tests {
         let b = root(2);
         let c = cid(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 // A earns 10 by fulfilling, then vouches half of it to newcomer B.
                 made(a, c, 100, 0),
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: a,
                     commitment: c,
                     at_ms: 10,
                 },
-                TesseraEvent::Vouch {
+                StandingEvent::Vouch {
                     voucher: a,
                     newcomer: b,
                     fraction_bp: 5_000,
@@ -506,17 +506,17 @@ mod tests {
         let b = root(2);
         let (c1, c2) = (cid(1), cid(2));
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 // A keeps one commitment, ghosts another; B participates in governance.
                 made(a, c1, 100, 0),
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: a,
                     commitment: c1,
                     at_ms: 40,
                 },
                 made(a, c2, 100, 0), // never heartbeated -> will lapse
-                TesseraEvent::GovernanceParticipation { by: b, at_ms: 5 },
+                StandingEvent::GovernanceParticipation { by: b, at_ms: 5 },
             ],
         );
         // A: +10 fulfilled, -20 lapsed = -10. B: +1 governance.
@@ -529,8 +529,8 @@ mod tests {
         let a = root(1);
         let gov = root(50); // a moot's governance identity
         let censured = Ledger::from_events(
-            TesseraConfig::default(),
-            &[TesseraEvent::Censure {
+            StandingConfig::default(),
+            &[StandingEvent::Censure {
                 by: gov,
                 target: a,
                 weight: 30,
@@ -541,15 +541,15 @@ mod tests {
 
         // A later pardon of the same weight restores the standing.
         let pardoned = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
-                TesseraEvent::Censure {
+                StandingEvent::Censure {
                     by: gov,
                     target: a,
                     weight: 30,
                     at_ms: 1,
                 },
-                TesseraEvent::Pardon {
+                StandingEvent::Pardon {
                     by: gov,
                     target: a,
                     weight: 30,
@@ -565,10 +565,10 @@ mod tests {
         let a = root(1);
         let gov = root(50);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 made(a, cid(1), 100, 0), // ghosted -> lapses (-20)
-                TesseraEvent::Pardon {
+                StandingEvent::Pardon {
                     by: gov,
                     target: a,
                     weight: 20,
@@ -585,15 +585,15 @@ mod tests {
         let a = root(1);
         // A self-pardon and a self-censure are both ignored (by == target).
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
-                TesseraEvent::Pardon {
+                StandingEvent::Pardon {
                     by: a,
                     target: a,
                     weight: 100,
                     at_ms: 1,
                 },
-                TesseraEvent::Censure {
+                StandingEvent::Censure {
                     by: a,
                     target: a,
                     weight: 100,
@@ -610,22 +610,22 @@ mod tests {
         let b = root(2); // newcomer
         let gov = root(50);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
+            StandingConfig::default(),
             &[
                 // A earns standing, vouches for B, then B is censured.
                 made(a, cid(1), 100, 0),
-                TesseraEvent::CommitmentFulfilled {
+                StandingEvent::CommitmentFulfilled {
                     by: a,
                     commitment: cid(1),
                     at_ms: 10,
                 },
-                TesseraEvent::Vouch {
+                StandingEvent::Vouch {
                     voucher: a,
                     newcomer: b,
                     fraction_bp: 5_000,
                     at_ms: 20,
                 },
-                TesseraEvent::Censure {
+                StandingEvent::Censure {
                     by: gov,
                     target: b,
                     weight: 30,
@@ -644,8 +644,8 @@ mod tests {
         let b = root(2);
         let gov = root(50);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
-            &[TesseraEvent::Censure {
+            StandingConfig::default(),
+            &[StandingEvent::Censure {
                 by: gov,
                 target: b,
                 weight: 30,

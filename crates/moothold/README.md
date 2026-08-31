@@ -23,7 +23,7 @@ is now `gemot`; from 0.1.0 `moothold` means the tier.
 `RepLens::composite_score` folds a persona's own-moot standing together with
 its concorded moots' depreciated scores, weighted in basis points. Concords are
 one hop: a lens never traverses another moot's concords. Concorded moots whose
-`TesseraConfig` differs from the viewer's are dropped from the sum.
+`StandingConfig` differs from the viewer's are dropped from the sum.
 
 `Reciprocity` is a directed `(provider, beneficiary)` credit ledger.
 `may_request` returns false once a requester's unreciprocated balance exceeds
@@ -46,7 +46,7 @@ non-founder operation is rejected (`MootholdError::StaleRevision`,
 
 ## Dependencies
 
-`gemot` for `MootId`, `Ledger`, `TesseraConfig`, and `PersonaChains`.
+`gemot` for `MootId`, `Ledger`, `StandingConfig`, and `PersonaChains`.
 `stickleback` for admission and the muniment-backed store, `muniment` (`redb`)
 for durable backing, `p2panda-core` and `p2panda-store` (0.7) for signed
 operations, `serde`, `thiserror`. `tempfile` and `tokio` are dev-only.

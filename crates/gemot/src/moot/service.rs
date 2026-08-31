@@ -11,7 +11,7 @@
 //! through the shared processor, and return plain receipts and snapshots.
 
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use muniment::{Backend, MemoryBackend, RedbBackend};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -31,6 +31,9 @@ use super::delegation::{
     MootDelegationProjection, MootDelegationStore, MootDelegationStoreError, MootDelegations,
     MootScopeKeyEpoch,
 };
+use super::flora::{
+    FloraEvent, FloraExt, FloraFileStore, FloraProjection, FloraStore, FloraStoreError,
+};
 use super::group::store::{MootGroupStore, MootGroupStoreError};
 use super::group::wire::MootGroupExt;
 use super::group::{MootGroup, MootGroupSnapshot, MootMembershipAction};
@@ -40,15 +43,31 @@ use super::records::{
     AvailabilityPolicy, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy, MootRoster,
     MootStore, MootStoreError, PolicyRevision,
 };
-use super::tessera::{
-    GateDecision, TesseraEvent, TesseraExt, TesseraFacts, TesseraFileStore, TesseraStore,
-    TesseraStoreError, authorize,
+use super::standing::{
+    GateDecision, StandingEvent, StandingExt, StandingFacts, StandingFileStore, StandingStore,
+    StandingStoreError, authorize,
+};
+use super::tulpa::{
+    TulpaEvent, TulpaExt, TulpaFileStore, TulpaProjection, TulpaStore, TulpaStoreError,
 };
 use super::typed_authorization::MootAuthority;
 
 const CONSTITUTION_EVIDENCE_VERSION: u16 = 1;
 const DELEGATION_EVIDENCE_VERSION: u16 = 1;
 const DOMAIN_EVIDENCE_VERSION: u16 = 1;
+
+/// Prefer the Standing file for new state, but keep the renamed domain able to
+/// read an existing Tessera corpus. The wire structs retain their exact serde
+/// layout, so no lossy rewrite or offline compaction is needed for this bridge.
+fn standing_store_path(directory: &Path) -> PathBuf {
+    let standing = directory.join("standing.redb");
+    if standing.exists() {
+        standing
+    } else {
+        let legacy = directory.join("tessera.redb");
+        if legacy.exists() { legacy } else { standing }
+    }
+}
 
 /// Stable privacy and radio-budget priorities for an importable Moot drop.
 /// Every selected record remains full-bodied because a signed log with a
@@ -100,7 +119,12 @@ struct DelegationEvidence {
 struct DomainEvidence {
     version: u16,
     membership_operations: Vec<DropRecord>,
-    tessera_operations: Vec<DropRecord>,
+    #[serde(alias = "tessera_operations")]
+    standing_operations: Vec<DropRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    tulpa_operations: Vec<DropRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    flora_operations: Vec<DropRecord>,
 }
 
 /// Retention settings supplied by the Moot's governed configuration.
@@ -149,8 +173,12 @@ pub struct MootSnapshot {
     pub checkpoint: Option<MootCheckpointSnapshot>,
     /// Signed delegated certificates retained in the current authority fold.
     pub delegated_certificates: usize,
-    /// Signed Tessera operations retained for the Moot's trust projection.
-    pub tessera_operations: usize,
+    /// Signed Standing operations retained for the Moot's trust projection.
+    pub standing_operations: usize,
+    /// Retained Tulpa facts and their effective adopted versions.
+    pub tulpa: TulpaProjection,
+    /// Retained federated-LoRA facts and compatibility-checked candidates.
+    pub flora: FloraProjection,
 }
 
 /// A request to evaluate one capability-scoped community action.
@@ -168,7 +196,7 @@ pub struct MootAuthorizationRequest {
 
 /// Inputs supplied by the Moot's membership and capability authority.
 ///
-/// The provider answers structural access and supplies the current Tessera
+/// The provider answers structural access and supplies the current Standing
 /// facts. Its `facts.is_member` field is the single membership input for a
 /// members-only constitution; `capability_covers` is the corresponding scoped
 /// live decision. [`Moot::authorize_constitution_grant`] intersects it with the
@@ -178,7 +206,7 @@ pub struct MootAuthorizationRequest {
 #[derive(Clone, Debug, Default)]
 pub struct MootAuthorizationInputs {
     pub capability_covers: bool,
-    pub facts: TesseraFacts,
+    pub facts: StandingFacts,
 }
 
 /// Supplies membership, scoped-capability, and reputation facts at the Moot
@@ -187,7 +215,7 @@ pub struct MootAuthorizationInputs {
 /// This is deliberately an injected read boundary. The signed constitution
 /// chooses the admission policy; the provider is the replaceable source of
 /// current group membership and grants. A future p2panda group-state/key
-/// adapter belongs here, rather than in the constitution fold or Tessera log.
+/// adapter belongs here, rather than in the constitution fold or Standing log.
 pub trait MootAuthorizationProvider {
     fn inputs(&self, request: &MootAuthorizationRequest) -> MootAuthorizationInputs;
 }
@@ -206,7 +234,9 @@ pub struct MootCommandReceipt {
 pub enum MootLane {
     Membership,
     Objects,
-    Tessera,
+    Standing,
+    Tulpa,
+    Flora,
 }
 
 /// A signed operation recovered from a command receipt for host-side live
@@ -215,7 +245,9 @@ pub enum MootLane {
 pub enum MootOutboundOperation {
     Membership(p2panda_core::Operation<MootGroupExt>),
     Object(p2panda_core::Operation<super::MootExt>),
-    Tessera(p2panda_core::Operation<TesseraExt>),
+    Standing(p2panda_core::Operation<StandingExt>),
+    Tulpa(p2panda_core::Operation<TulpaExt>),
+    Flora(p2panda_core::Operation<FloraExt>),
 }
 
 /// Native-drop import result plus the refreshed materialized view.
@@ -225,7 +257,9 @@ pub struct MootDropImportReceipt {
     pub constitution_operations: u64,
     pub delegation_operations: u64,
     pub membership_operations: u64,
-    pub tessera_operations: u64,
+    pub standing_operations: u64,
+    pub tulpa_operations: u64,
+    pub flora_operations: u64,
     pub snapshot: MootSnapshot,
 }
 
@@ -237,7 +271,11 @@ pub enum MootError {
     #[error(transparent)]
     Store(#[from] MootStoreError),
     #[error(transparent)]
-    Tessera(#[from] TesseraStoreError),
+    Standing(#[from] StandingStoreError),
+    #[error(transparent)]
+    Tulpa(#[from] TulpaStoreError),
+    #[error(transparent)]
+    Flora(#[from] FloraStoreError),
     #[error(transparent)]
     Delegation(#[from] MootDelegationStoreError),
     #[error(transparent)]
@@ -270,7 +308,9 @@ pub struct Moot<B> {
     moot_id: MootId,
     governance: MootGovernance<B>,
     objects: MootStore<B>,
-    tessera: TesseraStore<B>,
+    standing: StandingStore<B>,
+    tulpa: TulpaStore<B>,
+    flora: FloraStore<B>,
     delegations: MootDelegationStore<B>,
     membership: MootGroupStore<B>,
     retention: MootRetentionSettings,
@@ -285,7 +325,9 @@ impl Moot<MemoryBackend> {
             moot_id,
             governance: MootGovernance::in_memory(moot_id.0, founder),
             objects: MootStore::in_memory(),
-            tessera: TesseraStore::in_memory(),
+            standing: StandingStore::in_memory(),
+            tulpa: TulpaStore::in_memory(),
+            flora: FloraStore::in_memory(),
             delegations: MootDelegationStore::in_memory(moot_id.0),
             membership: MootGroupStore::in_memory(moot_id.0),
             retention,
@@ -311,7 +353,9 @@ impl Moot<RedbBackend> {
                 founder,
             )?,
             objects: MootStore::at_path(directory.as_ref().join("objects.redb"))?,
-            tessera: TesseraFileStore::open(directory.as_ref().join("tessera.redb"))?,
+            standing: StandingFileStore::open(standing_store_path(directory.as_ref()))?,
+            tulpa: TulpaFileStore::open(directory.as_ref().join("tulpa.redb"))?,
+            flora: FloraFileStore::open(directory.as_ref().join("flora.redb"))?,
             delegations: super::delegation::MootDelegationFileStore::open(
                 directory.as_ref().join("delegations.redb"),
                 moot_id.0,
@@ -347,7 +391,9 @@ impl Moot<RedbBackend> {
             )
             .await?,
             objects: MootStore::at_path(directory.as_ref().join("objects.redb"))?,
-            tessera: TesseraFileStore::open(directory.as_ref().join("tessera.redb"))?,
+            standing: StandingFileStore::open(standing_store_path(directory.as_ref()))?,
+            tulpa: TulpaFileStore::open(directory.as_ref().join("tulpa.redb"))?,
+            flora: FloraFileStore::open(directory.as_ref().join("flora.redb"))?,
             delegations: super::delegation::MootDelegationFileStore::open(
                 directory.as_ref().join("delegations.redb"),
                 moot_id.0,
@@ -378,9 +424,19 @@ impl<B: Backend + Clone> Moot<B> {
         &self.objects
     }
 
-    /// Lower store boundary for a host-composed Tessera LogSync session.
-    pub fn tessera_store(&self) -> &TesseraStore<B> {
-        &self.tessera
+    /// Lower store boundary for a host-composed Standing LogSync session.
+    pub fn standing_store(&self) -> &StandingStore<B> {
+        &self.standing
+    }
+
+    /// Lower store boundary for the social Tulpa lane.
+    pub fn tulpa_store(&self) -> &TulpaStore<B> {
+        &self.tulpa
+    }
+
+    /// Lower store boundary for the FLORA receipt lane.
+    pub fn flora_store(&self) -> &FloraStore<B> {
+        &self.flora
     }
 
     /// Independent delegation lane for host-composed LogSync publication.
@@ -661,22 +717,61 @@ impl<B: Backend + Clone> Moot<B> {
         })
     }
 
-    /// Record one Tessera fact through the same aggregate command surface.
+    /// Record one Standing fact through the same aggregate command surface.
     /// The receipt can be resolved with [`outbound`](Self::outbound) and
-    /// published by the host on its Tessera LogSync handle.
-    pub async fn record_tessera(
+    /// published by the host on its Standing LogSync handle.
+    pub async fn record_standing(
         &self,
         actor_seed: [u8; 32],
-        event: TesseraEvent,
+        event: StandingEvent,
     ) -> Result<MootCommandReceipt, MootError> {
         self.governance.snapshot().await?;
         let operation = self
-            .tessera
+            .standing
             .author_seed(actor_seed, self.moot_id.0, &event)
             .await?;
         Ok(MootCommandReceipt {
             operation: *operation.hash.as_bytes(),
-            lane: MootLane::Tessera,
+            lane: MootLane::Standing,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Retain one Tulpa proposal or endorsement. Recognition remains a
+    /// projection over the proposal's frozen electorate, so recording this fact
+    /// never grants its author a separate governance power.
+    pub async fn record_tulpa(
+        &self,
+        actor_seed: [u8; 32],
+        event: TulpaEvent,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self
+            .tulpa
+            .author_seed(actor_seed, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Tulpa,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Retain a FLORA round specification, contribution receipt, or candidate
+    /// artifact reference. The operation contains no training or tensor bytes.
+    pub async fn record_flora(
+        &self,
+        actor_seed: [u8; 32],
+        event: FloraEvent,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self
+            .flora
+            .author_seed(actor_seed, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Flora,
             snapshot: self.snapshot().await?,
         })
     }
@@ -702,11 +797,23 @@ impl<B: Backend + Clone> Moot<B> {
                 .await?
                 .map(MootOutboundOperation::Object)
                 .ok_or(MootError::OutboundMissing),
-            MootLane::Tessera => self
-                .tessera
+            MootLane::Standing => self
+                .standing
                 .get(&hash)
                 .await?
-                .map(MootOutboundOperation::Tessera)
+                .map(MootOutboundOperation::Standing)
+                .ok_or(MootError::OutboundMissing),
+            MootLane::Tulpa => self
+                .tulpa
+                .get(&hash)
+                .await?
+                .map(MootOutboundOperation::Tulpa)
+                .ok_or(MootError::OutboundMissing),
+            MootLane::Flora => self
+                .flora
+                .get(&hash)
+                .await?
+                .map(MootOutboundOperation::Flora)
                 .ok_or(MootError::OutboundMissing),
         }
     }
@@ -782,8 +889,22 @@ impl<B: Backend + Clone> Moot<B> {
         let domains = DomainEvidence {
             version: DOMAIN_EVIDENCE_VERSION,
             membership_operations: self.membership.drop_records().await?,
-            tessera_operations: export_topic_operations::<B, TesseraExt, u64>(
-                &self.tessera.sync_store(),
+            standing_operations: export_topic_operations::<B, StandingExt, u64>(
+                &self.standing.sync_store(),
+                &p2panda_core::Topic::from(self.moot_id.0),
+                DropExportProfile::default(),
+            )
+            .await
+            .map_err(|_| MootError::DomainEvidenceMalformed)?,
+            tulpa_operations: export_topic_operations::<B, TulpaExt, u64>(
+                &self.tulpa.sync_store(),
+                &p2panda_core::Topic::from(self.moot_id.0),
+                DropExportProfile::default(),
+            )
+            .await
+            .map_err(|_| MootError::DomainEvidenceMalformed)?,
+            flora_operations: export_topic_operations::<B, FloraExt, u64>(
+                &self.flora.sync_store(),
                 &p2panda_core::Topic::from(self.moot_id.0),
                 DropExportProfile::default(),
             )
@@ -892,14 +1013,16 @@ impl<B: Backend + Clone> Moot<B> {
             .unwrap_or(DomainEvidence {
                 version: DOMAIN_EVIDENCE_VERSION,
                 membership_operations: Vec::new(),
-                tessera_operations: Vec::new(),
+                standing_operations: Vec::new(),
+                tulpa_operations: Vec::new(),
+                flora_operations: Vec::new(),
             }))
     }
 
-    async fn accept_tessera_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {
+    async fn accept_standing_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {
         let mut accepted = 0;
         for record in records {
-            let Some(operation) = decode_operation_record::<TesseraExt>(record)
+            let Some(operation) = decode_operation_record::<StandingExt>(record)
                 .map_err(|_| MootError::DomainEvidenceMalformed)?
             else {
                 continue;
@@ -907,7 +1030,39 @@ impl<B: Backend + Clone> Moot<B> {
             if operation.body.is_none() {
                 return Err(MootError::DomainEvidenceMalformed);
             }
-            accepted += u64::from(self.tessera.accept(self.moot_id.0, &operation).await?);
+            accepted += u64::from(self.standing.accept(self.moot_id.0, &operation).await?);
+        }
+        Ok(accepted)
+    }
+
+    async fn accept_tulpa_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {
+        let mut accepted = 0;
+        for record in records {
+            let Some(operation) = decode_operation_record::<TulpaExt>(record)
+                .map_err(|_| MootError::DomainEvidenceMalformed)?
+            else {
+                continue;
+            };
+            if operation.body.is_none() {
+                return Err(MootError::DomainEvidenceMalformed);
+            }
+            accepted += u64::from(self.tulpa.accept(self.moot_id.0, &operation).await?);
+        }
+        Ok(accepted)
+    }
+
+    async fn accept_flora_drop_records(&self, records: &[DropRecord]) -> Result<u64, MootError> {
+        let mut accepted = 0;
+        for record in records {
+            let Some(operation) = decode_operation_record::<FloraExt>(record)
+                .map_err(|_| MootError::DomainEvidenceMalformed)?
+            else {
+                continue;
+            };
+            if operation.body.is_none() {
+                return Err(MootError::DomainEvidenceMalformed);
+            }
+            accepted += u64::from(self.flora.accept(self.moot_id.0, &operation).await?);
         }
         Ok(accepted)
     }
@@ -929,8 +1084,14 @@ impl<B: Backend + Clone> Moot<B> {
             .membership
             .accept_drop_records(&domains.membership_operations)
             .await?;
-        let tessera_operations = self
-            .accept_tessera_drop_records(&domains.tessera_operations)
+        let standing_operations = self
+            .accept_standing_drop_records(&domains.standing_operations)
+            .await?;
+        let tulpa_operations = self
+            .accept_tulpa_drop_records(&domains.tulpa_operations)
+            .await?;
+        let flora_operations = self
+            .accept_flora_drop_records(&domains.flora_operations)
             .await?;
         // The evidence becomes active before the object lane examines its
         // checkpoint chain. This is the dependency order a fresh device needs
@@ -945,7 +1106,9 @@ impl<B: Backend + Clone> Moot<B> {
             constitution_operations,
             delegation_operations,
             membership_operations,
-            tessera_operations,
+            standing_operations,
+            tulpa_operations,
+            flora_operations,
             snapshot: self.snapshot().await?,
         })
     }
@@ -1058,7 +1221,9 @@ impl<B: Backend + Clone> Moot<B> {
             .delegations(&governance.rules)
             .await?
             .certificate_count();
-        let tessera_operations = self.tessera.len().await?;
+        let standing_operations = self.standing.len().await?;
+        let tulpa = self.tulpa.fold_moot(self.moot_id.0).await?;
+        let flora = self.flora.fold_moot(self.moot_id.0).await?;
         Ok(MootSnapshot {
             moot_id: self.moot_id,
             governance,
@@ -1066,7 +1231,9 @@ impl<B: Backend + Clone> Moot<B> {
             roster,
             checkpoint,
             delegated_certificates,
-            tessera_operations,
+            standing_operations,
+            tulpa,
+            flora,
         })
     }
 }
@@ -1076,10 +1243,12 @@ mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-    use crate::moot::tessera::{
-        ChainRoot, DenyReason, GateConfig, GateDecision, Policy, TesseraEvent, TesseraFacts,
+    use crate::moot::standing::{
+        ChainRoot, DenyReason, GateConfig, GateDecision, Policy, StandingEvent, StandingFacts,
     };
+    use crate::moot::tulpa::{TulpaEvent, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion};
     use crate::moot::{
+        ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraScale,
         KeepBound, MootAccessLevel, MootMember, MootMembershipAction, MootStoreError,
     };
     use identity::delegation::{
@@ -1087,6 +1256,8 @@ mod tests {
         SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
     };
     use identity::{IdentityProvider, InMemoryProvider};
+    use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
+    use std::collections::BTreeMap;
     use std::io::Cursor;
     use stickleback::NativeDropError;
 
@@ -1112,7 +1283,7 @@ mod tests {
 
     struct Access {
         capability_covers: bool,
-        facts: TesseraFacts,
+        facts: StandingFacts,
     }
 
     impl MootAuthorizationProvider for Access {
@@ -1239,7 +1410,7 @@ mod tests {
                 .authorize(
                     &Access {
                         capability_covers: false,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             is_member: true,
                             ..Default::default()
                         },
@@ -1255,7 +1426,7 @@ mod tests {
                 .authorize(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             score: 1,
                             ..Default::default()
                         },
@@ -1271,7 +1442,7 @@ mod tests {
                 .authorize(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             is_member: true,
                             ..Default::default()
                         },
@@ -1295,7 +1466,7 @@ mod tests {
                 .authorize(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             score: 1,
                             is_member: true,
                             ..Default::default()
@@ -1334,7 +1505,7 @@ mod tests {
             .unwrap();
         let member = Access {
             capability_covers: true,
-            facts: TesseraFacts {
+            facts: StandingFacts {
                 is_member: true,
                 ..Default::default()
             },
@@ -1449,7 +1620,7 @@ mod tests {
         };
         let member = Access {
             capability_covers: true,
-            facts: TesseraFacts {
+            facts: StandingFacts {
                 is_member: true,
                 ..Default::default()
             },
@@ -1559,7 +1730,7 @@ mod tests {
                 .authorize_current_delegated(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             score: 1,
                             ..Default::default()
                         },
@@ -1622,7 +1793,7 @@ mod tests {
                 .authorize_current_delegated(
                     &Access {
                         capability_covers: true,
-                        facts: TesseraFacts {
+                        facts: StandingFacts {
                             score: 1,
                             ..Default::default()
                         },
@@ -1640,7 +1811,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn aggregate_drop_reconstructs_all_five_retained_domains_for_late_peer() {
+    async fn aggregate_drop_reconstructs_all_seven_retained_domains_for_late_peer() {
         let founder = keypair(12);
         let founder_id = founder.public_key().to_bytes();
         let member_identity = InMemoryProvider::from_seed([0x61; 32]);
@@ -1734,11 +1905,54 @@ mod tests {
             .await
             .unwrap();
         source
-            .record_tessera(
+            .record_standing(
                 founder.to_seed(),
-                TesseraEvent::GovernanceParticipation {
+                StandingEvent::GovernanceParticipation {
                     by: ChainRoot(member_root),
                     at_ms: 7,
+                },
+            )
+            .await
+            .unwrap();
+        source
+            .record_tulpa(
+                founder.to_seed(),
+                TulpaEvent::Proposed {
+                    proposal: TulpaProposalId([0x66; 32]),
+                    action: TulpaProposal::Adopt {
+                        tulpa: TulpaId([0x67; 32]),
+                        version: TulpaVersion([0x68; 32]),
+                        artifact: ArtifactRef::blake3(b"drop Tulpa"),
+                    },
+                    recognition: RecognitionContext::new(
+                        RecognitionPolicy::AnyEligible,
+                        ElectorateSnapshot::new(ID.0, [0x69; 32], [founder_id]),
+                    ),
+                    at_ms: 8,
+                },
+            )
+            .await
+            .unwrap();
+        source
+            .record_flora(
+                founder.to_seed(),
+                FloraEvent::RoundProposed {
+                    spec: FloraRoundSpec {
+                        round: FloraRoundId([0x6a; 32]),
+                        base_model: ArtifactRef::blake3(b"drop base"),
+                        rank_budget: 1,
+                        participants: BTreeMap::from([(
+                            founder_id,
+                            FloraParticipant {
+                                rank: 1,
+                                scale: FloraScale {
+                                    numerator: 1,
+                                    denominator: 1,
+                                },
+                            },
+                        )]),
+                    },
+                    at_ms: 9,
                 },
             )
             .await
@@ -1763,13 +1977,17 @@ mod tests {
         assert_eq!(receipt.constitution_operations, 1);
         assert_eq!(receipt.delegation_operations, 1);
         assert_eq!(receipt.membership_operations, 1);
-        assert_eq!(receipt.tessera_operations, 1);
+        assert_eq!(receipt.standing_operations, 1);
+        assert_eq!(receipt.tulpa_operations, 1);
+        assert_eq!(receipt.flora_operations, 1);
         assert_eq!(receipt.snapshot, expected);
         assert_eq!(receipt.snapshot.membership.members[0].member, member_root);
         assert_eq!(receipt.snapshot.roster.members.len(), 1);
         assert_eq!(receipt.snapshot.roster.fauna.len(), 1);
         assert_eq!(receipt.snapshot.delegated_certificates, 1);
-        assert_eq!(receipt.snapshot.tessera_operations, 1);
+        assert_eq!(receipt.snapshot.standing_operations, 1);
+        assert_eq!(receipt.snapshot.tulpa.facts.len(), 1);
+        assert_eq!(receipt.snapshot.flora.rounds.len(), 1);
     }
 
     #[tokio::test]
@@ -1800,6 +2018,41 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(reopened.snapshot().await.unwrap().roster.members.len(), 1);
+    }
+
+    #[test]
+    fn legacy_tessera_file_is_opened_until_standing_file_exists() {
+        let directory = tempfile::tempdir().unwrap();
+        let legacy = directory.path().join("tessera.redb");
+        StandingFileStore::open(&legacy).unwrap();
+        assert_eq!(standing_store_path(directory.path()), legacy);
+
+        let standing = directory.path().join("standing.redb");
+        StandingFileStore::open(&standing).unwrap();
+        assert_eq!(standing_store_path(directory.path()), standing);
+    }
+
+    #[test]
+    fn legacy_domain_drop_decodes_tessera_operations_as_standing() {
+        #[derive(Serialize)]
+        struct LegacyDomainEvidence {
+            version: u16,
+            membership_operations: Vec<DropRecord>,
+            tessera_operations: Vec<DropRecord>,
+        }
+
+        let legacy = LegacyDomainEvidence {
+            version: DOMAIN_EVIDENCE_VERSION,
+            membership_operations: Vec::new(),
+            tessera_operations: Vec::new(),
+        };
+        let bytes = encode_cbor(&legacy).unwrap();
+        let decoded: DomainEvidence = decode_cbor(&bytes).unwrap();
+        assert_eq!(decoded.version, DOMAIN_EVIDENCE_VERSION);
+        assert!(decoded.membership_operations.is_empty());
+        assert!(decoded.standing_operations.is_empty());
+        assert!(decoded.tulpa_operations.is_empty());
+        assert!(decoded.flora_operations.is_empty());
     }
 
     #[tokio::test]
@@ -1914,7 +2167,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn protected_drop_and_tessera_command_expose_publishable_operations() {
+    async fn protected_drop_and_standing_command_expose_publishable_operations() {
         let founder = keypair(7);
         let founder_id = founder.public_key().to_bytes();
         let source = Moot::in_memory(ID, founder_id, retention());
@@ -1969,19 +2222,93 @@ mod tests {
         );
 
         let receipt = source
-            .record_tessera(
+            .record_standing(
                 founder.to_seed(),
-                TesseraEvent::GovernanceParticipation {
+                StandingEvent::GovernanceParticipation {
                     by: ChainRoot(founder_id),
                     at_ms: 3,
                 },
             )
             .await
             .unwrap();
-        assert_eq!(receipt.lane, MootLane::Tessera);
+        assert_eq!(receipt.lane, MootLane::Standing);
         assert!(matches!(
             source.outbound(&receipt).await.unwrap(),
-            MootOutboundOperation::Tessera(_)
+            MootOutboundOperation::Standing(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn tulpa_and_flora_commands_surface_distinct_lanes_and_snapshots() {
+        let founder = keypair(71);
+        let founder_id = founder.public_key().to_bytes();
+        let service = Moot::in_memory(ID, founder_id, retention());
+        service
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder_id),
+                1,
+            )
+            .await
+            .unwrap();
+
+        let tulpa = service
+            .record_tulpa(
+                founder.to_seed(),
+                TulpaEvent::Proposed {
+                    proposal: TulpaProposalId([1; 32]),
+                    action: TulpaProposal::Adopt {
+                        tulpa: TulpaId([2; 32]),
+                        version: TulpaVersion([3; 32]),
+                        artifact: ArtifactRef::blake3(b"tulpa-v1"),
+                    },
+                    recognition: RecognitionContext::new(
+                        RecognitionPolicy::AnyEligible,
+                        ElectorateSnapshot::new(ID.0, [4; 32], [founder_id]),
+                    ),
+                    at_ms: 2,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(tulpa.lane, MootLane::Tulpa);
+        assert!(matches!(
+            service.outbound(&tulpa).await.unwrap(),
+            MootOutboundOperation::Tulpa(_)
+        ));
+        assert_eq!(tulpa.snapshot.tulpa.facts.len(), 1);
+
+        let flora = service
+            .record_flora(
+                founder.to_seed(),
+                FloraEvent::RoundProposed {
+                    spec: FloraRoundSpec {
+                        round: FloraRoundId([5; 32]),
+                        base_model: ArtifactRef::blake3(b"base-model"),
+                        rank_budget: 1,
+                        participants: BTreeMap::from([(
+                            founder_id,
+                            FloraParticipant {
+                                rank: 1,
+                                scale: FloraScale {
+                                    numerator: 1,
+                                    denominator: 1,
+                                },
+                            },
+                        )]),
+                    },
+                    at_ms: 3,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(flora.lane, MootLane::Flora);
+        assert!(matches!(
+            service.outbound(&flora).await.unwrap(),
+            MootOutboundOperation::Flora(_)
+        ));
+        assert_eq!(flora.snapshot.flora.rounds.len(), 1);
     }
 }

@@ -6,8 +6,8 @@
 
 //! The Moot's live lane set, joined as one act.
 //!
-//! A Moot replicates over five independent LogSync lanes — constitution,
-//! delegation, membership, records, tessera — all subscribing to the Moot id
+//! A Moot replicates over seven independent LogSync lanes — constitution,
+//! delegation, membership, records, standing, Tulpa, and FLORA — all subscribing to the Moot id
 //! as their sync topic and each carrying its own extension type and accept
 //! path. Joining them one by one is the ceremony every host would repeat;
 //! this owns it once, the way `JoinedSpace` owns the per-lane ceremony.
@@ -26,16 +26,20 @@ use stickleback::{Endpoint, Gossip, JoinError, JoinedSpace, SyncStatus, lane_id}
 use super::MootGroupExt;
 use super::constitution::ConstitutionExt;
 use super::delegation::MootDelegationExt;
+use super::flora::FloraExt;
 use super::records::{MootExt, MootLogId};
 use super::service::Moot;
-use super::tessera::TesseraExt;
+use super::standing::StandingExt;
+use super::tulpa::TulpaExt;
 
 /// Lane kinds, one spelling each, so both peers derive identical protocol ids.
 pub const GEMOT_CONSTITUTION_LANE: &str = "gemot/constitution/v1";
 pub const GEMOT_DELEGATION_LANE: &str = "gemot/delegation/v1";
 pub const GEMOT_MEMBERSHIP_LANE: &str = "gemot/membership/v1";
 pub const GEMOT_RECORDS_LANE: &str = "gemot/records/v1";
-pub const GEMOT_TESSERA_LANE: &str = "gemot/tessera/v1";
+pub const GEMOT_STANDING_LANE: &str = "gemot/standing/v1";
+pub const GEMOT_TULPA_LANE: &str = "gemot/tulpa/v1";
+pub const GEMOT_FLORA_LANE: &str = "gemot/flora/v1";
 
 /// One Moot's joined lane set. Dropping it leaves every lane.
 pub struct MootLanes {
@@ -43,38 +47,44 @@ pub struct MootLanes {
     pub delegation: JoinedSpace<MootDelegationExt>,
     pub membership: JoinedSpace<MootGroupExt>,
     pub records: JoinedSpace<MootExt>,
-    pub tessera: JoinedSpace<TesseraExt>,
+    pub standing: JoinedSpace<StandingExt>,
+    pub tulpa: JoinedSpace<TulpaExt>,
+    pub flora: JoinedSpace<FloraExt>,
 }
 
 impl MootLanes {
     /// Sync activity across the set, in lane order, for a host's status
     /// surface. Per-lane rather than summed: a Steward that can only say
     /// "some lane is behind" cannot say which.
-    pub fn sync_status(&self) -> [SyncStatus; 5] {
+    pub fn sync_status(&self) -> [SyncStatus; 7] {
         [
             self.constitution.sync_status(),
             self.delegation.sync_status(),
             self.membership.sync_status(),
             self.records.sync_status(),
-            self.tessera.sync_status(),
+            self.standing.sync_status(),
+            self.tulpa.sync_status(),
+            self.flora.sync_status(),
         ]
     }
 
     /// Shared counter handles, in the same lane order, for a host watching
     /// arrivals from a task that cannot borrow the lanes.
-    pub fn status_handles(&self) -> [Arc<Mutex<SyncStatus>>; 5] {
+    pub fn status_handles(&self) -> [Arc<Mutex<SyncStatus>>; 7] {
         [
             self.constitution.status_handle(),
             self.delegation.status_handle(),
             self.membership.status_handle(),
             self.records.status_handle(),
-            self.tessera.status_handle(),
+            self.standing.status_handle(),
+            self.tulpa.status_handle(),
+            self.flora.status_handle(),
         ]
     }
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> Moot<B> {
-    /// Join all five of this Moot's lanes over the host transport's parts.
+    /// Join all seven of this Moot's lanes over the host transport's parts.
     ///
     /// Every accept closure delegates to the lane's own validating store, so
     /// nothing arriving over the wire bypasses the admission each lane already
@@ -142,15 +152,43 @@ impl<B: Backend + Clone + Send + Sync + 'static> Moot<B> {
         )
         .await?;
 
-        let tesserae = self.tessera_store().clone();
-        let tessera = JoinedSpace::join::<_, u64, _, _>(
-            lane_id(GEMOT_TESSERA_LANE, moot),
-            self.tessera_store().sync_store(),
+        let standing_store = self.standing_store().clone();
+        let standing = JoinedSpace::join::<_, u64, _, _>(
+            lane_id(GEMOT_STANDING_LANE, moot),
+            self.standing_store().sync_store(),
+            endpoint.clone(),
+            gossip.clone(),
+            moot,
+            move |operation: Operation<StandingExt>| {
+                let store = standing_store.clone();
+                async move { matches!(store.accept(moot, &operation).await, Ok(true)) }
+            },
+        )
+        .await?;
+
+        let tulpa_store = self.tulpa_store().clone();
+        let tulpa = JoinedSpace::join::<_, u64, _, _>(
+            lane_id(GEMOT_TULPA_LANE, moot),
+            self.tulpa_store().sync_store(),
+            endpoint.clone(),
+            gossip.clone(),
+            moot,
+            move |operation: Operation<TulpaExt>| {
+                let store = tulpa_store.clone();
+                async move { matches!(store.accept(moot, &operation).await, Ok(true)) }
+            },
+        )
+        .await?;
+
+        let flora_store = self.flora_store().clone();
+        let flora = JoinedSpace::join::<_, u64, _, _>(
+            lane_id(GEMOT_FLORA_LANE, moot),
+            self.flora_store().sync_store(),
             endpoint,
             gossip,
             moot,
-            move |operation: Operation<TesseraExt>| {
-                let store = tesserae.clone();
+            move |operation: Operation<FloraExt>| {
+                let store = flora_store.clone();
                 async move { matches!(store.accept(moot, &operation).await, Ok(true)) }
             },
         )
@@ -161,7 +199,9 @@ impl<B: Backend + Clone + Send + Sync + 'static> Moot<B> {
             delegation,
             membership,
             records,
-            tessera,
+            standing,
+            tulpa,
+            flora,
         })
     }
 }

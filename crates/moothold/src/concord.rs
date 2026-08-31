@@ -25,16 +25,16 @@
 //!   trusting or cautious it is.
 //!
 //! Schema note: composing standings across moots assumes they share (or have
-//! normalised) their `TesseraConfig` — a score computed under different weights
+//! normalised) their `StandingConfig` — a score computed under different weights
 //! is not comparable, so a real rep concord carries a schema concord. Phase 5
 //! composes the numbers and leaves that gating to the federation layer.
 
 use std::collections::HashMap;
 
 pub use gemot::moot::MootId;
-use gemot::moot::tessera::event::BASIS_POINTS;
-use gemot::moot::tessera::ledger::Ledger;
-use gemot::moot::tessera::persona_chain::{PersonaChains, PersonaId};
+use gemot::moot::standing::event::BASIS_POINTS;
+use gemot::moot::standing::ledger::Ledger;
+use gemot::moot::standing::persona_chain::{PersonaChains, PersonaId};
 use serde::{Deserialize, Serialize};
 
 /// How a viewer moot folds concorded moots' reputations into its own view.
@@ -91,7 +91,7 @@ impl RepLens {
     /// viewer's own effective score plus its concorded moots' effective scores,
     /// combined under the lens's composition policy.
     ///
-    /// `ledgers` maps each moot to its tessera ledger; `chains` is the global
+    /// `ledgers` maps each moot to its standing ledger; `chains` is the global
     /// persona forest (Phase 2), so each moot's contribution is the persona's
     /// *depreciated* standing there. A moot absent from `ledgers` contributes 0.
     pub fn composite_score(
@@ -142,8 +142,8 @@ impl RepLens {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gemot::moot::tessera::event::{ChainRoot, CommitmentId, Scope, TesseraEvent};
-    use gemot::moot::tessera::ledger::TesseraConfig;
+    use gemot::moot::standing::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
+    use gemot::moot::standing::ledger::StandingConfig;
 
     fn moot(n: u8) -> MootId {
         MootId([n; 32])
@@ -159,7 +159,7 @@ mod tests {
         let mut events = Vec::new();
         for i in 0..fulfilments {
             let c = CommitmentId([100 + i; 32]);
-            events.push(TesseraEvent::CommitmentMade {
+            events.push(StandingEvent::CommitmentMade {
                 by: root,
                 commitment: c,
                 scope: Scope("s".into()),
@@ -167,20 +167,20 @@ mod tests {
                 duration_ms: None,
                 at_ms: 0,
             });
-            events.push(TesseraEvent::CommitmentFulfilled {
+            events.push(StandingEvent::CommitmentFulfilled {
                 by: root,
                 commitment: c,
                 at_ms: 1,
             });
         }
-        Ledger::from_events(TesseraConfig::default(), &events)
+        Ledger::from_events(StandingConfig::default(), &events)
     }
 
     /// A ledger where `root` ghosted one commitment (score -20).
     fn ledger_in_debt(root: PersonaId) -> Ledger {
         Ledger::from_events(
-            TesseraConfig::default(),
-            &[TesseraEvent::CommitmentMade {
+            StandingConfig::default(),
+            &[StandingEvent::CommitmentMade {
                 by: ChainRoot(root.0),
                 commitment: CommitmentId([7; 32]),
                 scope: Scope("s".into()),
@@ -297,9 +297,9 @@ mod tests {
         let pardoned = HashMap::from([(
             x,
             Ledger::from_events(
-                TesseraConfig::default(),
+                StandingConfig::default(),
                 &[
-                    TesseraEvent::CommitmentMade {
+                    StandingEvent::CommitmentMade {
                         by: ChainRoot(p.0),
                         commitment: CommitmentId([7; 32]),
                         scope: Scope("s".into()),
@@ -307,7 +307,7 @@ mod tests {
                         duration_ms: None,
                         at_ms: 0,
                     },
-                    TesseraEvent::Pardon {
+                    StandingEvent::Pardon {
                         by: ChainRoot(gov.0),
                         target: ChainRoot(p.0),
                         weight: 20,
@@ -326,11 +326,11 @@ mod tests {
         // the concord is dropped.
         let (v, x, p) = (moot(1), moot(2), persona(3));
         let chains = PersonaChains::new();
-        let mut x_ledger = Ledger::new(TesseraConfig {
+        let mut x_ledger = Ledger::new(StandingConfig {
             fulfil_reward: 99,
-            ..TesseraConfig::default()
+            ..StandingConfig::default()
         });
-        x_ledger.apply(&TesseraEvent::CommitmentMade {
+        x_ledger.apply(&StandingEvent::CommitmentMade {
             by: ChainRoot(p.0),
             commitment: CommitmentId([1; 32]),
             scope: Scope("s".into()),
@@ -338,13 +338,13 @@ mod tests {
             duration_ms: None,
             at_ms: 0,
         });
-        x_ledger.apply(&TesseraEvent::CommitmentFulfilled {
+        x_ledger.apply(&StandingEvent::CommitmentFulfilled {
             by: ChainRoot(p.0),
             commitment: CommitmentId([1; 32]),
             at_ms: 1,
         });
         // V carries the default config via its own (empty) ledger.
-        let ledgers = HashMap::from([(v, Ledger::new(TesseraConfig::default())), (x, x_ledger)]);
+        let ledgers = HashMap::from([(v, Ledger::new(StandingConfig::default())), (x, x_ledger)]);
         let mut lens = RepLens::new(v, CompositionPolicy::WeightedSum);
         lens.concord(x, 10_000);
         // P scored +99 in X, but the schema mismatch drops the concord -> 0.

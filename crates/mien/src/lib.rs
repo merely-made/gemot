@@ -18,12 +18,12 @@
 //! name is not `standing` or `score`, which both suggest a fact about the
 //! persona rather than a view held by a moot.
 //!
-//! Accrual and depreciation are tessera-denominated; the mien is what a moot
+//! Accrual and depreciation are standing-denominated; the mien is what a moot
 //! reads off its ledger, alone or composed.
 //!
 //! Not the proof of who you are: that is `insigne`.
 //!
 //! No implementation yet. The working code is in `moothold`'s concord module
-//! and `gemot`'s tessera store.
+//! and `gemot`'s standing store.
 
 #![doc(html_no_source)]
