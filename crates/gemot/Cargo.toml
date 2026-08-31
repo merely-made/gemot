@@ -4,7 +4,7 @@ version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Community domain and assembly layer for Moot lifecycle, governance, replication, and Tessera."
+description = "Community domain and assembly layer for Moot governance, replication, Standing, Tulpa, and FLORA."
 documentation = "https://docs.rs/gemot"
 readme = "README.md"
 keywords = ["federation", "community", "social", "p2p", "browser"]
@@ -14,7 +14,7 @@ categories = ["network-programming"]
 path = "src/lib.rs"
 
 [dependencies]
-# Tessera events are wire-ready (they become signed operation extensions on the
+# Standing events are wire-ready (they become signed operation extensions on the
 # event-DAG, like Murm's `CabalExt`). serde sets the event types up for that
 # wire bridge; p2panda-core is the operation/signing substrate the bridge rides
 # (same as murm posts); identity supplies the Ed25519 signing keypair.

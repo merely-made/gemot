@@ -9,14 +9,14 @@
 //! Community and federation supercrate for the
 //! [`mere`](https://crates.io/crates/mere) browser. A *moot* is a single
 //! persistent themed federatable graph-view community. `gemot` is the assembly
-//! layer that manages Moot lifecycle, governance, replication, and Tessera
+//! layer that manages Moot lifecycle, governance, replication, and Standing
 //! validation. Tier 3 federation lives in the sibling `moothold` crate.
 //!
 //! Inside `gemot`, the [`mooting`](https://crates.io/crates/mooting)
 //! crate supplies backend-neutral p2panda storage and recognition-policy
 //! plumbing. [`moot`] owns the community namespace: constitutional law,
-//! delegation, membership, public records, and Tessera trust facts sit beneath
-//! one aggregate boundary.
+//! delegation, membership, public records, Standing trust facts, Tulpa
+//! adoption, and FLORA receipts sit beneath one aggregate boundary.
 //!
 //! ## Naming note
 //!
@@ -30,13 +30,15 @@
 //! folds, trust records, and host-composed sync tests are implemented. Signed
 //! constitutional governance has a durable fold and high-level command/snapshot
 //! service. The aggregate `Moot` service now composes that governance with
-//! signed membership, delegation, object, and Tessera stores, plain commands,
-//! durable snapshots, constitution-bound retention checkpoints, rotation-safe
+//! signed membership, delegation, object, Standing, Tulpa, and FLORA stores,
+//! plain commands, durable snapshots, constitution-bound retention checkpoints, rotation-safe
 //! checkpoint ancestry, prefix pruning, and public/local native-drop
-//! export/import. Aggregate drops reconstruct all five retained domains on a
+//! export/import. Aggregate drops reconstruct all seven retained domains on a
 //! fresh recipient. Protected drops take an injected group protector, and
-//! membership, object, and Tessera commands return explicit host-publication
-//! seams.
+//! membership, object, Standing, Tulpa, and FLORA commands return explicit
+//! host-publication seams. Tulpa uses frozen recognition contexts and retains
+//! revocation history; FLORA carries references and receipts only, never raw
+//! tensors or training corpus bytes.
 //! The signed admission policy now evaluates an injected membership/capability
 //! provider. Founder-governed signed grants narrow that provider's live
 //! decision; quorum amendments and the p2panda-auth group adapter are

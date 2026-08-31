@@ -12,11 +12,12 @@ use p2panda_core::cbor::encode_cbor;
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
 
-use crate::moot::tessera::Policy;
+use crate::moot::standing::{Policy, StandingFacts};
+use mooting::MemberKey;
 
 /// The rule controlling amendments to the shared constitution.
 ///
-/// The first rung is intentionally small. Tessera thresholds and quorum rules
+/// The first rung is intentionally small. Standing thresholds and quorum rules
 /// can extend this enum without changing the signed event or fold shape.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AmendmentRule {
@@ -86,6 +87,47 @@ pub struct CapabilityGrant {
     pub delegation_depth: u16,
 }
 
+/// Optional, explicit eligibility filter for Tulpa endorsements.
+///
+/// This never grants authority, changes the frozen electorate, or gives an
+/// endorser additional votes. A host that elects to use it filters an
+/// endorser's Standing facts before passing the remaining identities to the
+/// proposal's `RecognitionContext`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TulpaRules {
+    /// Minimum Standing score required to be eligible to endorse. `None`
+    /// leaves endorsement eligibility entirely to the frozen electorate.
+    pub standing_endorsement_floor: Option<i64>,
+}
+
+impl TulpaRules {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+
+    /// Explicit one-person, one-endorsement filter. It deliberately takes one
+    /// fact set and returns only a boolean, never a weight.
+    pub fn standing_allows_endorsement(&self, facts: &StandingFacts) -> bool {
+        self.standing_endorsement_floor
+            .is_none_or(|floor| facts.score >= floor)
+    }
+
+    /// Filter a raw endorsement set before `RecognitionContext::evaluate`.
+    /// Callers supply Standing facts at this explicitly chosen seam; the
+    /// returned set is still unweighted and subject to the frozen electorate.
+    pub fn filter_endorsers(
+        &self,
+        endorsements: &BTreeSet<MemberKey>,
+        facts_for: impl Fn(MemberKey) -> StandingFacts,
+    ) -> BTreeSet<MemberKey> {
+        endorsements
+            .iter()
+            .copied()
+            .filter(|endorser| self.standing_allows_endorsement(&facts_for(*endorser)))
+            .collect()
+    }
+}
+
 fn is_zero_u16(value: &u16) -> bool {
     *value == 0
 }
@@ -118,12 +160,17 @@ pub struct ConstitutionRules {
     pub amendment: AmendmentRule,
     /// Keys allowed to author governed retention checkpoints.
     pub checkpoint_signers: BTreeSet<[u8; 32]>,
-    /// The signed admission rule evaluated from Tessera facts plus a host- or
+    /// The signed admission rule evaluated from Standing facts plus a host- or
     /// group-state supplied membership/capability provider.
     pub admission: Policy,
     /// Current founder-governed capability grants. Removing an entry in an
     /// accepted amendment revokes it for future authorization decisions.
     pub capability_grants: BTreeMap<[u8; 32], CapabilityGrant>,
+    /// Policy for Tulpa endorsement eligibility. Defaults to no Standing
+    /// filter and is omitted from the canonical encoding in that case, keeping
+    /// pre-Tulpa constitution bytes readable.
+    #[serde(default, skip_serializing_if = "TulpaRules::is_default")]
+    pub tulpa: TulpaRules,
 }
 
 impl ConstitutionRules {
@@ -134,6 +181,7 @@ impl ConstitutionRules {
             checkpoint_signers: [founder].into_iter().collect(),
             admission: Policy::OpenWithFloor(Default::default()),
             capability_grants: BTreeMap::new(),
+            tulpa: TulpaRules::default(),
         }
     }
 
@@ -282,5 +330,22 @@ mod tests {
             encode_cbor(&legacy).unwrap(),
             encode_cbor(&current).unwrap()
         );
+    }
+
+    #[test]
+    fn tulpa_standing_policy_filters_eligibility_without_changing_vote_weight() {
+        let rules = TulpaRules {
+            standing_endorsement_floor: Some(10),
+        };
+        let endorse = BTreeSet::from([[1; 32], [2; 32]]);
+        let filtered = rules.filter_endorsers(&endorse, |member| StandingFacts {
+            score: if member == [1; 32] { 10 } else { 9 },
+            ..Default::default()
+        });
+        assert_eq!(filtered, BTreeSet::from([[1; 32]]));
+        assert!(rules.standing_allows_endorsement(&StandingFacts {
+            score: 10,
+            ..Default::default()
+        }));
     }
 }

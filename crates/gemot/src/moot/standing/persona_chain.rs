@@ -6,7 +6,7 @@
 
 //! Persona chains + fork depreciation — Phase 2.
 //!
-//! Tessera accrues at a chain *root* (the [`Ledger`] keys by [`ChainRoot`]). A
+//! Standing accrues at a chain *root* (the [`Ledger`] keys by [`ChainRoot`]). A
 //! persona is a leaf that links to a parent; walking the links reaches the root.
 //! A user's standing therefore follows them across persona forks (it lives at the
 //! root), while a freshly forked persona *presents* only a depreciated fraction
@@ -25,8 +25,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::moot::tessera::event::{BASIS_POINTS, ChainRoot};
-use crate::moot::tessera::ledger::Ledger;
+use crate::moot::standing::event::{BASIS_POINTS, ChainRoot};
+use crate::moot::standing::ledger::Ledger;
 
 /// A persona's leaf identity (its public key). Derives in production from
 /// `master + persona_id`; Phase 2 treats it as an opaque key, like Phase 1's
@@ -77,7 +77,7 @@ impl PersonaChains {
         self.root_and_depth(persona).0
     }
 
-    /// A persona's **effective** tessera — what a moot or gate sees — as of
+    /// A persona's **effective** standing — what a moot or gate sees — as of
     /// `now_ms`: the chain root's score, with *positive* standing depreciated once
     /// per generation from the root (the `depreciation_bp` curve). Debt and zero
     /// pass through undepreciated, so forking cannot launder a bad reputation.
@@ -99,8 +99,8 @@ impl PersonaChains {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::tessera::event::{CommitmentId, Scope, TesseraEvent};
-    use crate::moot::tessera::ledger::TesseraConfig;
+    use crate::moot::standing::event::{CommitmentId, Scope, StandingEvent};
+    use crate::moot::standing::ledger::StandingConfig;
 
     fn persona(n: u8) -> PersonaId {
         PersonaId([n; 32])
@@ -113,7 +113,7 @@ mod tests {
         let mut events = Vec::new();
         for i in 0..fulfilments {
             let c = CommitmentId([100 + i; 32]);
-            events.push(TesseraEvent::CommitmentMade {
+            events.push(StandingEvent::CommitmentMade {
                 by: root,
                 commitment: c,
                 scope: Scope("s".into()),
@@ -121,13 +121,13 @@ mod tests {
                 duration_ms: None,
                 at_ms: 0,
             });
-            events.push(TesseraEvent::CommitmentFulfilled {
+            events.push(StandingEvent::CommitmentFulfilled {
                 by: root,
                 commitment: c,
                 at_ms: 1,
             });
         }
-        Ledger::from_events(TesseraConfig::default(), &events)
+        Ledger::from_events(StandingConfig::default(), &events)
     }
 
     #[test]
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn a_fork_inherits_the_depreciated_fraction() {
-        // The done-condition: a forked persona inherits f * root tessera.
+        // The done-condition: a forked persona inherits f * root standing.
         let r = persona(1);
         let ledger = ledger_with_root_fulfilments(r, 10); // root = 100
         let mut chains = PersonaChains::new();
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn a_fresh_chain_presents_zero() {
         // The Sybil floor: a brand-new chain (no accrual) presents nothing.
-        let ledger = Ledger::new(TesseraConfig::default());
+        let ledger = Ledger::new(StandingConfig::default());
         let chains = PersonaChains::new();
         assert_eq!(chains.effective_score(persona(9), &ledger, 10), 0);
     }
@@ -190,8 +190,8 @@ mod tests {
         // A chain in debt cannot fork to a less-penalized face.
         let r = persona(1);
         let ledger = Ledger::from_events(
-            TesseraConfig::default(),
-            &[TesseraEvent::CommitmentMade {
+            StandingConfig::default(),
+            &[StandingEvent::CommitmentMade {
                 by: ChainRoot([1; 32]),
                 commitment: CommitmentId([7; 32]),
                 scope: Scope("s".into()),

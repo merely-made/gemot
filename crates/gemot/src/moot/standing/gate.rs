@@ -4,11 +4,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Tessera facts + the policy gate — Phase 4 / the §8.8 policy slot.
+//! Standing facts + the policy gate — Phase 4 / the §8.8 policy slot.
 //!
-//! Tessera is the **facts** source for the capability stack's policy slot, not
+//! Standing is the **facts** source for the capability stack's policy slot, not
 //! the policy *engine*. This module exposes the facts a moot's policy reads about
-//! a persona ([`TesseraFacts`]), a set of configurable policy presets
+//! a persona ([`StandingFacts`]), a set of configurable policy presets
 //! ([`Policy`]) a moot operator picks from, and the [`authorize`] reference
 //! authorizer that evaluates a chosen policy against the facts and the
 //! structural-cap decision: an action passes iff a cap covers the cluster-path
@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 /// A moot's policy parameters for the gate. Per-moot configurable.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GateConfig {
-    /// Minimum effective / composite tessera a persona needs to act (post, pin).
+    /// Minimum effective / composite standing a persona needs to act (post, pin).
     pub posting_threshold: i64,
     /// Maximum actions one persona may take within [`rate_window_ms`](Self::rate_window_ms).
     pub rate_limit: u32,
@@ -46,11 +46,11 @@ impl Default for GateConfig {
     }
 }
 
-/// The tessera facts a moot's gate reads about a persona, assembled by the moot
+/// The standing facts a moot's gate reads about a persona, assembled by the moot
 /// from the reputation layer (`score`, e.g. a concord composite) and its own
 /// recent-activity log (`recent_action_ms`).
 #[derive(Clone, Debug, Default)]
-pub struct TesseraFacts {
+pub struct StandingFacts {
     /// The persona's effective / composite standing in the gating moot.
     pub score: i64,
     /// Timestamps (ms) of the persona's recent actions, for the rate limit.
@@ -111,7 +111,7 @@ pub enum Policy {
 pub fn authorize(
     policy: &Policy,
     cap_covers: bool,
-    facts: &TesseraFacts,
+    facts: &StandingFacts,
     now_ms: u64,
 ) -> GateDecision {
     if !cap_covers {
@@ -156,7 +156,7 @@ pub fn authorize(
 /// A convenience for the common case; richer moots pick another [`Policy`].
 pub fn may_act(
     cap_covers: bool,
-    facts: &TesseraFacts,
+    facts: &StandingFacts,
     now_ms: u64,
     config: &GateConfig,
 ) -> GateDecision {
@@ -172,8 +172,8 @@ pub fn may_act(
 mod tests {
     use super::*;
 
-    fn facts(score: i64, recent_action_ms: Vec<u64>) -> TesseraFacts {
-        TesseraFacts {
+    fn facts(score: i64, recent_action_ms: Vec<u64>) -> StandingFacts {
+        StandingFacts {
             score,
             recent_action_ms,
             ..Default::default()
@@ -243,12 +243,12 @@ mod tests {
     fn vouched_or_score_lets_a_vouched_newcomer_in() {
         let policy = Policy::VouchedOrScore(GateConfig::default());
         // A zero-standing newcomer is admitted if vouched, refused if not.
-        let vouched = TesseraFacts {
+        let vouched = StandingFacts {
             score: 0,
             vouched: true,
             ..Default::default()
         };
-        let stranger = TesseraFacts {
+        let stranger = StandingFacts {
             score: 0,
             vouched: false,
             ..Default::default()
@@ -267,12 +267,12 @@ mod tests {
             rate_window_ms: 60_000,
         };
         // High standing does not help a non-member; membership is what counts.
-        let member = TesseraFacts {
+        let member = StandingFacts {
             score: 0,
             is_member: true,
             ..Default::default()
         };
-        let outsider = TesseraFacts {
+        let outsider = StandingFacts {
             score: 10_000,
             is_member: false,
             ..Default::default()

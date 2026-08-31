@@ -6,7 +6,7 @@
 
 //! A Moot's signed, amendable shared law.
 //!
-//! Constitution is a separate governance log beside Tessera. Tessera supplies
+//! Constitution is a separate governance log beside Standing. Standing supplies
 //! reputation facts; the constitution supplies the amendable rule that consumes
 //! such facts. The first rule is founder-signed and feeds an explicit governed
 //! checkpoint signer set.
@@ -20,7 +20,7 @@ mod wire;
 #[cfg(test)]
 mod sync;
 
-pub use event::{AmendmentRule, CapabilityGrant, ConstitutionEvent, ConstitutionRules};
+pub use event::{AmendmentRule, CapabilityGrant, ConstitutionEvent, ConstitutionRules, TulpaRules};
 pub use fold::{Constitution, ConstitutionError, GovernedAction, authorize_governed};
 pub use governance::{
     MootGovernance, MootGovernanceError, MootGovernanceFile, MootGovernanceSnapshot,
