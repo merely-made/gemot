@@ -1248,7 +1248,7 @@ mod tests {
     };
     use crate::moot::tulpa::{TulpaEvent, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion};
     use crate::moot::{
-        ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraScale,
+        ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraWeight,
         KeepBound, MootAccessLevel, MootMember, MootMembershipAction, MootStoreError,
     };
     use identity::delegation::{
@@ -1945,7 +1945,7 @@ mod tests {
                             founder_id,
                             FloraParticipant {
                                 rank: 1,
-                                scale: FloraScale {
+                                weight: FloraWeight {
                                     numerator: 1,
                                     denominator: 1,
                                 },
@@ -2292,7 +2292,7 @@ mod tests {
                             founder_id,
                             FloraParticipant {
                                 rank: 1,
-                                scale: FloraScale {
+                                weight: FloraWeight {
                                     numerator: 1,
                                     denominator: 1,
                                 },
