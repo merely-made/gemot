@@ -14,7 +14,7 @@
 //!   founding, the same on every member, a pure function of the op set.
 //! - **First join per author wins** — re-joins and label changes don't
 //!   churn membership (a rename event is a later milestone).
-//! - **Flora order is `(at_ms, op_hash)`** — stable everywhere, ties broken
+//! - **Fauna order is `(at_ms, op_hash)`** — stable everywhere, ties broken
 //!   content-addressably.
 
 use std::collections::BTreeMap;
@@ -50,7 +50,7 @@ pub struct Member {
     pub join_op_hash: [u8; 32],
 }
 
-/// One engram reference in the fauna.
+/// One codicil reference in the fauna.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FaunaEntry {
     pub manifest_id: [u8; 32],
@@ -360,8 +360,8 @@ mod tests {
         assert_eq!(roster.fauna[0].schema_id, "eidetic.SearchIndexSpec/v1");
         assert_eq!(roster.fauna[0].shared_by, author(&friend));
         // The pack hand-off (participant gate B5's curation half): a shared
-        // engram whose schema is mere.pack/v1 lists in the fauna like any
-        // other — the moot's flora IS where a distributed pack becomes
+        // codicil whose schema is mere.pack/v1 lists in the fauna like any
+        // other: the Moot's fauna catalog is where a distributed pack becomes
         // discoverable, no pack-specific wire needed.
         let pack_shared = to_operation(
             &friend,
@@ -391,7 +391,7 @@ mod tests {
                 .fauna
                 .iter()
                 .any(|f| f.schema_id == "mere.pack/v1" && f.title == "trail-keeper 0.1.0"),
-            "the pack is visible in the moot's flora under its schema"
+            "the pack is visible in the Moot's fauna under its schema"
         );
 
         let without_fauna = MootRoster::fold(MOOT, [&declared, &founder_join, &friend_join]);
