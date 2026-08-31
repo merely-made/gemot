@@ -728,7 +728,7 @@ mod tests {
                 MOOT,
                 &MootEvent::Shared {
                     manifest_id: [0xaa; 32],
-                    schema_id: "engram/v1".into(),
+                    schema_id: "codicil/v1".into(),
                     title: "retained tail".into(),
                     at_ms: 12,
                 },

@@ -6,7 +6,7 @@
 
 //! moot-peer — the moot-object M1 rehearsal bin.
 //!
-//! Declare a moot, join it, share an engram reference into its fauna, and
+//! Declare a moot, join it, share an codicil reference into its fauna, and
 //! watch the roster converge across devices — the moot-tier mirror of
 //! `mesh-peer`. Both modes print the live roster and real sync status.
 //!

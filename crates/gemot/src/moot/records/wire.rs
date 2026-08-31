@@ -55,7 +55,7 @@ pub enum MootEvent {
     /// A member announcing themselves; the author key is the identity,
     /// `name` is a display label. First join per author wins.
     Joined { name: String, at_ms: u64 },
-    /// An engram reference shared into the moot's fauna: the manifest id
+    /// An codicil reference shared into the moot's fauna: the manifest id
     /// (CID) plus what it claims to be. Blob transfer is a later milestone;
     /// the reference is the hand-off.
     Shared {
