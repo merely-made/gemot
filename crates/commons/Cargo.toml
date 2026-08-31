@@ -11,7 +11,6 @@ publish = false
 
 [dependencies]
 chartulary = { path = "../../eidetic/chartulary" }
-codicil = { path = "../../eidetic/codicil" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 personae = { path = "../../dramatis/personae" }
 proofs = { package = "mere-proofs", path = "../../system/proofs" }

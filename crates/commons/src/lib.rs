@@ -36,8 +36,8 @@ pub mod call;
 pub mod chat;
 
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
-use codicil::Codicil;
 use muniment::Backend;
+use muniment::Journal;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
@@ -348,13 +348,13 @@ fn causal_entries(records: &[StoredRecord]) -> Vec<CausalEntry<u64>> {
 
 fn causal_journal(
     records: &[StoredRecord],
-) -> Result<(Codicil<CommonsBatch>, Vec<PendingCausalOperation>), MaterializeError> {
+) -> Result<(Journal<CommonsBatch>, Vec<PendingCausalOperation>), MaterializeError> {
     let entries = causal_entries(records);
     let projection = causal_projection(&entries)?;
     let effective: BTreeSet<_> = projection.order.iter().copied().collect();
     let causal = CausalIndex::new(&entries);
     let removals = removal_index(records, &effective);
-    let mut journal = Codicil::new();
+    let mut journal = Journal::new();
     for index in projection.order {
         journal.append(remove_wins_batch(
             records, &entries, &causal, &removals, index,
@@ -605,7 +605,7 @@ pub async fn materialize_with_authority<
     let entries = causal_entries(&records);
     let causal = causal_projection(&entries)?;
     let capability = commons_write_capability(container);
-    let mut journal = Codicil::new();
+    let mut journal = Journal::new();
     let mut effective = Vec::new();
     let mut pending_authority = Vec::new();
     let mut revoked = Vec::new();
