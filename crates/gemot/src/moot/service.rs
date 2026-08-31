@@ -2047,7 +2047,7 @@ mod tests {
             tessera_operations: Vec::new(),
         };
         let bytes = encode_cbor(&legacy).unwrap();
-        let decoded: DomainEvidence = decode_cbor(&bytes).unwrap();
+        let decoded: DomainEvidence = decode_cbor(bytes.as_slice()).unwrap();
         assert_eq!(decoded.version, DOMAIN_EVIDENCE_VERSION);
         assert!(decoded.membership_operations.is_empty());
         assert!(decoded.standing_operations.is_empty());

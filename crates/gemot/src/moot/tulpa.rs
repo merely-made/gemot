@@ -68,6 +68,10 @@ pub enum TulpaProposal {
 
 /// One signed Tulpa source fact.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "the frozen recognition context stays inline so one signed event is self-contained"
+)]
 pub enum TulpaEvent {
     /// An offer with a frozen recognition context. A matching proposal id is
     /// intentionally de-duplicated in the projection, while all conflicting
@@ -408,6 +412,11 @@ impl<B: Backend + Clone> TulpaStore<B> {
         Ok(self.store.operation_count().await?)
     }
 
+    /// Whether this store currently contains no Tulpa operations.
+    pub async fn is_empty(&self) -> Result<bool, TulpaStoreError> {
+        Ok(self.store.operation_count().await? == 0)
+    }
+
     pub async fn fold_moot(&self, moot_id: [u8; 32]) -> Result<TulpaProjection, TulpaStoreError> {
         let logs: BTreeMap<VerifyingKey, Vec<u64>> =
             self.store.resolve(&Topic::from(moot_id)).await?;
@@ -650,7 +659,7 @@ mod tests {
             3,
             Some(*proposed_revoke.hash.as_bytes()),
         );
-        let operations = vec![proposed, adopted, proposed_revoke, revoked];
+        let operations = [proposed, adopted, proposed_revoke, revoked];
         let projection = TulpaProjection::fold(
             operations
                 .iter()
