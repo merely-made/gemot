@@ -41,7 +41,10 @@ use stickleback::{
 
 use crate::moot::standing::event::StandingEvent;
 use crate::moot::standing::ledger::{Ledger, StandingConfig};
-use crate::moot::standing::wire::{StandingExt, from_operation, to_operation_seed};
+use crate::moot::standing::wire::{
+    StandingExt, authored_from_operation, from_operation, stable_author, standing_identity_salt,
+    to_operation_seed, to_operation_seed_with_attestation,
+};
 
 /// The single per-moot standing log id: each author keeps one standing log per moot,
 /// so the log id is a constant and the moot id is the topic.
@@ -60,6 +63,12 @@ pub enum StandingStoreError {
     /// A stored operation did not decode to a valid standing event.
     #[error("malformed standing operation")]
     Malformed,
+    /// Personae could not derive or attest the Standing writer.
+    #[error(transparent)]
+    Identity(#[from] identity::IdentityError),
+    /// The event names a root other than its authenticated author.
+    #[error("Standing event author does not match its stable Personae root")]
+    AuthorMismatch,
 }
 
 /// Standing's current wire-level admission policy.
@@ -85,12 +94,24 @@ impl OperationPolicy<StandingExt> for StandingPolicy {
                 "operation addresses a different moot",
             ));
         }
-        from_operation(operation).map_err(|_| {
+        let (_, event) = from_operation(operation).map_err(|_| {
             Reject::new(
                 "invalid-standing-event",
                 "operation body is not a Standing event",
             )
         })?;
+        let record = authored_from_operation(operation)
+            .map_err(|error| Reject::new("invalid-standing-author", error.to_string()))?;
+        if record.author_attestation.is_some() {
+            let author = stable_author(operation)
+                .map_err(|error| Reject::new("invalid-standing-author", error.to_string()))?;
+            if event.author() != author {
+                return Err(Reject::new(
+                    "standing-author-mismatch",
+                    "Standing event names another stable Personae root",
+                ));
+            }
+        }
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.moot_id),
             LOG_ID,
@@ -147,6 +168,41 @@ impl<B: Backend + Clone> StandingStore<B> {
             None => (0, None),
         };
         let operation = to_operation_seed(signing_seed, moot_id, event, seq_num, backlink);
+        self.accept(moot_id, &operation).await?;
+        Ok(operation)
+    }
+
+    /// Sign and retain the next event under a Moot-scoped key attested by the
+    /// stable Personae root named by the event.
+    pub async fn author_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        moot_id: [u8; 32],
+        event: &StandingEvent,
+    ) -> Result<Operation<StandingExt>, StandingStoreError> {
+        if event.author().0 != identity.master_public_key().to_bytes() {
+            return Err(StandingStoreError::AuthorMismatch);
+        }
+        let salt = standing_identity_salt(moot_id);
+        let keypair = identity.derive_keypair(&salt)?;
+        let attestation = identity.attest_derived_key(&salt)?;
+        let author = p2panda_core::SigningKey::from_bytes(&keypair.to_seed()).verifying_key();
+        let previous = self.store.get_latest_entry(&author, &LOG_ID).await?;
+        let (seq_num, backlink) = match previous {
+            Some(operation) => (
+                operation.header.seq_num + 1,
+                Some(*operation.hash.as_bytes()),
+            ),
+            None => (0, None),
+        };
+        let operation = to_operation_seed_with_attestation(
+            keypair.to_seed(),
+            moot_id,
+            event,
+            attestation,
+            seq_num,
+            backlink,
+        );
         self.accept(moot_id, &operation).await?;
         Ok(operation)
     }
@@ -237,6 +293,13 @@ impl<B: Backend + Clone> StandingStore<B> {
                     let seq = op.header.seq_num;
                     let (_moot, event) =
                         from_operation(&op).map_err(|_| StandingStoreError::Malformed)?;
+                    let author = stable_author(&op).map_err(|_| StandingStoreError::Malformed)?;
+                    if event.author() != author {
+                        // Legacy wire remains importable, but an unattested
+                        // derived signer cannot make standing accrue to a
+                        // different root.
+                        continue;
+                    }
                     tagged.push((event.at_ms(), author_bytes, u64::from(seq), event));
                 }
             }
@@ -419,5 +482,70 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ledger.score(&root_of(&kp), 5_000), 11);
+    }
+
+    #[tokio::test]
+    async fn identity_backed_event_accrues_to_the_stable_personae_root() {
+        let store = StandingStore::in_memory();
+        let identity = InMemoryProvider::from_seed([0x51; 32]);
+        let root = ChainRoot(identity.master_public_key().to_bytes());
+        let event = StandingEvent::GovernanceParticipation {
+            by: root,
+            at_ms: 1_000,
+        };
+        let operation = store
+            .author_for_identity(&identity, MOOT, &event)
+            .await
+            .unwrap();
+
+        assert_ne!(*operation.header.verifying_key.as_bytes(), root.0);
+        assert_eq!(stable_author(&operation).unwrap(), root);
+        let ledger = store
+            .fold_moot(MOOT, StandingConfig::default())
+            .await
+            .unwrap();
+        assert_eq!(ledger.score(&root, 2_000), 1);
+    }
+
+    #[tokio::test]
+    async fn identity_backed_authoring_refuses_another_root() {
+        let store = StandingStore::in_memory();
+        let identity = InMemoryProvider::from_seed([0x52; 32]);
+        let event = StandingEvent::GovernanceParticipation {
+            by: ChainRoot([0xee; 32]),
+            at_ms: 1_000,
+        };
+
+        assert!(matches!(
+            store.author_for_identity(&identity, MOOT, &event).await,
+            Err(StandingStoreError::AuthorMismatch)
+        ));
+        assert!(store.is_empty().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn legacy_mismatched_claim_is_retained_but_does_not_accrue() {
+        let store = StandingStore::in_memory();
+        let signer = keypair(0x53);
+        let claimed = ChainRoot([0xee; 32]);
+        let operation = to_operation(
+            &signer,
+            MOOT,
+            &StandingEvent::GovernanceParticipation {
+                by: claimed,
+                at_ms: 1_000,
+            },
+            0,
+            None,
+        );
+
+        assert!(store.accept(MOOT, &operation).await.unwrap());
+        assert_eq!(store.len().await.unwrap(), 1);
+        let ledger = store
+            .fold_moot(MOOT, StandingConfig::default())
+            .await
+            .unwrap();
+        assert_eq!(ledger.score(&claimed, 2_000), 0);
+        assert_eq!(ledger.score(&root_of(&signer), 2_000), 0);
     }
 }

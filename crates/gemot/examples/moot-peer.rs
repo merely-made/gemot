@@ -108,7 +108,7 @@ fn parse_args() -> Result<(Mode, Vec<String>), String> {
             let name = args.get(1).ok_or(usage)?.clone();
             let charter = args[2..].join(" ");
             Mode::Declare { name, charter }
-        }
+        },
         Some("join") => Mode::Join {
             name: args.get(1).ok_or(usage)?.clone(),
         },
@@ -272,7 +272,7 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("declare: {e}"))?;
             joined.publish(op).map_err(|e| e.to_string())?;
             println!("declared.");
-        }
+        },
         Mode::Join { name } => {
             let op = store
                 .author(
@@ -287,7 +287,7 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("join: {e}"))?;
             joined.publish(op).map_err(|e| e.to_string())?;
             println!("joined.");
-        }
+        },
         Mode::Share {
             manifest_id,
             schema_id,
@@ -308,8 +308,8 @@ async fn main() -> Result<(), String> {
                 .map_err(|e| format!("share: {e}"))?;
             joined.publish(op).map_err(|e| e.to_string())?;
             println!("shared into the fauna.");
-        }
-        Mode::Show => {}
+        },
+        Mode::Show => {},
     }
 
     // Watch the roster, printing on change, with real sync status.

@@ -17,6 +17,7 @@ use muniment::{Backend, MemoryBackend, RedbBackend};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
+use servitor::{Cap, cap_path};
 use stickleback::{
     DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropId,
     DropImportReport, DropLimits, DropProtector, DropRecord, DropWriteReceipt, EvidenceKind,
@@ -41,11 +42,11 @@ use super::group::{MootGroup, MootGroupSnapshot, MootMembershipAction};
 use super::MootId;
 use super::records::{
     AvailabilityPolicy, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy, MootRoster,
-    MootStore, MootStoreError, PolicyRevision,
+    MootStore, MootStoreError, PolicyRevision, fauna_cap,
 };
 use super::standing::{
-    GateDecision, StandingEvent, StandingExt, StandingFacts, StandingFileStore, StandingStore,
-    StandingStoreError, authorize,
+    DenyReason, GateDecision, StandingEvent, StandingExt, StandingFacts, StandingFileStore,
+    StandingStore, StandingStoreError, authorize,
 };
 use super::tulpa::{
     TulpaEvent, TulpaExt, TulpaFileStore, TulpaProjection, TulpaStore, TulpaStoreError,
@@ -96,7 +97,7 @@ impl DropExportSelector<super::MootExt> for MootDropSelector {
             Ok((_, MootEvent::Declared { .. } | MootEvent::Joined { .. })) => self.roster_priority,
             Ok((_, MootEvent::Shared { .. } | MootEvent::HistoryPruned { .. })) => {
                 self.fauna_priority
-            }
+            },
             Err(_) => return DropExportDecision::Omit,
         };
         DropExportDecision::Full { priority }
@@ -300,6 +301,8 @@ pub enum MootError {
     DomainEvidenceMalformed,
     #[error("authored operation is absent from its retained lane")]
     OutboundMissing,
+    #[error("Moot authority denied the local command: {0:?}")]
+    Unauthorized(DenyReason),
 }
 
 /// One Moot's constitutional and replicated object services.
@@ -368,7 +371,7 @@ impl Moot<RedbBackend> {
         };
         match service.governance.snapshot().await {
             Ok(_) => service.refresh_retention_authority().await?,
-            Err(MootGovernanceError::NotFounded) => {}
+            Err(MootGovernanceError::NotFounded) => {},
             Err(error) => return Err(error.into()),
         }
         Ok(service)
@@ -591,6 +594,35 @@ impl<B: Backend + Clone> Moot<B> {
             .await
     }
 
+    /// Evaluate direct constitutional and independently delegated capability
+    /// authority together with current membership and Standing facts.
+    pub async fn authorize_current_capability<P: MootAuthorizationProvider>(
+        &self,
+        provider: &P,
+        request: &MootAuthorizationRequest,
+    ) -> Result<GateDecision, MootError> {
+        let governance = self.governance.snapshot().await?;
+        let delegations = self.delegations.delegations(&governance.rules).await?;
+        let inputs = provider.inputs(request);
+        let capability_covers =
+            governance
+                .rules
+                .grant_covers(request.subject, &request.capability_path, request.at_ms)
+                || delegations.covers(
+                    self.moot_id.0,
+                    &governance.rules,
+                    request.subject,
+                    &request.capability_path,
+                    request.at_ms,
+                );
+        Ok(authorize(
+            &governance.rules.admission,
+            capability_covers && inputs.capability_covers,
+            &inputs.facts,
+            request.at_ms,
+        ))
+    }
+
     /// Evaluate caller-supplied delegated authority. Prefer
     /// [`Self::authorize_current_delegated`] for the aggregate-owned lane.
     pub async fn authorize_delegated<P: MootAuthorizationProvider>(
@@ -667,6 +699,59 @@ impl<B: Backend + Clone> Moot<B> {
         .await
     }
 
+    /// Share under this Moot's derived Personae key while retaining the
+    /// stable root as the fauna attribution and authorization subject.
+    pub async fn share_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        manifest_id: [u8; 32],
+        schema_id: String,
+        title: String,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let event = MootEvent::Shared {
+            manifest_id,
+            schema_id,
+            title,
+            at_ms,
+        };
+        let operation = self
+            .objects
+            .author_for_identity(identity, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Objects,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Author a contribution only after current community membership and
+    /// capability authority allow this stable Personae root to write fauna.
+    pub async fn share_authorized_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        manifest_id: [u8; 32],
+        schema_id: String,
+        title: String,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let group = self.membership().await?;
+        let request = MootAuthorizationRequest {
+            subject: identity.master_public_key().to_bytes(),
+            capability_path: cap_path(&fauna_cap()),
+            at_ms,
+        };
+        match self.authorize_current_capability(&group, &request).await? {
+            GateDecision::Allow => {
+                self.share_for_identity(identity, manifest_id, schema_id, title, at_ms)
+                    .await
+            },
+            GateDecision::Deny(reason) => Err(MootError::Unauthorized(reason)),
+        }
+    }
+
     async fn author_object(
         &self,
         actor_seed: [u8; 32],
@@ -735,6 +820,45 @@ impl<B: Backend + Clone> Moot<B> {
             lane: MootLane::Standing,
             snapshot: self.snapshot().await?,
         })
+    }
+
+    /// Record one Standing fact under a Moot-scoped derived key certified by
+    /// the stable Personae root named in the event.
+    pub async fn record_standing_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        event: StandingEvent,
+    ) -> Result<MootCommandReceipt, MootError> {
+        self.governance.snapshot().await?;
+        let operation = self
+            .standing
+            .author_for_identity(identity, self.moot_id.0, &event)
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Standing,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Record a stable-root Standing assertion only after current community
+    /// membership and the caller-selected typed capability allow it.
+    pub async fn record_standing_authorized_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        event: StandingEvent,
+        capability: &Cap,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let group = self.membership().await?;
+        let request = MootAuthorizationRequest {
+            subject: identity.master_public_key().to_bytes(),
+            capability_path: cap_path(capability),
+            at_ms: event.at_ms(),
+        };
+        match self.authorize_current_capability(&group, &request).await? {
+            GateDecision::Allow => self.record_standing_for_identity(identity, event).await,
+            GateDecision::Deny(reason) => Err(MootError::Unauthorized(reason)),
+        }
     }
 
     /// Retain one Tulpa proposal or endorsement. Recognition remains a
@@ -1168,7 +1292,9 @@ impl<B: Backend + Clone> Moot<B> {
     }
 
     /// The moot's commons **as converged authority sees it**: fauna entries
-    /// whose sharer holds the typed `moot/fauna` capability at `at_ms`.
+    /// whose sharer is admitted by the current constitutional policy, is a
+    /// current Write member, and holds the typed `moot/fauna` capability at
+    /// `at_ms`.
     ///
     /// Today `MootPolicy::admit` accepts a `Shared` event on wire grammar and
     /// moot address alone, so the raw
@@ -1193,9 +1319,27 @@ impl<B: Backend + Clone> Moot<B> {
             moot_id: self.moot_id.0,
             now_ms: at_ms,
         };
+        let group = self.membership().await?;
+        let capability_path = cap_path(&fauna_cap());
         Ok(roster
             .authorized_fauna(&authority)
             .into_iter()
+            .filter(|entry| {
+                let inputs = group.inputs(&MootAuthorizationRequest {
+                    subject: entry.shared_by,
+                    capability_path: capability_path.clone(),
+                    at_ms,
+                });
+                matches!(
+                    authorize(
+                        &rules.admission,
+                        inputs.capability_covers,
+                        &inputs.facts,
+                        at_ms,
+                    ),
+                    GateDecision::Allow
+                )
+            })
             .cloned()
             .collect())
     }
@@ -1555,6 +1699,81 @@ mod tests {
                 .unwrap(),
             GateDecision::Deny(DenyReason::NoCapability)
         );
+    }
+
+    #[tokio::test]
+    async fn authorized_fauna_applies_the_same_admission_policy_as_authoring() {
+        let founder = keypair(0x19);
+        let founder_id = founder.public_key().to_bytes();
+        let sharer = InMemoryProvider::from_seed([0x71; 32]);
+        let sharer_id = sharer.master_public_key().to_bytes();
+        let service = Moot::in_memory(ID, founder_id, retention());
+        let mut rules = ConstitutionRules::founder_only(founder_id);
+        rules.admission = Policy::OpenWithFloor(GateConfig::default());
+        rules.grant(CapabilityGrant {
+            id: [0x72; 32],
+            subject: sharer_id,
+            path_prefix: cap_path(&fauna_cap()),
+            not_before_ms: 1,
+            expires_at_ms: None,
+            delegation_depth: 0,
+        });
+        service
+            .found(founder.to_seed(), None, None, rules, 1)
+            .await
+            .unwrap();
+        service
+            .update_membership(
+                founder.to_seed(),
+                MootMembershipAction::Create {
+                    initial_members: vec![
+                        MootMember {
+                            member: founder_id,
+                            access: MootAccessLevel::Manage,
+                        },
+                        MootMember {
+                            member: sharer_id,
+                            access: MootAccessLevel::Write,
+                        },
+                    ],
+                },
+            )
+            .await
+            .unwrap();
+
+        service
+            .share_for_identity(
+                &sharer,
+                [0x73; 32],
+                "example.note.v1".into(),
+                "note".into(),
+                10,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            service
+                .object_store()
+                .roster(ID.0)
+                .await
+                .unwrap()
+                .fauna
+                .len(),
+            1
+        );
+        assert!(matches!(
+            service
+                .share_authorized_for_identity(
+                    &sharer,
+                    [0x74; 32],
+                    "example.note.v1".into(),
+                    "refused".into(),
+                    11,
+                )
+                .await,
+            Err(MootError::Unauthorized(DenyReason::BelowThreshold))
+        ));
+        assert!(service.authorized_fauna(11).await.unwrap().is_empty());
     }
 
     #[tokio::test]

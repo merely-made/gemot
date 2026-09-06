@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject};
 
 use super::retention::MootRosterSnapshot;
-use super::wire::{MootEvent, MootExt, from_operation, verify};
+use super::wire::{MootEvent, MootExt, from_operation, stable_author, verify};
 
 /// The founding statement, as resolved by the fold.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,7 +187,9 @@ impl MootRoster {
             if id != moot_id {
                 continue;
             }
-            let author = *op.header.verifying_key.as_bytes();
+            let Ok(author) = stable_author(op) else {
+                continue;
+            };
             let op_hash = *op.hash.as_bytes();
             match event {
                 MootEvent::Declared {
@@ -205,7 +207,7 @@ impl MootRoster {
                             op_hash,
                         },
                     );
-                }
+                },
                 MootEvent::Joined { name, at_ms } => {
                     let candidate = (at_ms, op_hash, name);
                     joins
@@ -216,7 +218,7 @@ impl MootRoster {
                             }
                         })
                         .or_insert(candidate);
-                }
+                },
                 MootEvent::Shared {
                     manifest_id,
                     schema_id,
@@ -231,8 +233,8 @@ impl MootRoster {
                         at_ms,
                         op_hash,
                     });
-                }
-                MootEvent::RetentionCheckpoint { .. } | MootEvent::HistoryPruned { .. } => {}
+                },
+                MootEvent::RetentionCheckpoint { .. } | MootEvent::HistoryPruned { .. } => {},
             }
         }
 

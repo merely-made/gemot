@@ -12,12 +12,13 @@
 //! another; the author signs at its per-author log position, forming a
 //! valid p2panda log LogSync reconciles.
 
-use identity::Ed25519Keypair;
+use identity::{DerivedKeyAttestation, Ed25519Keypair};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
+use stickleback::{WriterBindingError, stable_writer_subject};
 
 use super::retention::RetentionCheckpoint;
 
@@ -33,6 +34,10 @@ pub enum MootLogId {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MootExt {
     pub moot_id: [u8; 32],
+    /// Master-signed binding when the operation uses a Moot-derived Personae
+    /// key. An absent attestation means the signer is the stable identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_attestation: Option<DerivedKeyAttestation>,
     /// Upstream-compatible signal that this operation retires its event prefix.
     #[serde(
         rename = "p",
@@ -89,6 +94,26 @@ pub enum WireError {
     MissingBody,
     #[error("moot operation body is not a MootEvent")]
     Malformed,
+    #[error(transparent)]
+    Writer(#[from] WriterBindingError),
+}
+
+/// Domain-separated salt for one Moot's derived object-lane signing key.
+pub fn object_identity_salt(moot_id: [u8; 32]) -> Vec<u8> {
+    let mut salt = Vec::with_capacity(55);
+    salt.extend_from_slice(b"mere.gemot.objects.v1/");
+    salt.extend_from_slice(&moot_id);
+    salt
+}
+
+/// Resolve an operation signer to the stable Personae root used by Moot
+/// projection and authorization.
+pub fn stable_author(operation: &Operation<MootExt>) -> Result<[u8; 32], WireError> {
+    Ok(stable_writer_subject(
+        *operation.header.verifying_key.as_bytes(),
+        operation.header.extensions.author_attestation.as_ref(),
+        &object_identity_salt(operation.header.extensions.moot_id),
+    )?)
 }
 
 /// Sign a [`MootEvent`] into an operation on `moot_id`'s event-DAG at the
@@ -137,6 +162,7 @@ pub fn to_prune_operation_seed(
         &MootEvent::HistoryPruned { checkpoint, at_ms },
         seq_num,
         backlink,
+        None,
         true,
     )
 }
@@ -151,7 +177,28 @@ pub fn to_operation_seed(
     seq_num: u32,
     backlink: Option<[u8; 32]>,
 ) -> Operation<MootExt> {
-    to_operation_seed_with_prune(signing_seed, moot_id, event, seq_num, backlink, false)
+    to_operation_seed_with_attestation(signing_seed, moot_id, event, seq_num, backlink, None)
+}
+
+/// Sign a Moot event under a derived key certified by its stable Personae
+/// root.
+pub fn to_operation_seed_with_attestation(
+    signing_seed: [u8; 32],
+    moot_id: [u8; 32],
+    event: &MootEvent,
+    seq_num: u32,
+    backlink: Option<[u8; 32]>,
+    author_attestation: Option<DerivedKeyAttestation>,
+) -> Operation<MootExt> {
+    to_operation_seed_with_prune(
+        signing_seed,
+        moot_id,
+        event,
+        seq_num,
+        backlink,
+        author_attestation,
+        false,
+    )
 }
 
 fn to_operation_seed_with_prune(
@@ -160,6 +207,7 @@ fn to_operation_seed_with_prune(
     event: &MootEvent,
     seq_num: u32,
     backlink: Option<[u8; 32]>,
+    author_attestation: Option<DerivedKeyAttestation>,
     prune: bool,
 ) -> Operation<MootExt> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
@@ -177,6 +225,7 @@ fn to_operation_seed_with_prune(
             &signing_key,
             MootExt {
                 moot_id,
+                author_attestation,
                 prune_flag: PruneFlag::new(prune),
             },
         );
@@ -248,6 +297,78 @@ mod tests {
         assert_eq!(
             to_operation(&kp, MOOT, &event, 0, None),
             to_operation_seed(kp.to_seed(), MOOT, &event, 0, None)
+        );
+    }
+
+    #[test]
+    fn absent_attestation_keeps_the_legacy_extension_encoding() {
+        #[derive(Serialize, Deserialize)]
+        struct LegacyMootExt {
+            moot_id: [u8; 32],
+            #[serde(
+                rename = "p",
+                skip_serializing_if = "PruneFlag::is_not_set",
+                default = "PruneFlag::default"
+            )]
+            prune_flag: PruneFlag,
+        }
+
+        let legacy = LegacyMootExt {
+            moot_id: MOOT,
+            prune_flag: PruneFlag::default(),
+        };
+        let current = MootExt {
+            moot_id: MOOT,
+            author_attestation: None,
+            prune_flag: PruneFlag::default(),
+        };
+        let legacy_bytes = encode_cbor(&legacy).unwrap();
+        assert_eq!(encode_cbor(&current).unwrap(), legacy_bytes);
+        let decoded: MootExt = decode_cbor(legacy_bytes.as_slice()).unwrap();
+        assert_eq!(decoded, current);
+
+        let identity = InMemoryProvider::from_seed([0x41; 32]);
+        let attested = MootExt {
+            moot_id: MOOT,
+            author_attestation: Some(
+                identity
+                    .attest_derived_key(&object_identity_salt(MOOT))
+                    .unwrap(),
+            ),
+            prune_flag: PruneFlag::default(),
+        };
+        let attested_bytes = encode_cbor(&attested).unwrap();
+        let legacy_reader: LegacyMootExt = decode_cbor(attested_bytes.as_slice()).unwrap();
+        assert_eq!(legacy_reader.moot_id, MOOT);
+        assert!(legacy_reader.prune_flag.is_not_set());
+    }
+
+    #[test]
+    fn attested_derived_signer_resolves_to_its_stable_root() {
+        let identity = InMemoryProvider::from_seed([0x31; 32]);
+        let salt = object_identity_salt(MOOT);
+        let derived = identity.derive_keypair(&salt).unwrap();
+        let operation = to_operation_seed_with_attestation(
+            derived.to_seed(),
+            MOOT,
+            &MootEvent::Shared {
+                manifest_id: [0xaa; 32],
+                schema_id: "fleece.snapshot/v1".into(),
+                title: "attested page".into(),
+                at_ms: 7,
+            },
+            0,
+            None,
+            Some(identity.attest_derived_key(&salt).unwrap()),
+        );
+
+        assert_ne!(
+            operation.header.verifying_key.as_bytes(),
+            &identity.master_public_key().to_bytes()
+        );
+        assert_eq!(
+            stable_author(&operation).unwrap(),
+            identity.master_public_key().to_bytes()
         );
     }
 

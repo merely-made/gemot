@@ -29,8 +29,9 @@
 //!
 //! - [`TypedMootAuthorization`] is the **moot-facing** face: it answers
 //!   gemot's own [`MootAuthorizationProvider`] seam from typed capabilities.
-//! - [`MootAuthority`] is the **servitor-facing** face: it presents the same
-//!   moot certificates as a [`servitor::AuthorityProvider`], so a moot peer's
+//! - [`MootAuthority`] is the **servitor-facing** face: it presents direct
+//!   constitutional grants and moot certificates as a
+//!   [`servitor::AuthorityProvider`], so a moot peer's
 //!   petition runs through the very `servitor::Gate` a script's and a wasm
 //!   component's do. That is the participant-gate doctrine's third actor
 //!   kind, and it needs no new gate — only this adapter.
@@ -109,7 +110,8 @@ impl<M: MootAuthorizationProvider> MootAuthorizationProvider for TypedMootAuthor
 /// a different axis from its action set — so a delegate-mode need fails
 /// closed here rather than being approximated by "act".
 pub struct MootAuthority<'a> {
-    /// The moot's converged delegation certificates.
+    /// The moot's converged delegation certificates, beside direct grants in
+    /// `rules`.
     pub delegations: &'a MootDelegations,
     /// The accepted constitution, whose capability grants root the chains.
     pub rules: &'a ConstitutionRules,
@@ -126,13 +128,11 @@ impl AuthorityProvider for MootAuthority<'_> {
             // Not expressible in the moot action vocabulary; see the type doc.
             return false;
         }
-        self.delegations.covers(
-            self.moot_id,
-            self.rules,
-            subject.0,
-            &cap_path(needed),
-            self.now_ms,
-        )
+        let path = cap_path(needed);
+        self.rules.grant_covers(subject.0, &path, self.now_ms)
+            || self
+                .delegations
+                .covers(self.moot_id, self.rules, subject.0, &path, self.now_ms)
     }
 }
 
@@ -229,6 +229,31 @@ mod tests {
             capability_path: capability.to_string(),
             at_ms: 500,
         }
+    }
+
+    #[test]
+    fn direct_constitutional_grant_answers_the_servitor_authority() {
+        let holder = InMemoryProvider::from_seed([0x61; 32]);
+        let subject = holder.master_public_key().to_bytes();
+        let capability = crate::moot::records::fauna_cap();
+        let mut rules = ConstitutionRules::founder_only(subject);
+        rules.grant(CapabilityGrant {
+            id: ROOT_GRANT,
+            subject,
+            path_prefix: cap_path(&capability),
+            not_before_ms: 10,
+            expires_at_ms: Some(1_000),
+            delegation_depth: 0,
+        });
+        let delegations = MootDelegations::new();
+        let authority = MootAuthority {
+            delegations: &delegations,
+            rules: &rules,
+            moot_id: MOOT,
+            now_ms: 500,
+        };
+
+        assert!(authority.covers(Subject::new(subject), &capability, Mode::Write));
     }
 
     #[test]

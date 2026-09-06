@@ -64,5 +64,6 @@ pub use crate::moot::standing::ledger::{Ledger, StandingConfig};
 pub use crate::moot::standing::persona_chain::{PersonaChains, PersonaId};
 pub use crate::moot::standing::store::{StandingFileStore, StandingStore, StandingStoreError};
 pub use crate::moot::standing::wire::{
-    StandingExt, WireError, from_operation, to_operation, to_operation_seed, verify,
+    StandingExt, WireError, from_operation, stable_author, standing_identity_salt, to_operation,
+    to_operation_seed, to_operation_seed_with_attestation, verify,
 };

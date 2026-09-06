@@ -134,6 +134,24 @@ pub enum StandingEvent {
 }
 
 impl StandingEvent {
+    /// Stable persona-chain root that authors this assertion.
+    ///
+    /// For handoffs this is the current owner (`from`); the successor only
+    /// becomes the author of later heartbeats or completion. Governance
+    /// judgements are authored by their governance root, not their target.
+    pub fn author(&self) -> ChainRoot {
+        match self {
+            StandingEvent::CommitmentMade { by, .. }
+            | StandingEvent::Heartbeat { by, .. }
+            | StandingEvent::CommitmentFulfilled { by, .. }
+            | StandingEvent::GovernanceParticipation { by, .. }
+            | StandingEvent::Pardon { by, .. }
+            | StandingEvent::Censure { by, .. } => *by,
+            StandingEvent::CleanHandoff { from, .. } => *from,
+            StandingEvent::Vouch { voucher, .. } => *voucher,
+        }
+    }
+
     /// The event's author-asserted timestamp (ms).
     pub fn at_ms(&self) -> u64 {
         match self {
