@@ -120,8 +120,9 @@ pub use records::{
     AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry,
     GovernedCheckpointAuthority, KeepBound, LogFrontier, Member, MootEvent, MootExt, MootLogId,
     MootRetentionPolicy, MootRoster, MootRosterSnapshot, MootStore, MootStoreError, MootStoreFile,
-    PolicyRevision, RetentionCheckpoint, StoredCheckpoint, WireError, from_operation, to_operation,
-    to_operation_seed, to_prune_operation, to_prune_operation_seed, verify,
+    PolicyRevision, RetentionCheckpoint, StoredCheckpoint, WireError, from_operation,
+    object_identity_salt, stable_author, to_operation, to_operation_seed,
+    to_operation_seed_with_attestation, to_prune_operation, to_prune_operation_seed, verify,
 };
 pub use service::{
     Moot, MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,

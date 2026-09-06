@@ -23,6 +23,7 @@ pub use retention::{
 pub use roster::{Declaration, FaunaEntry, Member, MootRoster, fauna_cap};
 pub use store::{MootStore, MootStoreError, MootStoreFile, StoredCheckpoint};
 pub use wire::{
-    MootEvent, MootExt, MootLogId, WireError, from_operation, to_operation, to_operation_seed,
-    to_prune_operation, to_prune_operation_seed, verify,
+    MootEvent, MootExt, MootLogId, WireError, from_operation, object_identity_salt, stable_author,
+    to_operation, to_operation_seed, to_operation_seed_with_attestation, to_prune_operation,
+    to_prune_operation_seed, verify,
 };
