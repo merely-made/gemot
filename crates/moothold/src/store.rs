@@ -69,20 +69,20 @@ impl OperationPolicy<MootholdExt> for MootholdPolicy {
                 moothold_id,
                 founder,
                 ..
-            } if moothold_id == self.id && founder == self.founder && author == self.founder => {}
+            } if moothold_id == self.id && founder == self.founder && author == self.founder => {},
             MootholdEvent::Founded { .. } => {
                 return Err(Reject::new(
                     "wrong-founder",
                     "foundation does not bind the configured founder",
                 ));
-            }
+            },
             _ if author != self.founder => {
                 return Err(Reject::new(
                     "unauthorized-moothold-event",
                     "actor is not the Moothold founder",
                 ));
-            }
-            _ => {}
+            },
+            _ => {},
         }
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.id.0),
@@ -140,11 +140,11 @@ impl<B: Backend + Clone> MootholdStore<B> {
         let event = from_operation(operation).map_err(|_| MootholdError::Malformed)?;
         let current = self.aggregate().await?;
         match (&current, &event) {
-            (None, MootholdEvent::Founded { .. }) => {}
+            (None, MootholdEvent::Founded { .. }) => {},
             (None, _) => return Err(MootholdStoreError::NotFounded),
             (Some(_), MootholdEvent::Founded { .. }) => {
                 return Err(MootholdError::AlreadyFounded.into());
-            }
+            },
             (Some(state), _) => {
                 if event.previous() != Some(state.revision) {
                     return Err(MootholdError::StaleRevision.into());
@@ -152,7 +152,7 @@ impl<B: Backend + Clone> MootholdStore<B> {
                 if *operation.header.verifying_key.as_bytes() != state.founder {
                     return Err(MootholdError::Unauthorized.into());
                 }
-            }
+            },
         }
         let processor = OperationProcessor::new(
             self.store.clone(),

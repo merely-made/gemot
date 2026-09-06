@@ -186,7 +186,7 @@ fn decode_authored<T: DeserializeOwned>(bytes: &[u8]) -> Result<ChatAuthored<T>,
                 return Err(ChatAuthorBindingError::UnsupportedVersion(record.version).into());
             }
             Ok(record)
-        }
+        },
         Err(_) => {
             let payload = decode_cbor(bytes).map_err(|error| ChatError::Wire(error.to_string()))?;
             Ok(ChatAuthored {
@@ -194,7 +194,7 @@ fn decode_authored<T: DeserializeOwned>(bytes: &[u8]) -> Result<ChatAuthored<T>,
                 payload,
                 author_attestation: None,
             })
-        }
+        },
     }
 }
 
@@ -489,7 +489,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                     }
                 }
                 CHAT_LOG
-            }
+            },
             ChatClass::Checkpoint => {
                 let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
                     Reject::new(
@@ -528,7 +528,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                 validate_checkpoint_epoch_inventory(&keys, &checkpoint)
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 CHAT_CHECKPOINT_LOG
-            }
+            },
         };
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.space_id),
@@ -1021,10 +1021,10 @@ impl<B: Backend + Clone> ChatReplica<B> {
                 operation: entry.operation,
             };
             match author_frontiers.get(&entry.author) {
-                Some(current) if current.seq_num >= entry.seq_num => {}
+                Some(current) if current.seq_num >= entry.seq_num => {},
                 _ => {
                     author_frontiers.insert(entry.author, frontier);
-                }
+                },
             }
         }
 
@@ -1148,7 +1148,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     ChatEpochHoldReason::PendingCausality => EpochHoldReason::PendingCausality,
                     ChatEpochHoldReason::AuthorityReevaluation => {
                         EpochHoldReason::AuthorityReevaluation
-                    }
+                    },
                 };
                 holds.push(EpochHold {
                     epoch: hold.epoch,
@@ -1371,7 +1371,7 @@ fn split_chat_records(records: Vec<StoredChatOperation>) -> RetainedChatRecords 
         match record.log_id {
             CHAT_LOG => data.push(record),
             CHAT_CHECKPOINT_LOG => checkpoints.push(record),
-            _ => {}
+            _ => {},
         }
     }
     RetainedChatRecords { data, checkpoints }
@@ -1543,12 +1543,12 @@ fn project_records<A: CommonsAuthority>(
             AuthorityState::Pending => {
                 pending_authority.push(classified);
                 continue;
-            }
+            },
             AuthorityState::Revoked => {
                 revoked.push(classified);
                 continue;
-            }
-            AuthorityState::Effective => {}
+            },
+            AuthorityState::Effective => {},
         }
         apply_event(
             &mut channels,
@@ -1641,12 +1641,12 @@ fn project_checkpoint_tail<A: CommonsAuthority>(
             AuthorityState::Pending => {
                 pending_authority.push(classified);
                 continue;
-            }
+            },
             AuthorityState::Revoked => {
                 revoked.push(classified);
                 continue;
-            }
-            AuthorityState::Effective => {}
+            },
+            AuthorityState::Effective => {},
         }
         apply_event(
             &mut channels,
@@ -1706,7 +1706,7 @@ fn apply_event(
     match event {
         ChatEvent::Channel(channel) => {
             channels.insert(channel.id.clone(), channel);
-        }
+        },
         ChatEvent::Message(message) => messages.push(AuthoredMessage {
             operation: *operation.hash.as_bytes(),
             author: stable_author,
@@ -1727,7 +1727,7 @@ fn apply_event(
             message.message.body = edit.body;
             message.latest_edit = Some(*operation.hash.as_bytes());
             message.edited_at_ms = Some(edit.edited_at_ms);
-        }
+        },
         ChatEvent::MessageDelete(delete) => {
             let index = messages
                 .iter()
@@ -1745,7 +1745,7 @@ fn apply_event(
                 deletion: *operation.hash.as_bytes(),
                 deleted_at_ms: delete.deleted_at_ms,
             });
-        }
+        },
     }
     Ok(())
 }
