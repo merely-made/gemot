@@ -139,16 +139,16 @@ impl Moothold {
 
     fn apply_event(&mut self, event: &MootholdEvent) {
         match event {
-            MootholdEvent::Founded { .. } => {}
+            MootholdEvent::Founded { .. } => {},
             MootholdEvent::MootAdmitted { moot, terms, .. } => {
                 self.members.insert(*moot, *terms);
-            }
+            },
             MootholdEvent::MootRemoved { moot, .. } => {
                 self.members.remove(moot);
-            }
+            },
             MootholdEvent::CompositionChanged { composition, .. } => {
                 self.composition = *composition;
-            }
+            },
         }
     }
 }

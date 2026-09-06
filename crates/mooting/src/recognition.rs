@@ -68,7 +68,7 @@ impl RecognitionPolicy {
                 ..
             } if *numerator == 0 || *denominator == 0 || numerator > denominator => {
                 Err(RecognitionPolicyError::InvalidFraction)
-            }
+            },
             Self::Fraction { minimum: 0, .. } => Err(RecognitionPolicyError::ZeroMinimum),
             _ => Ok(()),
         }
@@ -133,7 +133,7 @@ impl RecognitionContext {
                     .saturating_mul(numerator as u64)
                     .div_ceil(denominator as u64);
                 fraction.max(minimum as u64)
-            }
+            },
             RecognitionPolicy::Unanimous => electorate_size.max(1),
         };
 

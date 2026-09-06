@@ -281,10 +281,10 @@ impl ParticipantAccumulator {
         match &frame.control {
             CallControl::Ring => {
                 replace_latest(&mut self.phase, frame.sequence, ParticipantPhase::Ringing)
-            }
+            },
             CallControl::Accept | CallControl::Resume => {
                 replace_latest(&mut self.phase, frame.sequence, ParticipantPhase::Connected)
-            }
+            },
             CallControl::Reconnect => replace_latest(
                 &mut self.phase,
                 frame.sequence,
@@ -293,18 +293,18 @@ impl ParticipantAccumulator {
             CallControl::Mute { muted } => replace_latest(&mut self.mute, frame.sequence, *muted),
             CallControl::PushToTalk { transmitting } => {
                 replace_latest(&mut self.push_to_talk, frame.sequence, *transmitting)
-            }
+            },
             CallControl::OfferAudio { formats } => {
                 replace_latest(&mut self.offered_audio, frame.sequence, formats.clone())
-            }
+            },
             CallControl::SelectAudio { format } => {
                 replace_latest(&mut self.selected_audio, frame.sequence, format.clone())
-            }
+            },
             CallControl::Decline
             | CallControl::Cancel
             | CallControl::Leave
             | CallControl::End
-            | CallControl::Fail => {}
+            | CallControl::Fail => {},
         }
     }
 
@@ -354,16 +354,16 @@ pub fn fold_call(
         match unique.entry((frame.sender, frame.sequence)) {
             Entry::Vacant(entry) => {
                 entry.insert(frame.clone());
-            }
+            },
             Entry::Occupied(entry) if entry.get() == frame => {
                 diagnostics.duplicate_frames += 1;
-            }
+            },
             Entry::Occupied(_) => {
                 return Err(CallFoldError::Equivocation {
                     participant: frame.sender,
                     sequence: frame.sequence,
                 });
-            }
+            },
         }
     }
 
@@ -505,20 +505,20 @@ fn validate_frame(
             if frame.sender != invitation.owner =>
         {
             return Err(CallFoldError::InvalidRole);
-        }
+        },
         CallControl::Accept | CallControl::Decline if frame.sender != invitation.invitee => {
             return Err(CallFoldError::InvalidRole);
-        }
+        },
         CallControl::OfferAudio { formats }
             if formats.is_empty()
                 || formats.len() > 16
                 || formats.iter().any(|format| !format.validate()) =>
         {
             return Err(CallFoldError::InvalidAudioParameters);
-        }
+        },
         CallControl::SelectAudio { format } if !format.validate() => {
             return Err(CallFoldError::InvalidAudioParameters);
-        }
+        },
         CallControl::Ring
         | CallControl::Accept
         | CallControl::Decline
@@ -531,7 +531,7 @@ fn validate_frame(
         | CallControl::Mute { .. }
         | CallControl::PushToTalk { .. }
         | CallControl::OfferAudio { .. }
-        | CallControl::SelectAudio { .. } => {}
+        | CallControl::SelectAudio { .. } => {},
     }
     Ok(())
 }
@@ -557,10 +557,10 @@ fn validate_terminal(
             if terminal.participant != invitation.invitee =>
         {
             Err(CallFoldError::InvalidRole)
-        }
+        },
         CallTerminalReason::Cancelled if terminal.participant != invitation.owner => {
             Err(CallFoldError::InvalidRole)
-        }
+        },
         CallTerminalReason::Failed
         | CallTerminalReason::Declined
         | CallTerminalReason::Missed
