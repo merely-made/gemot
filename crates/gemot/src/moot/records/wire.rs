@@ -69,6 +69,11 @@ pub enum MootEvent {
         title: String,
         at_ms: u64,
     },
+    /// A contributor's withdrawal of one of their own `Shared` operations.
+    /// The target is the original signed operation hash, so withdrawing one
+    /// contribution does not withdraw another contribution to the same
+    /// manifest.
+    Withdrawn { target_share: [u8; 32], at_ms: u64 },
     /// Constitution-authorized current state and retained event frontiers.
     RetentionCheckpoint {
         checkpoint: Box<RetentionCheckpoint>,
@@ -405,5 +410,36 @@ mod tests {
         assert!(validate_header(&op0.header).is_ok());
         assert!(validate_header(&op1.header).is_ok());
         assert!(validate_backlink(&op0.header, &op1.header).is_ok());
+    }
+
+    #[test]
+    fn withdrawal_round_trips_and_keeps_its_signed_author_binding() {
+        let identity = InMemoryProvider::from_seed([0x52; 32]);
+        let salt = object_identity_salt(MOOT);
+        let derived = identity.derive_keypair(&salt).unwrap();
+        let operation = to_operation_seed_with_attestation(
+            derived.to_seed(),
+            MOOT,
+            &MootEvent::Withdrawn {
+                target_share: [0xaa; 32],
+                at_ms: 9,
+            },
+            0,
+            None,
+            Some(identity.attest_derived_key(&salt).unwrap()),
+        );
+        let (_, event) = from_operation(&operation).unwrap();
+        assert_eq!(
+            event,
+            MootEvent::Withdrawn {
+                target_share: [0xaa; 32],
+                at_ms: 9,
+            }
+        );
+        assert_eq!(
+            stable_author(&operation).unwrap(),
+            identity.master_public_key().to_bytes()
+        );
+        assert!(verify(&operation));
     }
 }
