@@ -17,7 +17,7 @@ use muniment::{Backend, MemoryBackend, RedbBackend};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
-use servitor::{Cap, cap_path};
+use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 use stickleback::{
     DropExportBudget, DropExportDecision, DropExportProfile, DropExportSelector, DropId,
     DropImportReport, DropLimits, DropProtector, DropRecord, DropWriteReceipt, EvidenceKind,
@@ -41,8 +41,9 @@ use super::group::{MootGroup, MootGroupSnapshot, MootMembershipAction};
 
 use super::MootId;
 use super::records::{
-    AvailabilityPolicy, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy, MootRoster,
-    MootStore, MootStoreError, PolicyRevision, fauna_cap,
+    AvailabilityPolicy, CollectionChange, CollectionEvent, CollectionFork, CollectionId,
+    CollectionRef, CollectionView, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy,
+    MootRoster, MootStore, MootStoreError, PolicyRevision, collection_cap, fauna_cap,
 };
 use super::standing::{
     DenyReason, GateDecision, StandingEvent, StandingExt, StandingFacts, StandingFileStore,
@@ -99,6 +100,7 @@ impl DropExportSelector<super::MootExt> for MootDropSelector {
                 _,
                 MootEvent::Shared { .. }
                 | MootEvent::Withdrawn { .. }
+                | MootEvent::Collection { .. }
                 | MootEvent::HistoryPruned { .. },
             )) => self.fauna_priority,
             Err(_) => return DropExportDecision::Omit,
@@ -310,6 +312,46 @@ pub enum MootError {
     WithdrawalUnknownTarget,
     #[error("withdrawal identity did not author the target shared operation")]
     WithdrawalWrongIdentity,
+    #[error("collection event references another Moot")]
+    ForeignCollection,
+    #[error("collection fork does not reproduce its named parent membership")]
+    InvalidCollectionFork,
+    #[error("collection does not have an effective current view")]
+    CollectionUnknown,
+    #[error("collection change does not name the exact current heads")]
+    StaleCollectionHeads,
+    #[error("collection membership names a contribution outside current effective fauna")]
+    IneffectiveCollectionContribution,
+}
+
+struct CurrentCollectionAuthority<'a> {
+    typed: MootAuthority<'a>,
+    group: &'a MootGroup,
+    rules: &'a ConstitutionRules,
+    at_ms: u64,
+}
+
+impl AuthorityProvider for CurrentCollectionAuthority<'_> {
+    fn covers(&self, subject: Subject, needed: &Cap, mode: Mode) -> bool {
+        if !self.typed.covers(subject, needed, mode) {
+            return false;
+        }
+        let request = MootAuthorizationRequest {
+            subject: subject.0,
+            capability_path: cap_path(needed),
+            at_ms: self.at_ms,
+        };
+        let inputs = self.group.inputs(&request);
+        matches!(
+            authorize(
+                &self.rules.admission,
+                inputs.capability_covers,
+                &inputs.facts,
+                self.at_ms,
+            ),
+            GateDecision::Allow
+        )
+    }
 }
 
 /// One Moot's constitutional and replicated object services.
@@ -789,6 +831,150 @@ impl<B: Backend + Clone> Moot<B> {
                     target_share,
                     at_ms,
                 },
+            )
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Objects,
+            snapshot: self.snapshot().await?,
+        })
+    }
+
+    /// Resolve a collection through current membership, typed capability, and
+    /// contribution authority. Raw history remains in the object roster.
+    pub async fn authorized_collection(
+        &self,
+        collection_id: CollectionId,
+        at_ms: u64,
+    ) -> Result<Option<CollectionView>, MootError> {
+        let rules = self.governance.snapshot().await?.rules;
+        let delegations = self.delegations.delegations(&rules).await?;
+        let group = self.membership().await?;
+        let authority = CurrentCollectionAuthority {
+            typed: MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: self.moot_id.0,
+                now_ms: at_ms,
+            },
+            group: &group,
+            rules: &rules,
+            at_ms,
+        };
+        Ok(self
+            .objects
+            .roster(self.moot_id.0)
+            .await?
+            .authorized_collection(self.moot_id.0, collection_id, &authority))
+    }
+
+    /// Mint a same-Moot collection root under a stable Personae identity.
+    pub async fn declare_collection_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        collection_id: CollectionId,
+        name: String,
+        fork: Option<CollectionFork>,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        if let Some(seed) = &fork {
+            if seed.parent.collection.moot_id != self.moot_id.0
+                || seed.selected.iter().any(|member| member.moot_id != self.moot_id.0)
+            {
+                return Err(MootError::ForeignCollection);
+            }
+            if !seed.verifies() {
+                return Err(MootError::InvalidCollectionFork);
+            }
+            let source = self
+                .authorized_collection(seed.parent.collection.collection_id, at_ms)
+                .await?
+                .ok_or(MootError::CollectionUnknown)?;
+            if source.version != seed.parent {
+                return Err(MootError::InvalidCollectionFork);
+            }
+            let effective: std::collections::BTreeSet<_> =
+                source.effective_selected.into_iter().collect();
+            if seed.selected.iter().any(|member| !effective.contains(member)) {
+                return Err(MootError::IneffectiveCollectionContribution);
+            }
+        }
+        let collection = CollectionRef { moot_id: self.moot_id.0, collection_id };
+        self.author_collection_for_identity(
+            identity,
+            collection,
+            CollectionEvent::Declared { collection_id, name, fork, at_ms },
+            at_ms,
+        ).await
+    }
+
+    /// Apply one membership decision against the exact observed collection heads.
+    pub async fn set_collection_membership_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        collection: CollectionRef,
+        mut parents: Vec<[u8; 32]>,
+        change: CollectionChange,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        if collection.moot_id != self.moot_id.0 {
+            return Err(MootError::ForeignCollection);
+        }
+        parents.sort();
+        parents.dedup();
+        let view = self
+            .authorized_collection(collection.collection_id, at_ms)
+            .await?
+            .ok_or(MootError::CollectionUnknown)?;
+        if parents != view.heads {
+            return Err(MootError::StaleCollectionHeads);
+        }
+        let CollectionChange::SetMembership { contribution, included } = change;
+        if contribution.moot_id != self.moot_id.0 {
+            return Err(MootError::ForeignCollection);
+        }
+        if included {
+            let effective = self.authorized_fauna(at_ms).await?;
+            if !effective.iter().any(|entry| entry.op_hash == contribution.share) {
+                return Err(MootError::IneffectiveCollectionContribution);
+            }
+        }
+        self.author_collection_for_identity(
+            identity,
+            collection,
+            CollectionEvent::Changed {
+                collection,
+                parents,
+                change: CollectionChange::SetMembership { contribution, included },
+                at_ms,
+            },
+            at_ms,
+        ).await
+    }
+
+    async fn author_collection_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        collection: CollectionRef,
+        event: CollectionEvent,
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let group = self.membership().await?;
+        let request = MootAuthorizationRequest {
+            subject: identity.master_public_key().to_bytes(),
+            capability_path: cap_path(&collection_cap(collection)),
+            at_ms,
+        };
+        match self.authorize_current_capability(&group, &request).await? {
+            GateDecision::Allow => {},
+            GateDecision::Deny(reason) => return Err(MootError::Unauthorized(reason)),
+        }
+        let operation = self
+            .objects
+            .author_for_identity(
+                identity,
+                self.moot_id.0,
+                &MootEvent::Collection { event },
             )
             .await?;
         Ok(MootCommandReceipt {

@@ -8,6 +8,7 @@
 //! retention checkpoints. This is one lane within a Moot, not the Moot's
 //! application boundary.
 
+pub mod collection;
 pub mod retention;
 pub mod roster;
 pub mod store;
@@ -16,6 +17,11 @@ pub mod wire;
 #[cfg(test)]
 mod sync;
 
+pub use collection::{
+    CollectionChange, CollectionEvent, CollectionFact, CollectionFork, CollectionId, CollectionRef,
+    CollectionVersion, CollectionView, ContributionRef, PendingCollectionFact,
+    PendingCollectionReason, SelectionCitation, collection_cap, membership_commitment,
+};
 pub use retention::{
     AvailabilityPolicy, CheckpointError, ErasurePolicy, GovernedCheckpointAuthority, KeepBound,
     LogFrontier, MootRetentionPolicy, MootRosterSnapshot, PolicyRevision, RetentionCheckpoint,
