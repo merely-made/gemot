@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use servitor::{AuthorityProvider, Cap, Mode, Subject};
 
+use super::collection::CollectionFact;
 use super::retention::MootRosterSnapshot;
 use super::wire::{MootEvent, MootExt, from_operation, stable_author, verify};
 
@@ -100,6 +101,9 @@ pub struct MootRoster {
     /// Withdrawal facts in `(target_share, at_ms, op_hash)` order.
     #[serde(default)]
     pub withdrawals: Vec<FaunaWithdrawal>,
+    /// Raw signed collection facts, retained independently of current authority.
+    #[serde(default)]
+    pub collections: Vec<CollectionFact>,
 }
 
 impl MootRoster {
@@ -188,6 +192,7 @@ impl MootRoster {
         let mut joins: BTreeMap<[u8; 32], (u64, [u8; 32], String)> = BTreeMap::new();
         let mut fauna: Vec<FaunaEntry> = Vec::new();
         let mut withdrawals: BTreeMap<[u8; 32], FaunaWithdrawal> = BTreeMap::new();
+        let mut collections: BTreeMap<[u8; 32], CollectionFact> = BTreeMap::new();
 
         if let Some(declaration) = &snapshot.roster.declaration {
             declarations.insert(declaration.op_hash, declaration.clone());
@@ -205,6 +210,9 @@ impl MootRoster {
         fauna.extend(snapshot.roster.fauna.iter().cloned());
         for withdrawal in &snapshot.roster.withdrawals {
             withdrawals.insert(withdrawal.op_hash, withdrawal.clone());
+        }
+        for fact in &snapshot.roster.collections {
+            collections.insert(fact.op_hash, fact.clone());
         }
 
         for op in ops {
@@ -275,6 +283,13 @@ impl MootRoster {
                         op_hash,
                     });
                 },
+                MootEvent::Collection { event } => {
+                    collections.entry(op_hash).or_insert(CollectionFact {
+                        event,
+                        by: author,
+                        op_hash,
+                    });
+                },
                 MootEvent::RetentionCheckpoint { .. } | MootEvent::HistoryPruned { .. } => {},
             }
         }
@@ -304,6 +319,7 @@ impl MootRoster {
                 withdrawal.op_hash,
             )
         });
+        let collections = collections.into_values().collect();
 
         Self {
             declaration,
@@ -311,6 +327,7 @@ impl MootRoster {
             membership_revision,
             fauna,
             withdrawals,
+            collections,
         }
     }
 }
@@ -323,6 +340,7 @@ impl Default for MootRoster {
             membership_revision: membership_revision(&BTreeMap::new()),
             fauna: Vec::new(),
             withdrawals: Vec::new(),
+            collections: Vec::new(),
         }
     }
 }

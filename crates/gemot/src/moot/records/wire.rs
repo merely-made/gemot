@@ -74,6 +74,10 @@ pub enum MootEvent {
     /// contribution does not withdraw another contribution to the same
     /// manifest.
     Withdrawn { target_share: [u8; 32], at_ms: u64 },
+    /// Collection history retains contribution references rather than payloads.
+    Collection {
+        event: super::collection::CollectionEvent,
+    },
     /// Constitution-authorized current state and retained event frontiers.
     RetentionCheckpoint {
         checkpoint: Box<RetentionCheckpoint>,
@@ -436,6 +440,36 @@ mod tests {
                 at_ms: 9,
             }
         );
+        assert_eq!(
+            stable_author(&operation).unwrap(),
+            identity.master_public_key().to_bytes()
+        );
+        assert!(verify(&operation));
+    }
+
+    #[test]
+    fn collection_round_trips_and_keeps_its_stable_author() {
+        use super::super::collection::{CollectionEvent, CollectionId};
+        let identity = InMemoryProvider::from_seed([0x53; 32]);
+        let salt = object_identity_salt(MOOT);
+        let derived = identity.derive_keypair(&salt).unwrap();
+        let event = MootEvent::Collection {
+            event: CollectionEvent::Declared {
+                collection_id: CollectionId([7; 32]),
+                name: "field notes".into(),
+                fork: None,
+                at_ms: 12,
+            },
+        };
+        let operation = to_operation_seed_with_attestation(
+            derived.to_seed(),
+            MOOT,
+            &event,
+            0,
+            None,
+            Some(identity.attest_derived_key(&salt).unwrap()),
+        );
+        assert_eq!(from_operation(&operation).unwrap().1, event);
         assert_eq!(
             stable_author(&operation).unwrap(),
             identity.master_public_key().to_bytes()

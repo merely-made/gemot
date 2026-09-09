@@ -117,12 +117,16 @@ pub use lanes::{
     GEMOT_RECORDS_LANE, GEMOT_STANDING_LANE, GEMOT_TULPA_LANE, MootLanes,
 };
 pub use records::{
-    AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry, FaunaWithdrawal,
+    AvailabilityPolicy, CheckpointError, CollectionChange, CollectionEvent, CollectionFact,
+    CollectionFork, CollectionId, CollectionRef, CollectionVersion, CollectionView,
+    ContributionRef, Declaration, ErasurePolicy, FaunaEntry, FaunaWithdrawal,
     GovernedCheckpointAuthority, KeepBound, LogFrontier, Member, MootEvent, MootExt, MootLogId,
     MootRetentionPolicy, MootRoster, MootRosterSnapshot, MootStore, MootStoreError, MootStoreFile,
-    PolicyRevision, RetentionCheckpoint, StoredCheckpoint, WireError, from_operation,
-    object_identity_salt, stable_author, to_operation, to_operation_seed,
-    to_operation_seed_with_attestation, to_prune_operation, to_prune_operation_seed, verify,
+    PendingCollectionFact, PendingCollectionReason, PolicyRevision, RetentionCheckpoint,
+    SelectionCitation, StoredCheckpoint, WireError, collection_cap,
+    from_operation, membership_commitment, object_identity_salt, stable_author, to_operation,
+    to_operation_seed, to_operation_seed_with_attestation, to_prune_operation,
+    to_prune_operation_seed, verify,
 };
 pub use service::{
     Moot, MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,

@@ -949,6 +949,179 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn checkpoint_keeps_collection_lineage_and_accepts_a_child_after_pruning() {
+        use super::super::collection::{
+            CollectionChange, CollectionEvent, CollectionFork, CollectionId, CollectionRef,
+            ContributionRef,
+        };
+
+        let checkpoint_authority = keypair(1);
+        let identity = InMemoryProvider::from_seed([0x23; 32]);
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("collection-lineage.redb");
+        let store = MootStoreFile::at_path_with_retention(
+            &path,
+            retention(&checkpoint_authority),
+        )
+        .unwrap();
+        let share = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Shared {
+                    manifest_id: [0xaa; 32],
+                    schema_id: "fleece/v1".into(),
+                    title: "lineage page".into(),
+                    at_ms: 1,
+                },
+            )
+            .await
+            .unwrap();
+        let collection_id = CollectionId([0xc1; 32]);
+        let collection = CollectionRef { moot_id: MOOT, collection_id };
+        let declaration = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Collection {
+                    event: CollectionEvent::Declared {
+                        collection_id,
+                        name: "field notes".into(),
+                        fork: None,
+                        at_ms: 2,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let first_change = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Collection {
+                    event: CollectionEvent::Changed {
+                        collection,
+                        parents: vec![*declaration.hash.as_bytes()],
+                        change: CollectionChange::SetMembership {
+                            contribution: ContributionRef {
+                                moot_id: MOOT,
+                                share: *share.hash.as_bytes(),
+                            },
+                            included: true,
+                        },
+                        at_ms: 3,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let checkpoint = store.build_checkpoint(MOOT, 4).await.unwrap();
+        let checkpoint_operation = store
+            .author(
+                &checkpoint_authority,
+                MOOT,
+                &MootEvent::RetentionCheckpoint { checkpoint: Box::new(checkpoint) },
+            )
+            .await
+            .unwrap();
+        store
+            .author_prune_seed(
+                identity.derive_keypair(&object_identity_salt(MOOT)).unwrap().to_seed(),
+                MOOT,
+                *checkpoint_operation.hash.as_bytes(),
+                5,
+            )
+            .await
+            .unwrap();
+
+        let operations = store.ops(MOOT).await.unwrap();
+        assert!(!operations.iter().any(|operation| operation.hash == declaration.hash));
+        assert!(!operations.iter().any(|operation| operation.hash == first_change.hash));
+        let retained = store.roster(MOOT).await.unwrap();
+        let before = retained
+            .authorized_collection(
+                MOOT,
+                collection_id,
+                &RootAuthority(identity.master_public_key().to_bytes()),
+            )
+            .unwrap();
+        assert_eq!(before.heads, vec![*first_change.hash.as_bytes()]);
+
+        drop(store);
+        let store = MootStoreFile::at_path_with_retention(
+            &path,
+            retention(&checkpoint_authority),
+        )
+        .unwrap();
+
+        let fork_id = CollectionId([0xc2; 32]);
+        store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Collection {
+                    event: CollectionEvent::Declared {
+                        collection_id: fork_id,
+                        name: "forked notes".into(),
+                        fork: Some(CollectionFork::new(
+                            before.version.clone(),
+                            before.selected.clone(),
+                        )),
+                        at_ms: 6,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let forked = store
+            .roster(MOOT)
+            .await
+            .unwrap()
+            .authorized_collection(
+                MOOT,
+                fork_id,
+                &RootAuthority(identity.master_public_key().to_bytes()),
+            )
+            .unwrap();
+        assert_eq!(forked.selected, before.selected);
+        assert_eq!(forked.fork.unwrap().parent, before.version);
+
+        let child = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Collection {
+                    event: CollectionEvent::Changed {
+                        collection,
+                        parents: before.heads,
+                        change: CollectionChange::SetMembership {
+                            contribution: ContributionRef {
+                                moot_id: MOOT,
+                                share: *share.hash.as_bytes(),
+                            },
+                            included: false,
+                        },
+                        at_ms: 7,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        let after = store
+            .roster(MOOT)
+            .await
+            .unwrap()
+            .authorized_collection(
+                MOOT,
+                collection_id,
+                &RootAuthority(identity.master_public_key().to_bytes()),
+            )
+            .unwrap();
+        assert_eq!(after.heads, vec![*child.hash.as_bytes()]);
+        assert!(after.selected.is_empty());
+    }
+
+    #[tokio::test]
     async fn reopened_checkpoint_does_not_resurrect_a_late_withdrawn_share() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("withdrawal.redb");
