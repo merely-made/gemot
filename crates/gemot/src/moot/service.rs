@@ -95,9 +95,12 @@ impl DropExportSelector<super::MootExt> for MootDropSelector {
         let priority = match super::from_operation(operation) {
             Ok((_, MootEvent::RetentionCheckpoint { .. })) => self.checkpoint_priority,
             Ok((_, MootEvent::Declared { .. } | MootEvent::Joined { .. })) => self.roster_priority,
-            Ok((_, MootEvent::Shared { .. } | MootEvent::HistoryPruned { .. })) => {
-                self.fauna_priority
-            },
+            Ok((
+                _,
+                MootEvent::Shared { .. }
+                | MootEvent::Withdrawn { .. }
+                | MootEvent::HistoryPruned { .. },
+            )) => self.fauna_priority,
             Err(_) => return DropExportDecision::Omit,
         };
         DropExportDecision::Full { priority }
@@ -303,6 +306,10 @@ pub enum MootError {
     OutboundMissing,
     #[error("Moot authority denied the local command: {0:?}")]
     Unauthorized(DenyReason),
+    #[error("withdrawal targets an unknown shared operation")]
+    WithdrawalUnknownTarget,
+    #[error("withdrawal identity did not author the target shared operation")]
+    WithdrawalWrongIdentity,
 }
 
 /// One Moot's constitutional and replicated object services.
@@ -750,6 +757,45 @@ impl<B: Backend + Clone> Moot<B> {
             },
             GateDecision::Deny(reason) => Err(MootError::Unauthorized(reason)),
         }
+    }
+
+    /// Withdraw one of this stable identity's own shared contributions.
+    ///
+    /// The target must already be a retained `Shared` operation authored by
+    /// this identity. The command deliberately has no seed-only counterpart:
+    /// stable-root binding is required before a withdrawal can be authored.
+    pub async fn withdraw_share_for_identity<P: identity::IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        target_share: [u8; 32],
+        at_ms: u64,
+    ) -> Result<MootCommandReceipt, MootError> {
+        let roster = self.objects.roster(self.moot_id.0).await?;
+        let share = roster
+            .fauna
+            .iter()
+            .find(|entry| entry.op_hash == target_share)
+            .ok_or(MootError::WithdrawalUnknownTarget)?;
+        if share.shared_by != identity.master_public_key().to_bytes() {
+            return Err(MootError::WithdrawalWrongIdentity);
+        }
+        self.governance.snapshot().await?;
+        let operation = self
+            .objects
+            .author_for_identity(
+                identity,
+                self.moot_id.0,
+                &MootEvent::Withdrawn {
+                    target_share,
+                    at_ms,
+                },
+            )
+            .await?;
+        Ok(MootCommandReceipt {
+            operation: *operation.hash.as_bytes(),
+            lane: MootLane::Objects,
+            snapshot: self.snapshot().await?,
+        })
     }
 
     async fn author_object(
@@ -1774,6 +1820,59 @@ mod tests {
             Err(MootError::Unauthorized(DenyReason::BelowThreshold))
         ));
         assert!(service.authorized_fauna(11).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn identity_withdrawal_refuses_unknown_and_wrong_targets_before_authoring() {
+        let founder = keypair(0x2a);
+        let sharer = InMemoryProvider::from_seed([0x2b; 32]);
+        let stranger = InMemoryProvider::from_seed([0x2c; 32]);
+        let service = Moot::in_memory(ID, founder.public_key().to_bytes(), retention());
+        service
+            .found(
+                founder.to_seed(),
+                None,
+                None,
+                ConstitutionRules::founder_only(founder.public_key().to_bytes()),
+                1,
+            )
+            .await
+            .unwrap();
+        let share = service
+            .share_for_identity(&sharer, [0xa1; 32], "fleece/v1".into(), "page".into(), 2)
+            .await
+            .unwrap();
+        let before = service.object_store().ops(ID.0).await.unwrap().len();
+        assert!(matches!(
+            service
+                .withdraw_share_for_identity(&sharer, [0xff; 32], 3)
+                .await,
+            Err(MootError::WithdrawalUnknownTarget)
+        ));
+        assert!(matches!(
+            service
+                .withdraw_share_for_identity(&stranger, share.operation, 3)
+                .await,
+            Err(MootError::WithdrawalWrongIdentity)
+        ));
+        assert_eq!(
+            service.object_store().ops(ID.0).await.unwrap().len(),
+            before
+        );
+
+        let withdrawal = service
+            .withdraw_share_for_identity(&sharer, share.operation, 4)
+            .await
+            .unwrap();
+        let roster = service.object_store().roster(ID.0).await.unwrap();
+        assert_eq!(roster.fauna.len(), 1);
+        assert_eq!(roster.withdrawals.len(), 1);
+        assert_eq!(roster.withdrawals[0].target_share, share.operation);
+        assert_eq!(
+            roster.withdrawals[0].withdrawn_by,
+            sharer.master_public_key().to_bytes()
+        );
+        assert_ne!(withdrawal.operation, share.operation);
     }
 
     #[tokio::test]

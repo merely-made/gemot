@@ -117,7 +117,7 @@ pub use lanes::{
     GEMOT_RECORDS_LANE, GEMOT_STANDING_LANE, GEMOT_TULPA_LANE, MootLanes,
 };
 pub use records::{
-    AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry,
+    AvailabilityPolicy, CheckpointError, Declaration, ErasurePolicy, FaunaEntry, FaunaWithdrawal,
     GovernedCheckpointAuthority, KeepBound, LogFrontier, Member, MootEvent, MootExt, MootLogId,
     MootRetentionPolicy, MootRoster, MootRosterSnapshot, MootStore, MootStoreError, MootStoreFile,
     PolicyRevision, RetentionCheckpoint, StoredCheckpoint, WireError, from_operation,

@@ -873,6 +873,159 @@ mod tests {
         assert_eq!(roster.fauna[0].title, "retained tail");
     }
 
+    #[tokio::test]
+    async fn checkpoint_snapshot_keeps_withdrawal_after_pruning_the_source_log() {
+        let authority = keypair(1);
+        let identity = InMemoryProvider::from_seed([0x22; 32]);
+        let store = MootStore::in_memory_with_retention(retention(&authority));
+        let share = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Shared {
+                    manifest_id: [0xaa; 32],
+                    schema_id: "fleece/v1".into(),
+                    title: "withdrawn page".into(),
+                    at_ms: 1,
+                },
+            )
+            .await
+            .unwrap();
+        let withdrawal = store
+            .author_for_identity(
+                &identity,
+                MOOT,
+                &MootEvent::Withdrawn {
+                    target_share: *share.hash.as_bytes(),
+                    at_ms: 2,
+                },
+            )
+            .await
+            .unwrap();
+        let checkpoint = store.build_checkpoint(MOOT, 3).await.unwrap();
+        let checkpoint_operation = store
+            .author(
+                &authority,
+                MOOT,
+                &MootEvent::RetentionCheckpoint {
+                    checkpoint: Box::new(checkpoint),
+                },
+            )
+            .await
+            .unwrap();
+        store
+            .author_prune_seed(
+                identity
+                    .derive_keypair(&object_identity_salt(MOOT))
+                    .unwrap()
+                    .to_seed(),
+                MOOT,
+                *checkpoint_operation.hash.as_bytes(),
+                4,
+            )
+            .await
+            .unwrap();
+
+        let operations = store.ops(MOOT).await.unwrap();
+        assert!(
+            !operations
+                .iter()
+                .any(|operation| operation.hash == share.hash)
+        );
+        assert!(
+            !operations
+                .iter()
+                .any(|operation| operation.hash == withdrawal.hash)
+        );
+        let roster = store.roster(MOOT).await.unwrap();
+        assert_eq!(roster.fauna.len(), 1);
+        assert_eq!(roster.withdrawals.len(), 1);
+        assert_eq!(roster.withdrawals[0].target_share, *share.hash.as_bytes());
+        assert!(
+            roster
+                .authorized_fauna(&RootAuthority(identity.master_public_key().to_bytes()))
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn reopened_checkpoint_does_not_resurrect_a_late_withdrawn_share() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("withdrawal.redb");
+        let authority = keypair(3);
+        let identity = InMemoryProvider::from_seed([0x32; 32]);
+        let (share, withdrawal) = {
+            let store =
+                MootStoreFile::at_path_with_retention(&path, retention(&authority)).unwrap();
+            let share = store
+                .author_for_identity(
+                    &identity,
+                    MOOT,
+                    &MootEvent::Shared {
+                        manifest_id: [0xbb; 32],
+                        schema_id: "fleece/v1".into(),
+                        title: "late page".into(),
+                        at_ms: 1,
+                    },
+                )
+                .await
+                .unwrap();
+            let withdrawal = store
+                .author_for_identity(
+                    &identity,
+                    MOOT,
+                    &MootEvent::Withdrawn {
+                        target_share: *share.hash.as_bytes(),
+                        at_ms: 2,
+                    },
+                )
+                .await
+                .unwrap();
+            let checkpoint = store.build_checkpoint(MOOT, 3).await.unwrap();
+            let checkpoint_operation = store
+                .author(
+                    &authority,
+                    MOOT,
+                    &MootEvent::RetentionCheckpoint {
+                        checkpoint: Box::new(checkpoint),
+                    },
+                )
+                .await
+                .unwrap();
+            store
+                .author_prune_seed(
+                    identity
+                        .derive_keypair(&object_identity_salt(MOOT))
+                        .unwrap()
+                        .to_seed(),
+                    MOOT,
+                    *checkpoint_operation.hash.as_bytes(),
+                    4,
+                )
+                .await
+                .unwrap();
+            (share, withdrawal)
+        };
+
+        let reopened = MootStoreFile::at_path_with_retention(&path, retention(&authority)).unwrap();
+        let roster = reopened.roster(MOOT).await.unwrap();
+        assert_eq!(roster.fauna.len(), 1);
+        assert_eq!(roster.withdrawals.len(), 1);
+        assert!(
+            reopened.accept(MOOT, &share).await.is_err(),
+            "a late prefix replay cannot pass the retained prune point"
+        );
+        assert!(
+            reopened
+                .roster(MOOT)
+                .await
+                .unwrap()
+                .authorized_fauna(&RootAuthority(identity.master_public_key().to_bytes()))
+                .is_empty()
+        );
+        assert_eq!(withdrawal.header.seq_num, 1);
+    }
+
     /// The intake paths do NOT all return the same decision, and that is
     /// deliberate — this pins the one place they diverge so it cannot be
     /// "cleaned up" into agreement.
