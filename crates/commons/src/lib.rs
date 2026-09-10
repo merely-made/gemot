@@ -41,7 +41,6 @@ use muniment::Journal;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
-use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
@@ -312,10 +311,8 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
         logs.sort_unstable();
         logs.dedup();
         for log_id in logs {
-            let entries =
-                LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
-                    store, &author, &log_id, None, None,
-                )
+            let entries = store
+                .get_log_entries(&author, &log_id, None, None)
                 .await?
                 .unwrap_or_default();
             // The tuple's second element is encoded header bytes, not the
@@ -429,13 +426,8 @@ async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
         return Ok(());
     }
 
-    let entries = LogStore::<Operation<CommonsExt>, VerifyingKey, u64, u32, Hash>::get_log_entries(
-        store,
-        &operation.header.verifying_key,
-        &COMMONS_LOG,
-        None,
-        None,
-    )
+    let entries = store
+        .get_log_entries(&operation.header.verifying_key, &COMMONS_LOG, None, None)
     .await?
     .unwrap_or_default();
     let mut next = 0u64;
