@@ -32,7 +32,6 @@ use std::path::Path;
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
 use p2panda_core::{Hash, Operation, Topic, VerifyingKey};
-use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use stickleback::{
     Admission, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,

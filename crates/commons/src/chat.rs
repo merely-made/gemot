@@ -18,7 +18,6 @@ use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
 use p2panda_net::{Endpoint, Gossip};
-use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use proofs::Digest;
