@@ -17,6 +17,7 @@ pub mod store;
 pub mod wire;
 
 use std::collections::BTreeSet;
+use std::fmt;
 
 use identity::DerivedKeyAttestation;
 use p2panda_auth::group::resolver::StrongRemove;
@@ -47,13 +48,32 @@ use super::standing::StandingFacts;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MootGroupHandle(pub [u8; 32]);
 
+impl fmt::Display for MootGroupHandle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_hex(&self.0, formatter)
+    }
+}
+
 impl Author for MootGroupHandle {}
 
 /// A local operation-id wrapper required by p2panda-auth's group graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MootGroupOperationId(pub [u8; 32]);
 
+impl fmt::Display for MootGroupOperationId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_hex(&self.0, formatter)
+    }
+}
+
 impl OperationId for MootGroupOperationId {}
+
+fn fmt_hex(bytes: &[u8; 32], formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for byte in bytes {
+        write!(formatter, "{byte:02x}")?;
+    }
+    Ok(())
+}
 
 /// Stable access vocabulary carried by Gemot membership operations and
 /// snapshots.
@@ -271,7 +291,12 @@ impl MootGroup {
     }
 
     pub fn auth_heads(&self) -> Vec<[u8; 32]> {
-        let mut heads: Vec<_> = self.state.heads().into_iter().map(|head| head.0).collect();
+        let mut heads: Vec<_> = self
+            .state
+            .heads(&[self.group])
+            .into_iter()
+            .map(|head| head.0)
+            .collect();
         heads.sort_unstable();
         heads
     }
@@ -291,11 +316,11 @@ impl MootGroup {
             Ok(next) => {
                 self.state = next;
                 self.operations.push(operation.clone());
-            }
+            },
             Err(_) => {
                 self.state = self.rebuild_state();
                 return Err(MootGroupError::Auth);
-            }
+            },
         }
         let members = self.member_set();
         let membership_changed = before != members;
@@ -395,6 +420,16 @@ mod tests {
         [value; 32]
     }
 
+    #[test]
+    fn group_identifiers_render_as_fixed_width_hex() {
+        let mut bytes = [0; 32];
+        bytes[1] = 10;
+        bytes[31] = 255;
+        let expected = format!("000a{}ff", "00".repeat(29));
+        assert_eq!(MootGroupHandle(bytes).to_string(), expected);
+        assert_eq!(MootGroupOperationId(bytes).to_string(), expected);
+    }
+
     fn operation(
         id_byte: u8,
         author: u8,
@@ -491,6 +526,7 @@ mod tests {
             .unwrap();
         assert!(removed.membership_changed);
         assert_eq!(removed.epoch, 3);
+        assert_eq!(removed.auth_heads, vec![id(13)]);
         let key_epoch = group.bind_group_secret(id(77)).unwrap();
         assert_eq!(key_epoch.epoch, 3);
         assert_eq!(key_epoch.members, vec![id(1)]);
