@@ -81,6 +81,46 @@ impl MootLanes {
             self.flora.status_handle(),
         ]
     }
+
+    /// Push one freshly authored operation onto its live lane.
+    ///
+    /// Initial reconciliation covers retained history for a late joiner; an
+    /// operation authored after peers are connected reaches them only through
+    /// these. Storing it is what makes it survive, publishing is what makes it
+    /// arrive.
+    pub fn publish_constitution(
+        &self,
+        operation: Operation<ConstitutionExt>,
+    ) -> Result<(), JoinError> {
+        self.constitution.publish(operation)
+    }
+
+    pub fn publish_delegation(
+        &self,
+        operation: Operation<MootDelegationExt>,
+    ) -> Result<(), JoinError> {
+        self.delegation.publish(operation)
+    }
+
+    pub fn publish_membership(&self, operation: Operation<MootGroupExt>) -> Result<(), JoinError> {
+        self.membership.publish(operation)
+    }
+
+    pub fn publish_records(&self, operation: Operation<MootExt>) -> Result<(), JoinError> {
+        self.records.publish(operation)
+    }
+
+    pub fn publish_standing(&self, operation: Operation<StandingExt>) -> Result<(), JoinError> {
+        self.standing.publish(operation)
+    }
+
+    pub fn publish_tulpa(&self, operation: Operation<TulpaExt>) -> Result<(), JoinError> {
+        self.tulpa.publish(operation)
+    }
+
+    pub fn publish_flora(&self, operation: Operation<FloraExt>) -> Result<(), JoinError> {
+        self.flora.publish(operation)
+    }
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> Moot<B> {
@@ -203,5 +243,33 @@ impl<B: Backend + Clone + Send + Sync + 'static> Moot<B> {
             tulpa,
             flora,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The publish set exists, one method per lane, each taking that lane's
+    /// own extension type. Compile-level: live lanes need a transport pair, so
+    /// a unit test cannot hold a `MootLanes` to call them on. What can go
+    /// wrong silently is a method bound to the wrong lane, and naming each
+    /// item at its signature catches exactly that.
+    #[test]
+    fn the_publish_set_names_every_lane_at_its_own_extension() {
+        let _: fn(&MootLanes, Operation<ConstitutionExt>) -> Result<(), JoinError> =
+            MootLanes::publish_constitution;
+        let _: fn(&MootLanes, Operation<MootDelegationExt>) -> Result<(), JoinError> =
+            MootLanes::publish_delegation;
+        let _: fn(&MootLanes, Operation<MootGroupExt>) -> Result<(), JoinError> =
+            MootLanes::publish_membership;
+        let _: fn(&MootLanes, Operation<MootExt>) -> Result<(), JoinError> =
+            MootLanes::publish_records;
+        let _: fn(&MootLanes, Operation<StandingExt>) -> Result<(), JoinError> =
+            MootLanes::publish_standing;
+        let _: fn(&MootLanes, Operation<TulpaExt>) -> Result<(), JoinError> =
+            MootLanes::publish_tulpa;
+        let _: fn(&MootLanes, Operation<FloraExt>) -> Result<(), JoinError> =
+            MootLanes::publish_flora;
     }
 }
