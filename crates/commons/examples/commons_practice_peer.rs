@@ -9,7 +9,13 @@
 //! One process owns one redb store.  A host may carry the canonical signed
 //! operation records over HTTP, loopback, or another carrier; this example
 //! implements no transport and makes no networking claim.
+//!
+//! Authority is evaluated at a store-local proof clock.  Leaving removes the
+//! installed envelope and keeps history.  The founder revokes the member
+//! through Gemot's delegation lane, whose signed records ride the same
+//! export/import wire as Commons operations.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
@@ -19,17 +25,21 @@ use commons_spine::{
     CommonsExt, GemotAuthorityView, Replica, commons_write_capability, from_operation,
 };
 use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
+use gemot::moot::delegation::{
+    self, MootDelegationEvent, MootDelegationExt, MootDelegationFileStore,
+};
 use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
 use muniment::RedbBackend;
 use p2panda_core::Topic;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use personae::delegation::{
-    CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+    CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+    SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
 };
 use personae::{IdentityProvider, InMemoryProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use servitor::cap_path;
+use servitor::{AuthorityProvider, Mode, Subject, cap_path};
 use stickleback::{
     DropExportProfile, DropRecord, decode_operation_record, export_topic_operations,
     operation_record,
@@ -39,7 +49,10 @@ const FORMAT: u16 = 1;
 const CONTAINER: [u8; 32] = [0xc3; 32];
 const MOOT: [u8; 32] = [0x71; 32];
 const ROOT_GRANT: [u8; 32] = [0x72; 32];
-const NOW_MS: u64 = 50;
+/// Store clock before any proof-only advance.
+const DEFAULT_NOW_MS: u64 = 50;
+const GRANT_EXPIRES_MS: u64 = 1_000;
+const REVOCATION_NONCE: [u8; 32] = [0x91; 32];
 const FOUNDER_SEED: [u8; 32] = [0x61; 32];
 const MEMBER_SEED: [u8; 32] = [0x62; 32];
 const INTRUDER_SEED: [u8; 32] = [0x63; 32];
@@ -100,9 +113,46 @@ struct AuthorityEnvelope {
     certificates: Vec<SignedDelegationCertificate>,
 }
 
+/// Store-local proof clock and leave marker, persisted beside the envelope.
+#[derive(Serialize, Deserialize)]
+struct LocalRecord {
+    now_ms: u64,
+    left: bool,
+}
+
 struct AuthorityState {
     rules: ConstitutionRules,
     delegations: MootDelegations,
+}
+
+/// Lifecycle verdict reported by status and enforced before participation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Lifecycle {
+    NotJoined,
+    Left,
+    Joined,
+    Expired,
+    Revoked,
+    NotAdmitted,
+}
+
+impl Lifecycle {
+    fn name(self) -> &'static str {
+        match self {
+            Self::NotJoined => "not_joined",
+            Self::Left => "left",
+            Self::Joined => "joined",
+            Self::Expired => "expired",
+            Self::Revoked => "revoked",
+            Self::NotAdmitted => "not_admitted",
+        }
+    }
+
+    /// Exchange needs an installed envelope; the host rechecks expiry and
+    /// revocation before it syncs.
+    fn installed(self) -> bool {
+        !matches!(self, Self::NotJoined | Self::Left)
+    }
 }
 
 struct Peer {
@@ -110,7 +160,9 @@ struct Peer {
     container: [u8; 32],
     root: [u8; 32],
     replica: Replica<RedbBackend>,
+    lane: MootDelegationFileStore,
     authority_path: PathBuf,
+    local_path: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -134,6 +186,15 @@ enum Request {
         operation_record_hex: String,
     },
     Status,
+    /// Remove the installed envelope; retained history stays.
+    Leave,
+    /// Refuse unless installed authority admits this peer at the store clock.
+    Recheck,
+    /// Proof-only: move the store clock forward.
+    AdvanceClock {
+        now_ms: u64,
+    },
+    RevokeMember,
     Close,
 }
 
@@ -167,7 +228,7 @@ fn fixture_rules(container: [u8; 32]) -> ConstitutionRules {
         subject: founder.master_public_key().to_bytes(),
         path_prefix: path,
         not_before_ms: 10,
-        expires_at_ms: Some(1_000),
+        expires_at_ms: Some(GRANT_EXPIRES_MS),
         delegation_depth: 1,
     });
     rules
@@ -193,7 +254,7 @@ fn fixture_envelope(container: [u8; 32]) -> Result<AuthorityEnvelope, String> {
                 },
                 15,
                 20,
-                Some(1_000),
+                Some(GRANT_EXPIRES_MS),
                 0,
                 [nonce; 32],
             ),
@@ -223,11 +284,11 @@ fn read_authority(path: &Path) -> Result<AuthorityEnvelope, String> {
     decode_cbor(bytes.as_slice()).map_err(|error| format!("authority CBOR: {error}"))
 }
 
+/// Structural checks only; time and revocation are judged at the store clock.
 fn validate_authority(
     envelope: &AuthorityEnvelope,
     container: [u8; 32],
-    required_subject: Option<[u8; 32]>,
-) -> Result<AuthorityState, String> {
+) -> Result<MootDelegations, String> {
     if envelope.format != FORMAT || envelope.moot != MOOT || envelope.container != container {
         return Err("invitation is bound to another practice space or container".into());
     }
@@ -243,10 +304,7 @@ fn validate_authority(
         .capability_grants
         .get(&ROOT_GRANT)
         .ok_or("invitation lacks the founder root grant")?;
-    if root.subject != founder_root()
-        || root.path_prefix != path
-        || !root.covers(founder_root(), &path, NOW_MS)
-    {
+    if root.subject != founder_root() || root.path_prefix != path {
         return Err("invitation root grant is not bound to this founder and container".into());
     }
     let mut delegations = MootDelegations::new();
@@ -258,15 +316,80 @@ fn validate_authority(
             .accept_certificate(MOOT, &envelope.rules, certificate)
             .map_err(|error| format!("delegation rejected: {error}"))?;
     }
-    if let Some(subject) = required_subject
-        && !delegations.covers(MOOT, &envelope.rules, subject, &path, NOW_MS)
-    {
-        return Err("invitation has no effective signed delegation for this peer".into());
+    Ok(delegations)
+}
+
+/// Classify `subject` with the Gemot authority the projection uses.
+fn verdict(
+    authority: &AuthorityState,
+    container: [u8; 32],
+    subject: [u8; 32],
+    now_ms: u64,
+) -> Lifecycle {
+    let gemot = MootAuthority {
+        delegations: &authority.delegations,
+        rules: &authority.rules,
+        moot_id: MOOT,
+        now_ms,
+    };
+    if gemot.covers(
+        Subject(subject),
+        &commons_write_capability(container),
+        Mode::Write,
+    ) {
+        return Lifecycle::Joined;
     }
-    Ok(AuthorityState {
-        rules: envelope.rules.clone(),
-        delegations,
-    })
+    let grants: Vec<_> = authority
+        .delegations
+        .projections(MOOT, &authority.rules, now_ms)
+        .into_iter()
+        .filter(|grant| grant.subject == subject)
+        .collect();
+    if grants.iter().any(|grant| grant.directly_revoked) {
+        Lifecycle::Revoked
+    } else if grants
+        .iter()
+        .any(|grant| grant.expires_at_ms.is_some_and(|expires| now_ms > expires))
+    {
+        Lifecycle::Expired
+    } else {
+        Lifecycle::NotAdmitted
+    }
+}
+
+/// Named reason a peer that is not joined may not participate.
+fn refusal(
+    authority: Option<&AuthorityState>,
+    lifecycle: Lifecycle,
+    subject: [u8; 32],
+    now_ms: u64,
+) -> String {
+    match lifecycle {
+        Lifecycle::Joined => "joined".into(),
+        Lifecycle::NotJoined => "not joined: no invitation is installed in this store".into(),
+        Lifecycle::Left => {
+            "not joined: this peer left the space; install an invitation to join again".into()
+        },
+        Lifecycle::Expired => {
+            let ended = authority.and_then(|authority| {
+                authority
+                    .delegations
+                    .projections(MOOT, &authority.rules, now_ms)
+                    .into_iter()
+                    .filter(|grant| grant.subject == subject)
+                    .filter_map(|grant| grant.expires_at_ms)
+                    .max()
+            });
+            format!(
+                "expired: this peer's grant ended at {} ms; store clock is {now_ms} ms",
+                ended.unwrap_or(GRANT_EXPIRES_MS)
+            )
+        },
+        Lifecycle::Revoked => "revoked: the issuer revoked this peer's delegation".into(),
+        Lifecycle::NotAdmitted => {
+            "invitation has no effective signed delegation for this peer".into()
+        },
+    }
 }
 
 impl Peer {
@@ -278,21 +401,105 @@ impl Peer {
             RedbBackend::open(store.join("commons.redb")).map_err(|error| error.to_string())?;
         let replica = Replica::for_identity(backend, container, &identity)
             .map_err(|error| error.to_string())?;
+        let lane = MootDelegationFileStore::open(store.join("delegations.redb"), MOOT)
+            .map_err(|error| error.to_string())?;
         Ok(Self {
             role,
             container,
             root,
             replica,
+            lane,
             authority_path: authority_path(store),
+            local_path: store.join("lifecycle.json"),
         })
     }
 
-    fn authority(&self, require_self: bool) -> Result<AuthorityState, String> {
-        validate_authority(
-            &read_authority(&self.authority_path)?,
-            self.container,
-            require_self.then_some(self.root),
-        )
+    fn local(&self) -> Result<LocalRecord, String> {
+        match fs::read(&self.local_path) {
+            Ok(bytes) => {
+                serde_json::from_slice(&bytes).map_err(|error| format!("lifecycle record: {error}"))
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(LocalRecord {
+                now_ms: DEFAULT_NOW_MS,
+                left: false,
+            }),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    fn write_local(&self, record: &LocalRecord) -> Result<(), String> {
+        let bytes = serde_json::to_vec(record).map_err(|error| error.to_string())?;
+        fs::write(&self.local_path, bytes).map_err(|error| error.to_string())
+    }
+
+    /// Invitation certificates plus retained delegation-lane revocations.
+    async fn authority_of(&self, envelope: &AuthorityEnvelope) -> Result<AuthorityState, String> {
+        let mut delegations = validate_authority(envelope, self.container)?;
+        // Lane issuances only duplicate the invitation's certificates. Gemot's
+        // issuer and scope checks decide which revocations apply; the rest stay
+        // retained but inert.
+        for operation in self
+            .lane
+            .operations()
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            if let Ok(MootDelegationEvent::Revoked(signed)) = delegation::from_operation(&operation)
+            {
+                let _ = delegations.accept_revocation(signed);
+            }
+        }
+        Ok(AuthorityState {
+            rules: envelope.rules.clone(),
+            delegations,
+        })
+    }
+
+    /// Installed authority, lifecycle verdict, and store clock.
+    async fn standing(&self) -> Result<(Option<AuthorityState>, Lifecycle, u64), String> {
+        let local = self.local()?;
+        if !self.authority_path.exists() {
+            let lifecycle = if local.left {
+                Lifecycle::Left
+            } else {
+                Lifecycle::NotJoined
+            };
+            return Ok((None, lifecycle, local.now_ms));
+        }
+        let authority = self
+            .authority_of(&read_authority(&self.authority_path)?)
+            .await?;
+        let lifecycle = verdict(&authority, self.container, self.root, local.now_ms);
+        Ok((Some(authority), lifecycle, local.now_ms))
+    }
+
+    /// This peer's authority, or the named reason it may not participate.
+    async fn admitted(&self) -> Result<AuthorityState, String> {
+        match self.standing().await? {
+            (Some(authority), Lifecycle::Joined, _) => Ok(authority),
+            (authority, lifecycle, now_ms) => {
+                Err(refusal(authority.as_ref(), lifecycle, self.root, now_ms))
+            },
+        }
+    }
+
+    async fn installed(&self) -> Result<(), String> {
+        match self.standing().await? {
+            (_, lifecycle, now_ms) if !lifecycle.installed() => {
+                Err(refusal(None, lifecycle, self.root, now_ms))
+            },
+            _ => Ok(()),
+        }
+    }
+
+    /// Refuse candidate authority that does not admit this peer now.
+    async fn require_joined(&self, envelope: &AuthorityEnvelope) -> Result<(), String> {
+        let authority = self.authority_of(envelope).await?;
+        let now_ms = self.local()?.now_ms;
+        match verdict(&authority, self.container, self.root, now_ms) {
+            Lifecycle::Joined => Ok(()),
+            lifecycle => Err(refusal(Some(&authority), lifecycle, self.root, now_ms)),
+        }
     }
 
     fn invitation(&self) -> Result<Invitation, String> {
@@ -317,13 +524,22 @@ impl Peer {
         .map_err(|error| error.to_string())
     }
 
+    async fn lane_count(&self) -> Result<usize, String> {
+        Ok(self
+            .lane
+            .operations()
+            .await
+            .map_err(|error| error.to_string())?
+            .len())
+    }
+
     async fn contribute(&mut self, payload_hex: &str, unchecked: bool) -> Result<Value, String> {
         let body = String::from_utf8(
             hex::decode(payload_hex).map_err(|_| "comparison_utf8_hex is not hex".to_string())?,
         )
         .map_err(|_| "comparison payload must be valid UTF-8".to_string())?;
         if !unchecked {
-            self.authority(true)?;
+            self.admitted().await?;
         }
         let ordinal = self.operation_records().await?.len();
         let id = format!("woodshed-comparison:{}:{ordinal}", self.role.name());
@@ -354,10 +570,28 @@ impl Peer {
     }
 
     async fn import(&self, encoded: &str) -> Result<Value, String> {
+        self.installed().await?;
         let bytes =
             hex::decode(encoded).map_err(|_| "operation_record_hex is not hex".to_string())?;
         let record: DropRecord = decode_cbor(bytes.as_slice())
             .map_err(|error| format!("operation record CBOR: {error}"))?;
+        // Gemot delegation statements share this wire with Commons operations.
+        if let Ok(Some(statement)) = decode_operation_record::<MootDelegationExt>(&record) {
+            if statement.header.extensions.moot_id != MOOT {
+                return Err("delegation statement addresses another practice space".into());
+            }
+            let accepted = self
+                .lane
+                .accept(&statement)
+                .await
+                .map_err(|error| error.to_string())?;
+            return Ok(json!({
+                "ok": true,
+                "lane": "delegation",
+                "accepted": accepted,
+                "operation_id": hex::encode(statement.hash.as_bytes()),
+            }));
+        }
         let operation = decode_operation_record::<CommonsExt>(&record)
             .map_err(|error| error.to_string())?
             .ok_or("record did not contain a Commons operation")?;
@@ -376,15 +610,98 @@ impl Peer {
             .map(|key| hex::encode(key.to_bytes()));
         Ok(json!({
             "ok": true,
+            "lane": "commons",
             "accepted": accepted,
             "operation_id": hex::encode(operation.hash.as_bytes()),
             "author_root": root,
         }))
     }
 
+    /// Founder withdraws the member's delegation with a signed Gemot revocation.
+    async fn revoke_member(&self) -> Result<Value, String> {
+        if self.role != Role::Founder {
+            return Err("only the founder may revoke a member".into());
+        }
+        let authority = self.admitted().await?;
+        let now_ms = self.local()?.now_ms;
+        let member_root = InMemoryProvider::from_seed(MEMBER_SEED)
+            .master_public_key()
+            .to_bytes();
+        let certificate = read_authority(&self.authority_path)?
+            .certificates
+            .into_iter()
+            .find(|signed| signed.certificate.subject == member_root)
+            .ok_or("installed authority has no member delegation")?;
+        let id = certificate.certificate.id();
+        let projections = authority
+            .delegations
+            .projections(MOOT, &authority.rules, now_ms);
+        if projections
+            .iter()
+            .any(|grant| grant.certificate == id && grant.directly_revoked)
+        {
+            return Err("the member's delegation is already revoked".into());
+        }
+        let founder = InMemoryProvider::from_seed(FOUNDER_SEED);
+        let scope = certificate.certificate.scope.clone();
+        let key = founder
+            .derive_keypair(&delegation_signing_salt(&scope))
+            .map_err(|error| error.to_string())?;
+        // author_revoke preflights against the lane's own fold, so the lane
+        // first records the issuance it withdraws.
+        let lane_grants = self
+            .lane
+            .delegations(&authority.rules)
+            .await
+            .map_err(|error| error.to_string())?;
+        if !lane_grants
+            .projections(MOOT, &authority.rules, now_ms)
+            .iter()
+            .any(|grant| grant.certificate == id)
+        {
+            self.lane
+                .author_issue(&key, &authority.rules, certificate)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        let revocation = SignedDelegationRevocation::issue(
+            &founder,
+            DelegationRevocation::new(id, founder_root(), scope, now_ms, REVOCATION_NONCE),
+        )
+        .map_err(|error| error.to_string())?;
+        let operation = self
+            .lane
+            .author_revoke(&key, &authority.rules, revocation)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(json!({
+            "ok": true,
+            "revoked_member_root": hex::encode(member_root),
+            "revoked_certificate": hex::encode(id.0),
+            "revocation_operation_id": hex::encode(operation.hash.as_bytes()),
+            "at_ms": now_ms,
+        }))
+    }
+
     async fn status(&self) -> Result<Value, String> {
         let retained = self.operation_records().await?;
-        let authority = self.authority(false).ok();
+        let (authority, lifecycle, now_ms) = self.standing().await?;
+        let projection = match authority.as_ref() {
+            Some(authority) => Some(
+                self.replica
+                    .projection_with_authority(&GemotAuthorityView {
+                        authority: MootAuthority {
+                            delegations: &authority.delegations,
+                            rules: &authority.rules,
+                            moot_id: MOOT,
+                            now_ms,
+                        },
+                    })
+                    .await
+                    .map_err(|error| error.to_string())?,
+            ),
+            None => None,
+        };
         let mut operations = Vec::new();
         for record in &retained {
             let operation = decode_operation_record::<CommonsExt>(record)
@@ -395,28 +712,41 @@ impl Peer {
                 .and_then(|record| record.writer_attestation)
                 .and_then(|attestation| attestation.master_public_key().ok())
                 .map(|key| hex::encode(key.to_bytes()));
+            let hash = *operation.hash.as_bytes();
+            let classification = projection.as_ref().map(|projection| {
+                if projection
+                    .revoked
+                    .iter()
+                    .any(|entry| entry.operation == hash)
+                {
+                    "revoked"
+                } else if projection
+                    .pending_authority
+                    .iter()
+                    .any(|entry| entry.operation == hash)
+                {
+                    "pending_authority"
+                } else if projection
+                    .pending
+                    .iter()
+                    .any(|entry| entry.operation == hash)
+                {
+                    "pending_causal"
+                } else {
+                    "effective"
+                }
+            });
             operations.push(json!({
-                "operation_id": hex::encode(operation.hash.as_bytes()),
+                "operation_id": hex::encode(hash),
                 "writer": hex::encode(operation.header.verifying_key.as_bytes()),
                 "author_root": root,
+                "authority": classification,
             }));
         }
-        let (records, pending_authority_count, revoked_authority_count) =
-            if let Some(authority) = authority.as_ref() {
-                let view = GemotAuthorityView {
-                    authority: MootAuthority {
-                        delegations: &authority.delegations,
-                        rules: &authority.rules,
-                        moot_id: MOOT,
-                        now_ms: NOW_MS,
-                    },
-                };
-                let projection = self
-                    .replica
-                    .projection_with_authority(&view)
-                    .await
-                    .map_err(|error| error.to_string())?;
-                let records = projection
+        let records: Vec<Value> = projection
+            .as_ref()
+            .map(|projection| {
+                projection
                     .graph
                     .graph()
                     .nodes()
@@ -428,26 +758,38 @@ impl Peer {
                             "media_type": node.media_type,
                         })
                     })
-                    .collect();
-                (
-                    records,
-                    projection.pending_authority.len(),
-                    projection.revoked.len(),
-                )
-            } else {
-                (Vec::new(), 0, 0)
-            };
+                    .collect()
+            })
+            .unwrap_or_default();
+        let revoked_members: BTreeSet<String> = authority
+            .as_ref()
+            .map(|authority| {
+                authority
+                    .delegations
+                    .projections(MOOT, &authority.rules, now_ms)
+                    .into_iter()
+                    .filter(|grant| grant.directly_revoked)
+                    .map(|grant| hex::encode(grant.subject))
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(json!({
             "ok": true,
             "role": self.role.name(),
             "container_hex": hex::encode(self.container),
             "local_root": hex::encode(self.root),
             "authority_installed": authority.is_some(),
+            "now_ms": now_ms,
+            "lifecycle": lifecycle.name(),
+            "lifecycle_reason": (lifecycle != Lifecycle::Joined)
+                .then(|| refusal(authority.as_ref(), lifecycle, self.root, now_ms)),
             "retained_count": retained.len(),
+            "retained_delegation_count": self.lane_count().await?,
+            "revoked_members": revoked_members,
             "operations": operations,
             "records": records,
-            "pending_authority_count": pending_authority_count,
-            "revoked_authority_count": revoked_authority_count,
+            "pending_authority_count": projection.as_ref().map_or(0, |p| p.pending_authority.len()),
+            "revoked_authority_count": projection.as_ref().map_or(0, |p| p.revoked.len()),
         }))
     }
 }
@@ -468,7 +810,145 @@ fn corrupt_signature(value: &mut Value) -> bool {
     }
 }
 
+fn refused<T>(result: Result<T, String>, reason: &str) -> bool {
+    matches!(result, Err(error) if error.starts_with(reason))
+}
+
+/// Leave keeps retained operations, refuses participation, and a new
+/// invitation re-joins.
+async fn check_leave(
+    store: &Path,
+    container: [u8; 32],
+    invitation: &Invitation,
+) -> Result<bool, String> {
+    let mut peer = Peer::open(Role::Member, &store.join("self-check-leave"), container)?;
+    let install = || Request::InstallAuthority {
+        invitation: invitation.clone(),
+    };
+    handle(&mut peer, install()).await?;
+    peer.contribute("7b7d", false).await?;
+    let (left, _) = handle(&mut peer, Request::Leave).await?;
+    Ok(left["lifecycle"] == "left"
+        && left["retained_count"] == 1
+        && refused(peer.contribute("7b7d", false).await, "not joined")
+        && refused(handle(&mut peer, Request::Export).await, "not joined")
+        && refused(handle(&mut peer, Request::Recheck).await, "not joined")
+        && peer.status().await?["retained_count"] == 1
+        && handle(&mut peer, install()).await.is_ok()
+        && peer.contribute("7b7d", false).await.is_ok())
+}
+
+/// Past the grant's expiry contribution and recheck are refused, and the
+/// clock never moves back.
+async fn check_expiry(
+    store: &Path,
+    container: [u8; 32],
+    invitation: &Invitation,
+) -> Result<bool, String> {
+    let mut peer = Peer::open(Role::Member, &store.join("self-check-expiry"), container)?;
+    handle(
+        &mut peer,
+        Request::InstallAuthority {
+            invitation: invitation.clone(),
+        },
+    )
+    .await?;
+    let admitted_before = handle(&mut peer, Request::Recheck).await.is_ok();
+    handle(
+        &mut peer,
+        Request::AdvanceClock {
+            now_ms: GRANT_EXPIRES_MS + 1,
+        },
+    )
+    .await?;
+    Ok(admitted_before
+        && refused(peer.contribute("7b7d", false).await, "expired")
+        && refused(handle(&mut peer, Request::Recheck).await, "expired")
+        && refused(
+            handle(
+                &mut peer,
+                Request::AdvanceClock {
+                    now_ms: DEFAULT_NOW_MS,
+                },
+            )
+            .await,
+            "clock refuses",
+        )
+        && peer.status().await?["lifecycle"] == "expired")
+}
+
+/// A revocation carried over the operation wire refuses recheck and withdraws
+/// a later write without deleting it.
+async fn check_revocation(store: &Path, container: [u8; 32]) -> Result<bool, String> {
+    let mut founder = Peer::open(
+        Role::Founder,
+        &store.join("self-check-revoke-founder"),
+        container,
+    )?;
+    let (created, _) = handle(&mut founder, Request::Init).await?;
+    let invitation: Invitation =
+        serde_json::from_value(created["invitation"].clone()).map_err(|error| error.to_string())?;
+    let mut member = Peer::open(
+        Role::Member,
+        &store.join("self-check-revoke-member"),
+        container,
+    )?;
+    handle(&mut member, Request::InstallAuthority { invitation }).await?;
+    let member_may_not_revoke = refused(
+        handle(&mut member, Request::RevokeMember).await,
+        "only the founder",
+    );
+    handle(&mut founder, Request::RevokeMember).await?;
+    // Not yet synced, the member's local check still admits this later write.
+    let later = member.contribute("7b7d", false).await?;
+    founder
+        .import(
+            later["operation_record_hex"]
+                .as_str()
+                .ok_or("no operation record")?,
+        )
+        .await?;
+    let (exported, _) = handle(&mut founder, Request::Export).await?;
+    for record in exported["operations"]
+        .as_array()
+        .ok_or("no exported operations")?
+    {
+        member
+            .import(record.as_str().ok_or("exported operation is not hex")?)
+            .await?;
+    }
+    let withdrawn = |status: &Value| {
+        status["retained_count"] == 1
+            && status["records"].as_array().is_some_and(Vec::is_empty)
+            && status["operations"].as_array().is_some_and(|operations| {
+                operations.iter().any(|operation| {
+                    operation["operation_id"] == later["operation_id"]
+                        && operation["authority"] == "revoked"
+                })
+            })
+    };
+    let member_root = hex::encode(member.root);
+    let founder_status = founder.status().await?;
+    let member_status = member.status().await?;
+    Ok(member_may_not_revoke
+        && refused(handle(&mut member, Request::Recheck).await, "revoked")
+        && refused(member.contribute("7b7d", false).await, "revoked")
+        && withdrawn(&founder_status)
+        && withdrawn(&member_status)
+        && member_status["lifecycle"] == "revoked"
+        && founder_status["revoked_members"]
+            .as_array()
+            .is_some_and(|roots| {
+                roots
+                    .iter()
+                    .any(|root| root.as_str() == Some(member_root.as_str()))
+            }))
+}
+
 async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> {
+    if store.join("self-check-founder").exists() {
+        return Err("self-check needs a fresh --store directory".into());
+    }
     let envelope = fixture_envelope(container)?;
     let founder = Peer::open(Role::Founder, &store.join("self-check-founder"), container)?;
     write_authority(&founder.authority_path, &envelope)?;
@@ -491,7 +971,7 @@ async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> 
         serde_json::from_value(encoded).map_err(|error| error.to_string())?;
     let mut tampered_envelope = envelope.clone();
     tampered_envelope.certificates[0] = tampered;
-    let tampered_grant_rejected = validate_authority(&tampered_envelope, container, None).is_err();
+    let tampered_grant_rejected = validate_authority(&tampered_envelope, container).is_err();
     let mut altered_rules = envelope.clone();
     altered_rules
         .rules
@@ -499,9 +979,8 @@ async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> 
         .get_mut(&ROOT_GRANT)
         .expect("fixture root grant exists")
         .delegation_depth = 2;
-    let unsigned_rule_mutation_rejected =
-        validate_authority(&altered_rules, container, None).is_err();
-    let wrong_space_invitation_rejected = validate_authority(&envelope, [0xee; 32], None).is_err();
+    let unsigned_rule_mutation_rejected = validate_authority(&altered_rules, container).is_err();
+    let wrong_space_invitation_rejected = validate_authority(&envelope, [0xee; 32]).is_err();
 
     let mut intruder = Peer::open(
         Role::Intruder,
@@ -520,19 +999,32 @@ async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> 
         .as_str()
         .ok_or("self-check generated no operation record")?
         .to_owned();
+    // A joined receiver, so the refusal is the container binding itself.
     let receiver = Peer::open(Role::Founder, &store.join("self-check-receiver"), container)?;
-    let wrong_container_operation_rejected = receiver.import(&foreign_record).await.is_err();
-    Ok(json!({
-        "ok": invitation_roundtrip_installed && tampered_grant_rejected
-            && unsigned_rule_mutation_rejected && wrong_space_invitation_rejected
-            && unauthorized_writer_rejected && wrong_container_operation_rejected,
+    write_authority(&receiver.authority_path, &envelope)?;
+    let wrong_container_operation_rejected = refused(
+        receiver.import(&foreign_record).await,
+        "operation addresses another Commons container",
+    );
+    let mut checks = json!({
         "invitation_roundtrip_installed": invitation_roundtrip_installed,
         "tampered_grant_rejected": tampered_grant_rejected,
         "unsigned_rule_mutation_rejected": unsigned_rule_mutation_rejected,
         "wrong_space_invitation_rejected": wrong_space_invitation_rejected,
         "unauthorized_writer_rejected": unauthorized_writer_rejected,
         "wrong_container_operation_rejected": wrong_container_operation_rejected,
-    }))
+        "leave_retains_and_refuses_contribution":
+            check_leave(store, container, &invitation).await?,
+        "expiry_refuses_contribution_and_recheck":
+            check_expiry(store, container, &invitation).await?,
+        "revocation_refuses_recheck_and_withdraws_later_operation":
+            check_revocation(store, container).await?,
+    });
+    let ok = checks
+        .as_object()
+        .is_some_and(|checks| checks.values().all(|value| value.as_bool() == Some(true)));
+    checks["ok"] = json!(ok);
+    Ok(checks)
 }
 
 async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), String> {
@@ -541,13 +1033,17 @@ async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), Stri
             if peer.role != Role::Founder {
                 return Err("only the founder may create this fixture invitation".into());
             }
-            let envelope = fixture_envelope(peer.container)?;
-            validate_authority(&envelope, peer.container, Some(peer.root))?;
             if peer.authority_path.exists() {
-                let existing = read_authority(&peer.authority_path)?;
-                validate_authority(&existing, peer.container, Some(peer.root))?;
+                peer.require_joined(&read_authority(&peer.authority_path)?)
+                    .await?;
             } else {
+                let envelope = fixture_envelope(peer.container)?;
+                peer.require_joined(&envelope).await?;
                 write_authority(&peer.authority_path, &envelope)?;
+                peer.write_local(&LocalRecord {
+                    left: false,
+                    ..peer.local()?
+                })?;
             }
             Ok((
                 json!({ "ok": true, "invitation": peer.invitation()? }),
@@ -566,12 +1062,16 @@ async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), Stri
                 .map_err(|_| "authority_cbor_hex is not hex".to_string())?;
             let envelope: AuthorityEnvelope = decode_cbor(bytes.as_slice())
                 .map_err(|error| format!("authority CBOR: {error}"))?;
-            validate_authority(
-                &envelope,
-                peer.container,
-                (peer.role != Role::Intruder).then_some(peer.root),
-            )?;
+            if peer.role == Role::Intruder {
+                validate_authority(&envelope, peer.container)?;
+            } else {
+                peer.require_joined(&envelope).await?;
+            }
             write_authority(&peer.authority_path, &envelope)?;
+            peer.write_local(&LocalRecord {
+                left: false,
+                ..peer.local()?
+            })?;
             Ok((json!({ "ok": true, "authority_installed": true }), false))
         },
         Request::Contribute {
@@ -581,8 +1081,14 @@ async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), Stri
             comparison_utf8_hex,
         } => Ok((peer.contribute(&comparison_utf8_hex, true).await?, false)),
         Request::Export => {
+            peer.installed().await?;
+            let lane = peer
+                .lane
+                .drop_records()
+                .await
+                .map_err(|error| error.to_string())?;
             let mut operations = Vec::new();
-            for record in peer.operation_records().await? {
+            for record in peer.operation_records().await?.into_iter().chain(lane) {
                 operations.push(hex::encode(
                     encode_cbor(&record).map_err(|error| error.to_string())?,
                 ));
@@ -593,6 +1099,55 @@ async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), Stri
             operation_record_hex,
         } => Ok((peer.import(&operation_record_hex).await?, false)),
         Request::Status => Ok((peer.status().await?, false)),
+        Request::Leave => {
+            peer.installed().await?;
+            peer.write_local(&LocalRecord {
+                left: true,
+                ..peer.local()?
+            })?;
+            fs::remove_file(&peer.authority_path).map_err(|error| error.to_string())?;
+            Ok((
+                json!({
+                    "ok": true,
+                    "lifecycle": Lifecycle::Left.name(),
+                    "retained_count": peer.operation_records().await?.len(),
+                    "retained_delegation_count": peer.lane_count().await?,
+                }),
+                false,
+            ))
+        },
+        Request::Recheck => {
+            peer.admitted().await?;
+            Ok((
+                json!({
+                    "ok": true,
+                    "lifecycle": Lifecycle::Joined.name(),
+                    "now_ms": peer.local()?.now_ms,
+                }),
+                false,
+            ))
+        },
+        Request::AdvanceClock { now_ms } => {
+            let local = peer.local()?;
+            if now_ms < local.now_ms {
+                return Err(format!(
+                    "clock refuses to move backwards from {} ms to {now_ms} ms",
+                    local.now_ms
+                ));
+            }
+            peer.write_local(&LocalRecord { now_ms, ..local })?;
+            let (_, lifecycle, _) = peer.standing().await?;
+            Ok((
+                json!({
+                    "ok": true,
+                    "proof_only": true,
+                    "now_ms": now_ms,
+                    "lifecycle": lifecycle.name(),
+                }),
+                false,
+            ))
+        },
+        Request::RevokeMember => Ok((peer.revoke_member().await?, false)),
         Request::Close => Ok((json!({ "ok": true, "closed": true }), true)),
     }
 }
