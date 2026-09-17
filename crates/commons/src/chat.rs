@@ -17,7 +17,7 @@ use crate::parking::{
 };
 use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
-use muniment::{Backend, MemoryBackend, StoreError};
+use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
@@ -1067,7 +1067,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                         epoch_held: keys.contains(&envelope.epoch),
                     })
                 },
-                async |operation| {
+                async |operation, unpark| {
                     let retained = self.load_retained().await?;
                     match admit_onto(
                         &self.store,
@@ -1076,6 +1076,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                         self.checkpoint_authority.clone(),
                         operation,
                         retained,
+                        unpark,
                     )
                     .await
                     {
@@ -1112,6 +1113,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             self.checkpoint_authority.clone(),
             operation,
             retained,
+            &[],
         )
         .await
     }
@@ -1474,12 +1476,14 @@ async fn accept_or_park<B: Backend + Clone>(
         checkpoint_authority,
         operation,
         retained,
+        &[],
     )
     .await
 }
 
 /// Admit one operation with one key snapshot against its retained history,
-/// never parking.
+/// never parking. `carried` writes commit in the insert's own batch: a
+/// re-admission unparks the record there, and every other caller passes none.
 async fn admit_onto<B: Backend + Clone>(
     store: &MunimentStore<B, ChatExt>,
     space_id: [u8; 32],
@@ -1487,10 +1491,14 @@ async fn admit_onto<B: Backend + Clone>(
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     operation: &Operation<ChatExt>,
     retained: RetainedChatRecords,
+    carried: &[WriteOp],
 ) -> Result<bool, ChatError> {
     let policy = chat_policy(space_id, keys, checkpoint_authority, retained)?;
     let processor = OperationProcessor::new(store.clone(), policy);
-    Ok(processor.process(operation).await?.inserted())
+    if carried.is_empty() {
+        return Ok(processor.process(operation).await?.inserted());
+    }
+    Ok(processor.process_with_writes(operation, carried).await?)
 }
 
 /// The retained history split by log, loaded once.
@@ -3242,6 +3250,53 @@ mod tests {
             ]
         );
         assert_eq!(projection, a.projection().await.unwrap());
+    }
+
+    /// The re-admission's insert carries its own unparking write, so the
+    /// record becomes stored and stops being parked in one commit: no crash
+    /// can strand a stored record in the parking area. Stickleback's
+    /// `process_with_writes` tests show that batch applies both or neither.
+    #[tokio::test]
+    async fn a_readmitted_record_is_stored_and_unparked_in_one_commit() {
+        use crate::keys::test_group::keyring;
+
+        let backend = MemoryBackend::new();
+        let (group, _, b, [first, second]) = behind_a_rotation(backend.clone()).await;
+        let parked = format!(
+            "{}/parking/records/",
+            stickleback::lane_id(COMMONS_CHAT_LANE, SPACE)
+        );
+        for operation in [&first, &second] {
+            assert!(!b.accept(operation).await.unwrap(), "parked, not accepted");
+        }
+        assert_eq!(backend.list(&parked).await.unwrap().len(), 2);
+        let store = b.sync_store();
+        for operation in [&first, &second] {
+            assert!(
+                store
+                    .get_operation(&operation.hash)
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+        }
+
+        b.keys().replace(keyring(&group.b));
+        assert_eq!(b.readmit_parked().await.unwrap().admitted, 2);
+        for operation in [&first, &second] {
+            assert!(
+                store
+                    .get_operation(&operation.hash)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        assert!(
+            backend.list(&parked).await.unwrap().is_empty(),
+            "stored and still parked is never observable"
+        );
+        assert_eq!(b.parking_status().await.unwrap(), ParkingStatus::default());
     }
 
     #[tokio::test]

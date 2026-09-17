@@ -23,11 +23,12 @@
 //!
 //! Records live under `<lane id>/parking/records/`, one key each naming
 //! arrival, author, log, sequence and size, bounded by count and bytes.
-//! Overflow evicts the oldest and adds to a durable eviction count. Unparking
-//! follows the insert instead of sharing its batch, because stickleback keeps
-//! its insert-with-extra-writes crate-private: a crash in between leaves a
-//! stored record parked, which the next re-admission finds stored and drops
-//! uncounted. A record parked and later admitted live is dropped the same way.
+//! Overflow evicts the oldest and adds to a durable eviction count. A
+//! re-admitted record's insert carries its own unparking write, through
+//! stickleback's `OperationProcessor::process_with_writes`, so the two commit
+//! in one batch and no crash leaves a stored record parked. A record refused
+//! on re-admission, or parked and later admitted live, is unparked on its own
+//! afterwards; neither leaves anything stored to disagree with.
 
 use std::collections::BTreeSet;
 
@@ -292,14 +293,16 @@ impl Parking {
 
     /// Re-admit parked records in causal order. `header` reads a record with
     /// the caller's key snapshot, `None` when a pre-decryption check now
-    /// fails; `admit` runs the lane's ordinary admission with that snapshot.
-    /// A record stays parked while its epoch is unheld or its predecessor is
-    /// not stored, and is unparked once admitted, found stored, or refused.
+    /// fails; `admit` runs the lane's ordinary admission with that snapshot,
+    /// committing the writes it is handed -- this record's unparking -- in the
+    /// same batch as the insert. A record stays parked while its epoch is
+    /// unheld or its predecessor is not stored, and is unparked once admitted,
+    /// found stored, or refused.
     pub async fn readmit<B, E, Error>(
         &self,
         store: &MunimentStore<B, E>,
         header: impl Fn(&Operation<E>) -> Option<ParkedHeader>,
-        mut admit: impl AsyncFnMut(&Operation<E>) -> Result<Readmitted, Error>,
+        mut admit: impl AsyncFnMut(&Operation<E>, &[WriteOp]) -> Result<Readmitted, Error>,
     ) -> Result<ReadmitReport, Error>
     where
         B: Backend,
@@ -359,8 +362,15 @@ impl Parking {
                     report.still_parked += 1;
                     continue;
                 }
-                match admit(operation).await? {
-                    Readmitted::Inserted => report.admitted += 1,
+                let unpark = [WriteOp::Delete {
+                    key: slot.key.clone(),
+                }];
+                match admit(operation, &unpark).await? {
+                    // The insert committed the unparking write with it.
+                    Readmitted::Inserted => {
+                        report.admitted += 1;
+                        continue;
+                    },
                     Readmitted::Duplicate => {},
                     Readmitted::Refused => report.refused += 1,
                 }
