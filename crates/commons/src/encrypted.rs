@@ -19,6 +19,7 @@
 //! epoch and runs the plaintext profile's fold, so the same edits project the
 //! same graph.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chartulary::{Container, GraphLog, Relation, WriterId};
@@ -30,16 +31,17 @@ use p2panda_net::{Endpoint, Gossip};
 use personae::{DerivedKeyAttestation, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use stickleback::{
-    Admission, DataKeyring, GroupCiphertext, GroupCryptoError, JoinError, JoinedSpace,
-    MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject, StoreTarget, lane_id,
-    validate_causal_metadata,
+    Admission, DataKeyring, GroupCiphertext, GroupCryptoError, GroupSecretId, JoinError,
+    JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    StoreTarget, lane_id, validate_causal_metadata,
 };
 
+use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{
     AllowAllAuthority, AuthoredBatch, COMMONS_CAUSAL_LIMITS, COMMONS_LOG, CommonsAuthority,
     CommonsBatch, CommonsProjection, CommonsRecord, GraphHeader, GroupKeys, MaterializeError,
     ReplicaError, ReplicaIdentityError, StoredRecord, author_batch, check_batch, derived_writer,
-    fold_with_authority, load_records, validate_counter_frontier,
+    fold_with_authority, load_operations, load_records, validate_counter_frontier,
 };
 
 /// The encrypted graph's sync-lane kind, distinct from
@@ -78,21 +80,25 @@ struct SealedRecord {
     writer_attestation: Option<DerivedKeyAttestation>,
 }
 
-/// Decrypt one operation back into the record the plaintext fold reads.
-fn open_record(
-    keys: &DataKeyring,
-    operation: &Operation<EncryptedCommonsExt>,
-) -> Result<CommonsRecord, Reject> {
+/// The body's ciphertext envelope, which names its epoch in the clear.
+fn envelope(operation: &Operation<EncryptedCommonsExt>) -> Result<GroupCiphertext, Reject> {
     let body = operation.body.as_ref().ok_or_else(|| {
         Reject::new(
             "invalid-commons-ciphertext",
             "encrypted commons operation has no body",
         )
     })?;
-    let envelope: GroupCiphertext = decode_cbor(body.to_bytes().as_slice())
-        .map_err(|error| Reject::new("invalid-commons-ciphertext", error.to_string()))?;
+    decode_cbor(body.to_bytes().as_slice())
+        .map_err(|error| Reject::new("invalid-commons-ciphertext", error.to_string()))
+}
+
+/// Decrypt one operation back into the record the plaintext fold reads.
+fn open_record(
+    keys: &DataKeyring,
+    operation: &Operation<EncryptedCommonsExt>,
+) -> Result<CommonsRecord, Reject> {
     let plaintext = keys
-        .open(&envelope)
+        .open(&envelope(operation)?)
         .map_err(|error| Reject::new("unreadable-commons-record", error.to_string()))?;
     let sealed: SealedRecord = decode_cbor(plaintext.as_slice())
         .map_err(|error| Reject::new("invalid-commons-batch", error.to_string()))?;
@@ -338,6 +344,41 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
         fold_with_authority(records, self.container, authority)
     }
 
+    /// The epochs retained records are sealed under, read from their envelopes
+    /// without decrypting, plus the current epoch. Changes nothing.
+    pub async fn epoch_report(&self) -> Result<LaneEpochReport, MaterializeError> {
+        let mut sealed = BTreeMap::<GroupSecretId, usize>::new();
+        for (operation, _) in load_operations(&self.store, self.container).await? {
+            let epoch = envelope(&operation)
+                .map_err(MaterializeError::Encrypted)?
+                .epoch;
+            *sealed.entry(epoch).or_default() += 1;
+        }
+        let keys = self.keys.current();
+        let current = keys.current_epoch();
+        let needed = current
+            .map(|epoch| EpochNeed {
+                epoch,
+                reason: EpochNeedReason::Current,
+            })
+            .into_iter()
+            .chain(sealed.iter().map(|(epoch, records)| EpochNeed {
+                epoch: *epoch,
+                reason: EpochNeedReason::EncryptedGraph { records: *records },
+            }))
+            .collect();
+        let releasable = keys
+            .epoch_ids()
+            .into_iter()
+            .filter(|epoch| Some(*epoch) != current && !sealed.contains_key(epoch))
+            .collect();
+        Ok(LaneEpochReport {
+            lane: COMMONS_ENCRYPTED_GRAPH_LANE,
+            needed,
+            releasable,
+        })
+    }
+
     async fn load(
         &self,
         keys: &DataKeyring,
@@ -567,6 +608,39 @@ mod tests {
             node_ids(&c.projection().await.unwrap()),
             ["after", "before"]
         );
+    }
+
+    #[tokio::test]
+    async fn the_epoch_report_reads_envelopes_without_decrypting() {
+        let backend = MemoryBackend::new();
+        let mut writer =
+            EncryptedReplica::new(backend.clone(), CONTAINER, [0x61; 32], founding_keyring());
+        let sealed = writer
+            .edit(|g| {
+                g.insert_node(&Author::new("ui"), Container::new("sealed"));
+            })
+            .await
+            .unwrap();
+        let epoch = epoch_of(&sealed);
+        let sealed_need = EpochNeed {
+            epoch,
+            reason: EpochNeedReason::EncryptedGraph { records: 1 },
+        };
+        let current_need = EpochNeed {
+            epoch,
+            reason: EpochNeedReason::Current,
+        };
+        assert_eq!(
+            writer.epoch_report().await.unwrap().needed,
+            [current_need, sealed_need.clone()]
+        );
+
+        // Same store, no keys: it cannot project, yet reports the same need.
+        let keyless = EncryptedReplica::new(backend, CONTAINER, [0x62; 32], DataKeyring::new());
+        assert!(keyless.projection().await.is_err(), "positive control");
+        let report = keyless.epoch_report().await.unwrap();
+        assert_eq!(report.needed, [sealed_need]);
+        assert!(report.releasable.is_empty());
     }
 
     #[tokio::test]

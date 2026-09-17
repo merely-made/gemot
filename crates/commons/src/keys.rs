@@ -76,6 +76,7 @@ pub(crate) mod test_group {
         pub a: GroupSession,
         pub b: GroupSession,
         pub c: GroupSession,
+        a_prekey: GroupPrekeyBundle,
     }
 
     fn member(seed: u8) -> (GroupSession, GroupPrekeyBundle) {
@@ -102,7 +103,31 @@ pub(crate) mod test_group {
                 .unwrap();
             b.process(root, &add_c.control, add_c.direct_for(b.member()))
                 .unwrap();
-            Self { a, b, c }
+            Self { a, b, c, a_prekey }
+        }
+
+        /// A adds a new member, which B and C also process; returns it.
+        pub fn invite(&mut self, seed: u8) -> GroupSession {
+            let (mut invitee, prekey) = member(seed);
+            self.a.register_prekey(&prekey).unwrap();
+            invitee.register_prekey(&self.a_prekey).unwrap();
+            let root = self.a.personae_root();
+            let add = self.a.add(invitee.member()).unwrap();
+            for session in [&mut self.b, &mut self.c, &mut invitee] {
+                let direct = add.direct_for(session.member());
+                session.process(root, &add.control, direct).unwrap();
+            }
+            invitee
+        }
+
+        /// A rotates; B and C process the frame.
+        pub fn rotate(&mut self) {
+            let root = self.a.personae_root();
+            let rotation = self.a.update().unwrap();
+            for session in [&mut self.b, &mut self.c] {
+                let direct = rotation.direct_for(session.member());
+                session.process(root, &rotation.control, direct).unwrap();
+            }
         }
 
         /// A removes C and rotates. B and C both process both frames in order;
