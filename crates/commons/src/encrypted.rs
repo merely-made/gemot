@@ -13,11 +13,13 @@
 //! parents. The body is a `GroupCiphertext` sealing the batch and the writer
 //! attestation to the current epoch of a shared [`GroupKeys`].
 //!
-//! Receipt decrypts to admit and stores the ciphertext. A record this member
-//! cannot open is refused as `unreadable-commons-record` and not stored, so a
-//! later sync can offer it again. The projection decrypts with every retained
-//! epoch and runs the plaintext profile's fold, so the same edits project the
-//! same graph.
+//! Receipt decrypts to admit and stores the ciphertext. A record sealed to an
+//! epoch the key handle lacks, or following such a record, parks until the
+//! host refreshes the handle and calls [`EncryptedReplica::readmit_parked`]
+//! (see [`crate::parking`]); any other record this member cannot open is
+//! refused as `unreadable-commons-record` and not stored. The projection
+//! decrypts with every retained epoch and runs the plaintext profile's fold,
+//! so the same edits project the same graph.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -36,6 +38,9 @@ use stickleback::{
     StoreTarget, lane_id, validate_causal_metadata,
 };
 
+use crate::parking::{
+    ParkedHeader, Parking, ParkingLimits, ParkingStatus, ReadmitReport, Readmitted,
+};
 use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{
     AllowAllAuthority, AuthoredBatch, COMMONS_CAUSAL_LIMITS, COMMONS_LOG, CommonsAuthority,
@@ -116,6 +121,30 @@ struct EncryptedCommonsPolicy {
     keys: Arc<DataKeyring>,
 }
 
+/// The checks made before decrypting, which parking repeats; returns the
+/// envelope.
+fn sealed_header(
+    container: [u8; 32],
+    operation: &Operation<EncryptedCommonsExt>,
+) -> Result<GroupCiphertext, Reject> {
+    let extensions = &operation.header.extensions;
+    if extensions.container != container {
+        return Err(Reject::new(
+            "wrong-container",
+            "operation addresses a different container",
+        ));
+    }
+    if validate_operation(operation).is_err() || operation.hash != operation.header.hash() {
+        return Err(Reject::new(
+            "bad-operation",
+            "operation header or body commitment is invalid",
+        ));
+    }
+    validate_causal_metadata(operation, &extensions.parents, COMMONS_CAUSAL_LIMITS)
+        .map_err(|err| Reject::new("invalid-commons-causality", err.to_string()))?;
+    envelope(operation)
+}
+
 impl OperationPolicy<EncryptedCommonsExt> for EncryptedCommonsPolicy {
     type LogId = u64;
 
@@ -123,21 +152,7 @@ impl OperationPolicy<EncryptedCommonsExt> for EncryptedCommonsPolicy {
         &self,
         operation: &Operation<EncryptedCommonsExt>,
     ) -> Result<Admission<Self::LogId>, Reject> {
-        let extensions = &operation.header.extensions;
-        if extensions.container != self.container {
-            return Err(Reject::new(
-                "wrong-container",
-                "operation addresses a different container",
-            ));
-        }
-        if validate_operation(operation).is_err() || operation.hash != operation.header.hash() {
-            return Err(Reject::new(
-                "bad-operation",
-                "operation header or body commitment is invalid",
-            ));
-        }
-        validate_causal_metadata(operation, &extensions.parents, COMMONS_CAUSAL_LIMITS)
-            .map_err(|err| Reject::new("invalid-commons-causality", err.to_string()))?;
+        sealed_header(self.container, operation)?;
         check_batch(operation, &open_record(&self.keys, operation)?)?;
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.container),
@@ -146,14 +161,40 @@ impl OperationPolicy<EncryptedCommonsExt> for EncryptedCommonsPolicy {
     }
 }
 
-/// Admit one operation with one snapshot of the handle's keys.
+/// Admit one operation with one snapshot of the handle's keys, or park it.
 async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, EncryptedCommonsExt>,
     container: [u8; 32],
     keys: &GroupKeys,
+    parking: &Parking,
     operation: &Operation<EncryptedCommonsExt>,
 ) -> Result<bool, ProcessError> {
     let keys = keys.current();
+    if let Ok(envelope) = sealed_header(container, operation)
+        && parking
+            .should_park(
+                store,
+                operation,
+                COMMONS_LOG,
+                keys.contains(&envelope.epoch),
+            )
+            .await?
+        && parking
+            .park(store.backend(), operation, COMMONS_LOG)
+            .await?
+    {
+        return Ok(false);
+    }
+    admit_with(store, container, keys, operation).await
+}
+
+/// Ordinary admission, never parking.
+async fn admit_with<B: Backend + Clone + Send + Sync + 'static>(
+    store: &MunimentStore<B, EncryptedCommonsExt>,
+    container: [u8; 32],
+    keys: Arc<DataKeyring>,
+    operation: &Operation<EncryptedCommonsExt>,
+) -> Result<bool, ProcessError> {
     let processor = OperationProcessor::new(
         store.clone(),
         EncryptedCommonsPolicy {
@@ -211,6 +252,7 @@ pub struct EncryptedReplica<B: Backend + Clone + Send + Sync + 'static> {
     signing_seed: [u8; 32],
     writer_attestation: Option<DerivedKeyAttestation>,
     keys: GroupKeys,
+    parking: Parking,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
@@ -234,6 +276,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
             signing_seed,
             writer_attestation: None,
             keys: keys.into(),
+            parking: Parking::new(COMMONS_ENCRYPTED_GRAPH_LANE, container),
         }
     }
 
@@ -253,7 +296,14 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
             signing_seed,
             writer_attestation: Some(writer_attestation),
             keys: keys.into(),
+            parking: Parking::new(COMMONS_ENCRYPTED_GRAPH_LANE, container),
         })
+    }
+
+    /// Bound this replica's parked records; see [`crate::parking`].
+    pub fn with_parking_limits(mut self, limits: ParkingLimits) -> Self {
+        self.parking.limits = limits;
+        self
     }
 
     /// The key handle this replica and its joined lane read.
@@ -280,6 +330,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
         let accept_store = self.store.clone();
         let container = self.container;
         let keys = self.keys.clone();
+        let parking = self.parking.clone();
         JoinedSpace::join::<_, u64, _, _>(
             lane_id(COMMONS_ENCRYPTED_GRAPH_LANE, container),
             self.sync_store(),
@@ -289,8 +340,9 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
             move |operation: Operation<EncryptedCommonsExt>| {
                 let store = accept_store.clone();
                 let keys = keys.clone();
+                let parking = parking.clone();
                 async move {
-                    accept_into(&store, container, &keys, &operation)
+                    accept_into(&store, container, &keys, &parking, &operation)
                         .await
                         .unwrap_or(false)
                 }
@@ -322,12 +374,56 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
         Ok(operation)
     }
 
-    /// Decrypt, validate and store one operation.
+    /// Decrypt, validate and store one operation. A record sealed to an
+    /// epoch the handle lacks, or backlinking a parked one, parks and returns
+    /// `false`.
     pub async fn accept(
         &self,
         operation: &Operation<EncryptedCommonsExt>,
     ) -> Result<bool, ProcessError> {
-        accept_into(&self.store, self.container, &self.keys, operation).await
+        accept_into(
+            &self.store,
+            self.container,
+            &self.keys,
+            &self.parking,
+            operation,
+        )
+        .await
+    }
+
+    /// Re-admit parked records with the handle's current keys, in causal
+    /// order. A host calls this after it replaces the key handle.
+    pub async fn readmit_parked(&self) -> Result<ReadmitReport, MaterializeError> {
+        let keys = self.keys.current();
+        self.parking
+            .readmit(
+                &self.store,
+                |operation| {
+                    let envelope = sealed_header(self.container, operation).ok()?;
+                    Some(ParkedHeader {
+                        parents: operation.header.extensions.parents.clone(),
+                        epoch_held: keys.contains(&envelope.epoch),
+                    })
+                },
+                async |operation| match admit_with(
+                    &self.store,
+                    self.container,
+                    keys.clone(),
+                    operation,
+                )
+                .await
+                {
+                    Ok(true) => Ok(Readmitted::Inserted),
+                    Ok(false) => Ok(Readmitted::Duplicate),
+                    Err(ProcessError::Store(error)) => Err(error.into()),
+                    Err(_) => Ok(Readmitted::Refused),
+                },
+            )
+            .await
+    }
+
+    pub async fn parking_status(&self) -> Result<ParkingStatus, MaterializeError> {
+        Ok(self.parking.status(self.store.backend()).await?)
     }
 
     /// Current graph plus operations waiting on unavailable causal parents.
@@ -585,11 +681,8 @@ mod tests {
             "B admits without a rebuild"
         );
 
-        let refused = c.accept(&after).await.expect_err("C cannot open it");
-        assert!(
-            matches!(&refused, ProcessError::Rejected(reject) if reject.code == "unreadable-commons-record"),
-            "{refused}"
-        );
+        assert!(!c.accept(&after).await.unwrap(), "C cannot open it: parked");
+        assert_eq!(c.parking_status().await.unwrap().parked, 1);
         assert_eq!(c.sync_store().operation_count().await.unwrap(), 1);
         assert_eq!(node_ids(&c.projection().await.unwrap()), ["before"]);
         for (who, replica) in [("a", &a), ("b", &b)] {
@@ -600,14 +693,204 @@ mod tests {
             );
         }
 
-        // Refused records are not stored, so a later offer is judged afresh:
-        // given the epoch (a stand-in for being re-added), C admits it.
+        // Parked records are not stored; given the epoch (a stand-in for
+        // being re-added), C re-admits it.
         c_keys.replace(keyring(&group.b));
-        assert!(c.accept(&after).await.unwrap());
+        assert_eq!(c.readmit_parked().await.unwrap().admitted, 1);
         assert_eq!(
             node_ids(&c.projection().await.unwrap()),
             ["after", "before"]
         );
+    }
+
+    /// A and B share the nodes in `shared`; then A removes C, rotates and
+    /// authors `after`, which B's handle cannot open yet.
+    async fn graph_behind_a_rotation(
+        shared: &[&str],
+        after: Vec<Box<dyn FnOnce(&mut GraphLog<Container, Relation>)>>,
+    ) -> (
+        Group,
+        EncryptedReplica<MemoryBackend>,
+        EncryptedReplica<MemoryBackend>,
+        Vec<Operation<EncryptedCommonsExt>>,
+    ) {
+        let mut group = Group::found();
+        let a_keys = GroupKeys::new(keyring(&group.a));
+        let mut a =
+            EncryptedReplica::new(MemoryBackend::new(), CONTAINER, [0xa1; 32], a_keys.clone());
+        let b = EncryptedReplica::new(
+            MemoryBackend::new(),
+            CONTAINER,
+            [0xb2; 32],
+            keyring(&group.b),
+        );
+        for id in shared {
+            let operation = a.edit(insert(id)).await.unwrap();
+            assert!(b.accept(&operation).await.unwrap(), "positive control");
+        }
+        group.remove_c_and_rotate();
+        a_keys.replace(keyring(&group.a));
+        let mut authored = Vec::new();
+        for edit in after {
+            authored.push(a.edit(edit).await.unwrap());
+        }
+        (group, a, b, authored)
+    }
+
+    fn insert(id: &str) -> Box<dyn FnOnce(&mut GraphLog<Container, Relation>)> {
+        let id = id.to_owned();
+        Box::new(move |g| {
+            g.insert_node(&Author::new("ui"), Container::new(id));
+        })
+    }
+
+    fn connect(from: &str, to: &str) -> Box<dyn FnOnce(&mut GraphLog<Container, Relation>)> {
+        let (from, to) = (from.to_owned(), to.to_owned());
+        Box::new(move |g| {
+            g.connect(&Author::new("ui"), &from, &to, cites()).unwrap();
+        })
+    }
+
+    fn signed_graph_envelope(
+        container: [u8; 32],
+        envelope: &GroupCiphertext,
+    ) -> Operation<EncryptedCommonsExt> {
+        let body = encode_cbor(envelope).unwrap();
+        let header = Header::builder()
+            .body(&body)
+            .seq_num(0)
+            .backlink(None)
+            .build(
+                &SigningKey::from_bytes(&[0xd4; 32]),
+                EncryptedCommonsExt {
+                    encryption: GraphEncryption::GroupData,
+                    container,
+                    parents: Vec::new(),
+                },
+            );
+        Operation {
+            hash: header.hash(),
+            header,
+            body: Some(Body::from_bytes(&body)),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_member_behind_a_rotation_parks_graph_records_then_readmits_in_order() {
+        let (group, a, b, after) =
+            graph_behind_a_rotation(&["before"], vec![insert("first"), insert("second")]).await;
+        for operation in &after {
+            assert!(!b.accept(operation).await.unwrap(), "parked, not accepted");
+        }
+        assert_eq!(b.parking_status().await.unwrap().parked, 2);
+        assert_eq!(b.sync_store().operation_count().await.unwrap(), 1);
+        assert_eq!(node_ids(&b.projection().await.unwrap()), ["before"]);
+        assert_eq!(
+            b.readmit_parked().await.unwrap(),
+            ReadmitReport {
+                still_parked: 2,
+                ..ReadmitReport::default()
+            }
+        );
+
+        b.keys().replace(keyring(&group.b));
+        assert_eq!(
+            b.readmit_parked().await.unwrap(),
+            ReadmitReport {
+                admitted: 2,
+                ..ReadmitReport::default()
+            }
+        );
+        assert_eq!(b.parking_status().await.unwrap(), ParkingStatus::default());
+        let projection = b.projection().await.unwrap();
+        assert_eq!(node_ids(&projection), ["before", "first", "second"]);
+        assert_eq!(
+            fingerprint(&projection.graph),
+            fingerprint(&a.projection().await.unwrap().graph)
+        );
+    }
+
+    /// The successor's edge counter continues its parked predecessor's, so
+    /// without parking it would be refused before its predecessor is checked.
+    #[tokio::test]
+    async fn a_graph_successor_under_a_held_epoch_parks_behind_its_parked_predecessor() {
+        let (group, a, b, after) = graph_behind_a_rotation(
+            &["before", "x"],
+            vec![connect("before", "x"), connect("x", "before")],
+        )
+        .await;
+        let [first, second] = <[_; 2]>::try_from(after).unwrap();
+        assert!(!b.accept(&first).await.unwrap());
+        b.keys().replace(keyring(&group.b));
+        assert!(
+            !b.accept(&second).await.unwrap(),
+            "readable, but its predecessor is parked"
+        );
+        assert_eq!(b.parking_status().await.unwrap().parked, 2);
+
+        // Positive control: with nothing parked the same record is refused.
+        let fresh = EncryptedReplica::new(
+            MemoryBackend::new(),
+            CONTAINER,
+            [0xb3; 32],
+            keyring(&group.b),
+        );
+        for stored in load_operations(&b.store, CONTAINER).await.unwrap() {
+            assert!(fresh.accept(&stored.0).await.unwrap());
+        }
+        let refusal = fresh.accept(&second).await.unwrap_err();
+        assert!(
+            matches!(&refusal, ProcessError::Rejected(reject) if reject.code == "edge-counter-frontier"),
+            "{refusal}"
+        );
+
+        assert_eq!(b.readmit_parked().await.unwrap().admitted, 2);
+        assert_eq!(
+            fingerprint(&b.projection().await.unwrap().graph),
+            fingerprint(&a.projection().await.unwrap().graph)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_tampered_graph_ciphertext_or_another_container_is_refused_not_parked() {
+        let (group, _, b, after) =
+            graph_behind_a_rotation(&["before"], vec![insert("first")]).await;
+        let first = &after[0];
+        b.keys().replace(keyring(&group.b));
+        let mut tampered = b.keys().current().seal_random(b"sealed batch").unwrap();
+        tampered.ciphertext[0] ^= 1;
+        let refusal = b
+            .accept(&signed_graph_envelope(CONTAINER, &tampered))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&refusal, ProcessError::Rejected(reject) if reject.code == "unreadable-commons-record"),
+            "{refusal}"
+        );
+
+        let mut other_group = DataKeyring::new();
+        other_group.rotate_random().unwrap();
+        let foreign = other_group.seal_random(b"sealed batch").unwrap();
+        let refusal = b
+            .accept(&signed_graph_envelope([0x99; 32], &foreign))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&refusal, ProcessError::Rejected(reject) if reject.code == "wrong-container"),
+            "{refusal}"
+        );
+        assert_eq!(b.parking_status().await.unwrap(), ParkingStatus::default());
+        assert_eq!(b.sync_store().operation_count().await.unwrap(), 1);
+
+        // Positive controls: the same foreign ciphertext addressed here parks;
+        // the untampered record is admitted.
+        assert!(
+            !b.accept(&signed_graph_envelope(CONTAINER, &foreign))
+                .await
+                .unwrap()
+        );
+        assert_eq!(b.parking_status().await.unwrap().parked, 1);
+        assert!(b.accept(first).await.unwrap());
     }
 
     #[tokio::test]

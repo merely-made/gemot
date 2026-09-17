@@ -36,6 +36,7 @@ pub mod call;
 pub mod chat;
 pub mod encrypted;
 mod keys;
+pub mod parking;
 pub mod pruning;
 
 pub use keys::GroupKeys;
