@@ -12,6 +12,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use crate::parking::{
+    ParkedHeader, Parking, ParkingLimits, ParkingStatus, ReadmitReport, Readmitted,
+};
 use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
 use muniment::{Backend, MemoryBackend, StoreError};
@@ -448,38 +451,95 @@ struct ChatPolicy {
     data: Vec<StoredChatOperation>,
 }
 
+/// A chat record's log, read before decrypting.
+enum ChatLog<'a> {
+    Data,
+    Checkpoint {
+        authority: &'a ChatCheckpointAuthority,
+        link: ChatCheckpointLink,
+    },
+}
+
+impl ChatLog<'_> {
+    fn id(&self) -> u64 {
+        match self {
+            Self::Data => CHAT_LOG,
+            Self::Checkpoint { .. } => CHAT_CHECKPOINT_LOG,
+        }
+    }
+}
+
+/// The checks admission makes before decrypting, which parking repeats:
+/// space, causal metadata, envelope, and the log's link and authority.
+fn chat_header<'a>(
+    space_id: [u8; 32],
+    checkpoint_authority: Option<&'a ChatCheckpointAuthority>,
+    operation: &Operation<ChatExt>,
+) -> Result<(GroupCiphertext, ChatLog<'a>), Reject> {
+    if operation.header.extensions.space_id != space_id {
+        return Err(Reject::new(
+            "wrong-chat-space",
+            "operation addresses another Commons chat space",
+        ));
+    }
+    validate_causal_metadata(operation, &operation.header.extensions.parents, CHAT_LIMITS)
+        .map_err(|error| Reject::new("invalid-chat-causality", error.to_string()))?;
+    let body = operation.body.as_ref().ok_or_else(|| {
+        Reject::new(
+            "missing-chat-ciphertext",
+            "chat operation requires an encrypted body",
+        )
+    })?;
+    let envelope = decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice())
+        .map_err(|error| Reject::new("invalid-chat-ciphertext", error.to_string()))?;
+    let log = match operation.header.extensions.class {
+        ChatClass::Channel
+        | ChatClass::Message
+        | ChatClass::MessageEdit
+        | ChatClass::MessageDelete => {
+            if operation.header.extensions.checkpoint.is_some() {
+                return Err(Reject::new(
+                    "unexpected-checkpoint-link",
+                    "only a checkpoint carries a checkpoint link",
+                ));
+            }
+            ChatLog::Data
+        },
+        ChatClass::Checkpoint => {
+            let authority = checkpoint_authority.ok_or_else(|| {
+                Reject::new(
+                    "checkpoint-authority-unconfigured",
+                    "this Commons has no configured checkpoint authority",
+                )
+            })?;
+            if authority.signers.len() != 1 {
+                return Err(Reject::new(
+                    "ambiguous-checkpoint-authority",
+                    format!(
+                        "checkpoint v1 requires one active signer, found {}",
+                        authority.signers.len()
+                    ),
+                ));
+            }
+            let link = checkpoint_link(operation).map_err(|error| {
+                Reject::new("unsupported-chat-checkpoint-version", error.to_string())
+            })?;
+            ChatLog::Checkpoint { authority, link }
+        },
+    };
+    Ok((envelope, log))
+}
+
 impl OperationPolicy<ChatExt> for ChatPolicy {
     type LogId = u64;
 
     fn admit(&self, operation: &Operation<ChatExt>) -> Result<Admission<u64>, Reject> {
-        if operation.header.extensions.space_id != self.space_id {
-            return Err(Reject::new(
-                "wrong-chat-space",
-                "operation addresses another Commons chat space",
-            ));
-        }
-        validate_causal_metadata(operation, &operation.header.extensions.parents, CHAT_LIMITS)
-            .map_err(|error| Reject::new("invalid-chat-causality", error.to_string()))?;
-        let body = operation.body.as_ref().ok_or_else(|| {
-            Reject::new(
-                "missing-chat-ciphertext",
-                "chat operation requires an encrypted body",
-            )
-        })?;
-        let envelope = decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice())
-            .map_err(|error| Reject::new("invalid-chat-ciphertext", error.to_string()))?;
+        let (envelope, log) =
+            chat_header(self.space_id, self.checkpoint_authority.as_ref(), operation)?;
         let keys = &self.keys;
-        let log_id = match operation.header.extensions.class {
-            ChatClass::Channel
-            | ChatClass::Message
-            | ChatClass::MessageEdit
-            | ChatClass::MessageDelete => {
-                if operation.header.extensions.checkpoint.is_some() {
-                    return Err(Reject::new(
-                        "unexpected-checkpoint-link",
-                        "only a checkpoint carries a checkpoint link",
-                    ));
-                }
+        let log_id = log.id();
+        match log {
+            ChatLog::Data => {
                 let plaintext = keys
                     .open(&envelope)
                     .map_err(|error| Reject::new("unreadable-chat-event", error.to_string()))?;
@@ -514,27 +574,8 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                         ));
                     }
                 }
-                CHAT_LOG
             },
-            ChatClass::Checkpoint => {
-                let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
-                    Reject::new(
-                        "checkpoint-authority-unconfigured",
-                        "this Commons has no configured checkpoint authority",
-                    )
-                })?;
-                if authority.signers.len() != 1 {
-                    return Err(Reject::new(
-                        "ambiguous-checkpoint-authority",
-                        format!(
-                            "checkpoint v1 requires one active signer, found {}",
-                            authority.signers.len()
-                        ),
-                    ));
-                }
-                let link = checkpoint_link(operation).map_err(|error| {
-                    Reject::new("unsupported-chat-checkpoint-version", error.to_string())
-                })?;
+            ChatLog::Checkpoint { authority, link } => {
                 let plaintext = keys.open(&envelope).map_err(|error| {
                     Reject::new("unreadable-chat-checkpoint", error.to_string())
                 })?;
@@ -561,9 +602,8 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                         )
                     })
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
-                CHAT_CHECKPOINT_LOG
             },
-        };
+        }
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.space_id),
             log_id,
@@ -756,6 +796,7 @@ pub struct ChatReplica<B: Backend + Clone> {
     author_attestation: Option<DerivedKeyAttestation>,
     keys: GroupKeys,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
+    parking: Parking,
 }
 
 impl ChatReplica<MemoryBackend> {
@@ -801,6 +842,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             author_attestation: None,
             keys: keys.into(),
             checkpoint_authority: None,
+            parking: Parking::new(COMMONS_CHAT_LANE, space_id),
         }
     }
 
@@ -844,7 +886,14 @@ impl<B: Backend + Clone> ChatReplica<B> {
             author_attestation: Some(author_attestation),
             keys: keys.into(),
             checkpoint_authority: None,
+            parking: Parking::new(COMMONS_CHAT_LANE, space_id),
         })
+    }
+
+    /// Bound this replica's parked records; see [`crate::parking`].
+    pub fn with_parking_limits(mut self, limits: ParkingLimits) -> Self {
+        self.parking.limits = limits;
+        self
     }
 
     /// Stable Personae root used for author and authority projection.
@@ -989,9 +1038,61 @@ impl<B: Backend + Clone> ChatReplica<B> {
         Ok(())
     }
 
+    /// Verify and store one record. A record sealed to an epoch the handle
+    /// lacks, or backlinking a parked one, parks and returns `false`.
     pub async fn accept(&self, operation: &Operation<ChatExt>) -> Result<bool, ChatError> {
-        let retained = self.load_retained().await?;
-        self.accept_onto(operation, retained).await
+        accept_or_park(
+            &self.store,
+            self.space_id,
+            self.keys.current(),
+            self.checkpoint_authority.clone(),
+            &self.parking,
+            operation,
+        )
+        .await
+    }
+
+    /// Re-admit parked records with the handle's current keys, in causal
+    /// order. A host calls this after it replaces the key handle.
+    pub async fn readmit_parked(&self) -> Result<ReadmitReport, ChatError> {
+        let keys = self.keys.current();
+        let authority = self.checkpoint_authority.as_ref();
+        self.parking
+            .readmit(
+                &self.store,
+                |operation| {
+                    let (envelope, _) = chat_header(self.space_id, authority, operation).ok()?;
+                    Some(ParkedHeader {
+                        parents: operation.header.extensions.parents.clone(),
+                        epoch_held: keys.contains(&envelope.epoch),
+                    })
+                },
+                async |operation| {
+                    let retained = self.load_retained().await?;
+                    match admit_onto(
+                        &self.store,
+                        self.space_id,
+                        keys.clone(),
+                        self.checkpoint_authority.clone(),
+                        operation,
+                        retained,
+                    )
+                    .await
+                    {
+                        Ok(true) => Ok(Readmitted::Inserted),
+                        Ok(false) => Ok(Readmitted::Duplicate),
+                        Err(ChatError::Process(ProcessError::Store(error))) => Err(error.into()),
+                        // The record's own refusal; other errors are this replica's.
+                        Err(ChatError::Process(_)) => Ok(Readmitted::Refused),
+                        Err(error) => Err(error),
+                    }
+                },
+            )
+            .await
+    }
+
+    pub async fn parking_status(&self) -> Result<ParkingStatus, ChatError> {
+        Ok(self.parking.status(self.store.backend()).await?)
     }
 
     /// Admit one operation against an already-loaded retained history.
@@ -1314,6 +1415,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
         // rotation reaches this lane's next admission.
         let keys = self.keys.clone();
         let checkpoint_authority = self.checkpoint_authority.clone();
+        let parking = self.parking.clone();
         JoinedSpace::join::<_, u64, _, _>(
             stickleback::lane_id(COMMONS_CHAT_LANE, space_id),
             store,
@@ -1324,19 +1426,16 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
                 let accept_store = accept_store.clone();
                 let keys = keys.current();
                 let checkpoint_authority = checkpoint_authority.clone();
+                let parking = parking.clone();
                 async move {
-                    let Ok(records) = load_operations_from_store(&accept_store, space_id).await
-                    else {
-                        return false;
-                    };
                     matches!(
-                        admit_onto(
+                        accept_or_park(
                             &accept_store,
                             space_id,
                             keys,
                             checkpoint_authority,
+                            &parking,
                             &operation,
-                            split_chat_records(records),
                         )
                         .await,
                         Ok(true)
@@ -1348,8 +1447,39 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
     }
 }
 
-/// Admit one operation with one key snapshot against its retained history.
-/// Shared by [`ChatReplica::accept`] and the joined lane's accept closure.
+/// Park one operation when it names an unheld epoch or backlinks a parked
+/// record; otherwise admit it against the retained history. Shared by
+/// [`ChatReplica::accept`] and the joined lane's accept closure.
+async fn accept_or_park<B: Backend + Clone>(
+    store: &MunimentStore<B, ChatExt>,
+    space_id: [u8; 32],
+    keys: Arc<DataKeyring>,
+    checkpoint_authority: Option<ChatCheckpointAuthority>,
+    parking: &Parking,
+    operation: &Operation<ChatExt>,
+) -> Result<bool, ChatError> {
+    if let Ok((envelope, log)) = chat_header(space_id, checkpoint_authority.as_ref(), operation)
+        && parking
+            .should_park(store, operation, log.id(), keys.contains(&envelope.epoch))
+            .await?
+        && parking.park(store.backend(), operation, log.id()).await?
+    {
+        return Ok(false);
+    }
+    let retained = split_chat_records(load_operations_from_store(store, space_id).await?);
+    admit_onto(
+        store,
+        space_id,
+        keys,
+        checkpoint_authority,
+        operation,
+        retained,
+    )
+    .await
+}
+
+/// Admit one operation with one key snapshot against its retained history,
+/// never parking.
 async fn admit_onto<B: Backend + Clone>(
     store: &MunimentStore<B, ChatExt>,
     space_id: [u8; 32],
@@ -3001,14 +3131,8 @@ mod tests {
             ["before rotation", "after rotation"]
         );
         for (who, replica) in [("stale handle", &stale), ("removed member", &c)] {
-            assert!(
-                matches!(
-                    replica.accept(&after).await,
-                    Err(ChatError::Process(ProcessError::Rejected(reject)))
-                        if reject.code == "unreadable-chat-event"
-                ),
-                "{who}"
-            );
+            assert!(!replica.accept(&after).await.unwrap(), "{who} parks it");
+            assert_eq!(replica.parking_status().await.unwrap().parked, 1, "{who}");
             assert_eq!(
                 bodies(&replica.projection().await.unwrap()),
                 ["before rotation"],
@@ -3016,14 +3140,295 @@ mod tests {
             );
         }
 
-        // Nothing was stored, so once its handle is replaced the stale replica
-        // admits the same record.
+        // Once its handle is replaced the stale replica re-admits the record.
         stale_keys.replace(keyring(&group.b));
-        assert!(stale.accept(&after).await.unwrap());
+        assert_eq!(stale.readmit_parked().await.unwrap().admitted, 1);
         assert_eq!(
             stale.projection().await.unwrap(),
             b.projection().await.unwrap()
         );
+    }
+
+    /// A and B share one message; then A removes C, rotates and authors
+    /// `first` and `second`, which B's handle cannot open yet.
+    async fn behind_a_rotation(
+        b_backend: MemoryBackend,
+    ) -> (
+        crate::keys::test_group::Group,
+        ChatReplica<MemoryBackend>,
+        ChatReplica<MemoryBackend>,
+        [Operation<ChatExt>; 2],
+    ) {
+        use crate::keys::test_group::{Group, keyring};
+
+        let mut group = Group::found();
+        let a_keys = GroupKeys::new(keyring(&group.a));
+        let mut a = ChatReplica::in_memory(SPACE, [0xa1; 32], a_keys.clone());
+        let b = ChatReplica::new(b_backend, SPACE, [0xb2; 32], keyring(&group.b));
+        let before = a.author(message("before rotation", 1)).await.unwrap();
+        assert!(b.accept(&before).await.unwrap(), "positive control");
+        group.remove_c_and_rotate();
+        a_keys.replace(keyring(&group.a));
+        let first = a.author(message("first after rotation", 2)).await.unwrap();
+        let second = a.author(message("second after rotation", 3)).await.unwrap();
+        (group, a, b, [first, second])
+    }
+
+    /// Sign a chosen envelope as a first chat record, bypassing sealing.
+    fn signed_envelope(
+        space_id: [u8; 32],
+        signing_seed: [u8; 32],
+        envelope: &GroupCiphertext,
+    ) -> Operation<ChatExt> {
+        let body = Body::from_bytes(&encode_cbor(envelope).unwrap());
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(0)
+            .backlink(None)
+            .build(
+                &SigningKey::from_bytes(&signing_seed),
+                ChatExt {
+                    space_id,
+                    class: ChatClass::Message,
+                    parents: Vec::new(),
+                    checkpoint: None,
+                },
+            );
+        Operation {
+            hash: header.hash(),
+            header,
+            body: Some(body),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_member_behind_a_rotation_parks_then_readmits_in_order() {
+        use crate::keys::test_group::keyring;
+
+        let (group, a, b, [first, second]) = behind_a_rotation(MemoryBackend::new()).await;
+        for operation in [&first, &second] {
+            assert!(!b.accept(operation).await.unwrap(), "parked, not accepted");
+        }
+        let status = b.parking_status().await.unwrap();
+        assert_eq!((status.parked, status.evicted_total), (2, 0));
+        assert_eq!(b.sync_store().operation_count().await.unwrap(), 1);
+        assert_eq!(bodies(&b.projection().await.unwrap()), ["before rotation"]);
+        let unrefreshed = b.readmit_parked().await.unwrap();
+        assert_eq!(
+            unrefreshed,
+            ReadmitReport {
+                still_parked: 2,
+                ..ReadmitReport::default()
+            }
+        );
+
+        b.keys().replace(keyring(&group.b));
+        let report = b.readmit_parked().await.unwrap();
+        assert_eq!(
+            report,
+            ReadmitReport {
+                admitted: 2,
+                ..ReadmitReport::default()
+            }
+        );
+        assert_eq!(b.parking_status().await.unwrap(), ParkingStatus::default());
+        let projection = b.projection().await.unwrap();
+        assert_eq!(
+            bodies(&projection),
+            [
+                "before rotation",
+                "first after rotation",
+                "second after rotation"
+            ]
+        );
+        assert_eq!(projection, a.projection().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_successor_under_a_held_epoch_parks_behind_its_parked_predecessor() {
+        use crate::keys::test_group::keyring;
+
+        let (group, a, b, [first, second]) = behind_a_rotation(MemoryBackend::new()).await;
+        assert!(!b.accept(&first).await.unwrap());
+        b.keys().replace(keyring(&group.b));
+        assert!(
+            !b.accept(&second).await.unwrap(),
+            "readable, but its predecessor is parked"
+        );
+        assert_eq!(b.parking_status().await.unwrap().parked, 2);
+
+        // Positive control: with nothing parked the same record is refused.
+        let fresh = ChatReplica::in_memory(SPACE, [0xb3; 32], keyring(&group.b));
+        assert!(matches!(
+            fresh.accept(&second).await,
+            Err(ChatError::Process(ProcessError::MissingPredecessor { .. }))
+        ));
+        assert_eq!(fresh.parking_status().await.unwrap().parked, 0);
+
+        assert_eq!(b.readmit_parked().await.unwrap().admitted, 2);
+        assert_eq!(b.projection().await.unwrap(), a.projection().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_removed_member_keeps_parked_records_within_its_bound() {
+        use crate::keys::test_group::{Group, keyring};
+
+        let mut group = Group::found();
+        let a_keys = GroupKeys::new(keyring(&group.a));
+        let mut a = ChatReplica::in_memory(SPACE, [0xa1; 32], a_keys.clone());
+        let c = ChatReplica::in_memory(SPACE, [0xc3; 32], keyring(&group.c)).with_parking_limits(
+            ParkingLimits {
+                max_records: 2,
+                ..ParkingLimits::default()
+            },
+        );
+        let before = a.author(message("before removal", 1)).await.unwrap();
+        assert!(c.accept(&before).await.unwrap(), "positive control");
+        group.remove_c_and_rotate();
+        a_keys.replace(keyring(&group.a));
+        // C's host drains the same frames and refreshes; it installs nothing.
+        c.keys().replace(keyring(&group.c));
+
+        let mut after = Vec::new();
+        for turn in 0..3u64 {
+            let body = format!("after removal {turn}");
+            after.push(a.author(message(&body, 2 + turn)).await.unwrap());
+        }
+        for operation in &after {
+            assert!(!c.accept(operation).await.unwrap());
+        }
+        let evicted_oldest = ReadmitReport {
+            still_parked: 2,
+            evicted_total: 1,
+            ..ReadmitReport::default()
+        };
+        for _ in 0..2 {
+            assert_eq!(c.readmit_parked().await.unwrap(), evicted_oldest);
+        }
+        let status = c.parking_status().await.unwrap();
+        assert_eq!((status.parked, status.evicted_total), (2, 1));
+        assert_eq!(bodies(&c.projection().await.unwrap()), ["before removal"]);
+        assert_eq!(c.sync_store().operation_count().await.unwrap(), 1);
+
+        // The oldest was the one evicted: given the epoch (a stand-in for being
+        // re-added), the survivors wait on it until it is offered again.
+        c.keys().replace(keyring(&group.b));
+        assert_eq!(c.readmit_parked().await.unwrap(), evicted_oldest);
+        assert!(c.accept(&after[0]).await.unwrap());
+        assert_eq!(
+            c.readmit_parked().await.unwrap(),
+            ReadmitReport {
+                admitted: 2,
+                evicted_total: 1,
+                ..ReadmitReport::default()
+            }
+        );
+        assert_eq!(c.projection().await.unwrap(), a.projection().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn the_byte_bound_evicts_the_oldest_parked_record() {
+        let (_, _, b, [first, second]) = behind_a_rotation(MemoryBackend::new()).await;
+        assert!(!b.accept(&first).await.unwrap());
+        let one = b.parking_status().await.unwrap().parked_bytes;
+        let bounded = ChatReplica::new(MemoryBackend::new(), SPACE, [0xb3; 32], b.keys().clone())
+            .with_parking_limits(ParkingLimits {
+                max_bytes: one * 3 / 2,
+                ..ParkingLimits::default()
+            });
+        for operation in [&first, &second] {
+            assert!(!bounded.accept(operation).await.unwrap());
+        }
+        let status = bounded.parking_status().await.unwrap();
+        assert_eq!((status.parked, status.evicted_total), (1, 1));
+        assert!(status.parked_bytes <= one * 3 / 2);
+    }
+
+    #[tokio::test]
+    async fn parked_records_survive_reopening_the_replica() {
+        use crate::keys::test_group::keyring;
+
+        let backend = MemoryBackend::new();
+        let (group, a, b, [first, second]) = behind_a_rotation(backend.clone()).await;
+        for operation in [&first, &second] {
+            assert!(!b.accept(operation).await.unwrap());
+        }
+        drop(b);
+
+        let reopened = ChatReplica::new(backend, SPACE, [0xb2; 32], keyring(&group.b));
+        assert_eq!(reopened.parking_status().await.unwrap().parked, 2);
+        assert_eq!(reopened.readmit_parked().await.unwrap().admitted, 2);
+        assert_eq!(
+            reopened.projection().await.unwrap(),
+            a.projection().await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_tampered_ciphertext_or_another_space_is_refused_not_parked() {
+        use crate::keys::test_group::keyring;
+
+        let (group, _, b, [first, _]) = behind_a_rotation(MemoryBackend::new()).await;
+        b.keys().replace(keyring(&group.b));
+        let plaintext = encode_cbor(&ChatAuthored::new(message("sealed", 9), None)).unwrap();
+        let mut tampered = b.keys().current().seal_random(&plaintext).unwrap();
+        tampered.ciphertext[0] ^= 1;
+        let refusal = b
+            .accept(&signed_envelope(SPACE, [0xd4; 32], &tampered))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&refusal, ChatError::Process(ProcessError::Rejected(reject)) if reject.code == "unreadable-chat-event"),
+            "{refusal}"
+        );
+
+        let mut other_group = DataKeyring::new();
+        other_group.rotate_random().unwrap();
+        let foreign = other_group.seal_random(&plaintext).unwrap();
+        let refusal = b
+            .accept(&signed_envelope([0x99; 32], [0xd4; 32], &foreign))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&refusal, ChatError::Process(ProcessError::Rejected(reject)) if reject.code == "wrong-chat-space"),
+            "{refusal}"
+        );
+        assert_eq!(b.parking_status().await.unwrap(), ParkingStatus::default());
+        assert_eq!(b.sync_store().operation_count().await.unwrap(), 1);
+
+        // Positive controls: epoch ids name no group, so the same foreign
+        // ciphertext addressed here parks; the untampered record is admitted.
+        assert!(
+            !b.accept(&signed_envelope(SPACE, [0xd4; 32], &foreign))
+                .await
+                .unwrap()
+        );
+        assert_eq!(b.parking_status().await.unwrap().parked, 1);
+        assert!(b.accept(&first).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn repeated_and_reordered_delivery_parks_each_record_once() {
+        use crate::keys::test_group::keyring;
+
+        let (group, a, b, [first, second]) = behind_a_rotation(MemoryBackend::new()).await;
+        for operation in [&second, &first, &second, &first] {
+            assert!(!b.accept(operation).await.unwrap());
+        }
+        assert_eq!(b.parking_status().await.unwrap().parked, 2);
+
+        // `second` arrived first; causal order re-admits `first` before it.
+        b.keys().replace(keyring(&group.b));
+        assert_eq!(
+            b.readmit_parked().await.unwrap(),
+            ReadmitReport {
+                admitted: 2,
+                ..ReadmitReport::default()
+            }
+        );
+        assert!(!b.accept(&first).await.unwrap(), "now a stored duplicate");
+        assert_eq!(b.parking_status().await.unwrap().parked, 0);
+        assert_eq!(b.projection().await.unwrap(), a.projection().await.unwrap());
     }
 
     fn message(body: &str, sent_at_ms: u64) -> ChatEvent {
