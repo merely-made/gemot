@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chartulary::{Container, GraphLog, Relation, WriterId};
-use muniment::Backend;
+use muniment::{Backend, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
@@ -185,15 +185,18 @@ async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
     {
         return Ok(false);
     }
-    admit_with(store, container, keys, operation).await
+    admit_with(store, container, keys, operation, &[]).await
 }
 
-/// Ordinary admission, never parking.
+/// Ordinary admission, never parking. `carried` writes commit in the insert's
+/// own batch: a re-admission unparks the record there, and every other caller
+/// passes none.
 async fn admit_with<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, EncryptedCommonsExt>,
     container: [u8; 32],
     keys: Arc<DataKeyring>,
     operation: &Operation<EncryptedCommonsExt>,
+    carried: &[WriteOp],
 ) -> Result<bool, ProcessError> {
     let processor = OperationProcessor::new(
         store.clone(),
@@ -208,7 +211,10 @@ async fn admit_with<B: Backend + Clone + Send + Sync + 'static>(
         open_record(&keys, stored)
     })
     .await?;
-    Ok(processor.process(operation).await?.inserted())
+    if carried.is_empty() {
+        return Ok(processor.process(operation).await?.inserted());
+    }
+    processor.process_with_writes(operation, carried).await
 }
 
 fn to_encrypted_operation(
@@ -405,11 +411,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
                         epoch_held: keys.contains(&envelope.epoch),
                     })
                 },
-                async |operation| match admit_with(
+                async |operation, unpark| match admit_with(
                     &self.store,
                     self.container,
                     keys.clone(),
                     operation,
+                    unpark,
                 )
                 .await
                 {
