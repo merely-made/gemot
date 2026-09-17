@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority};
+use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
 use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
@@ -418,9 +418,8 @@ pub enum ChatReplicaIdentityError {
 #[derive(Clone)]
 struct ChatPolicy {
     space_id: [u8; 32],
-    /// Shared so the sync-lane accept closure hands each admission the same
-    /// serialized keyring instead of copying it per operation.
-    key_state: Arc<Vec<u8>>,
+    /// One snapshot of the key handle for this admission.
+    keys: Arc<DataKeyring>,
     projected_message_authors: BTreeMap<[u8; 32], [u8; 32]>,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     current_checkpoint: Option<StoredChatCheckpoint>,
@@ -446,8 +445,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
         })?;
         let envelope = decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice())
             .map_err(|error| Reject::new("invalid-chat-ciphertext", error.to_string()))?;
-        let keys = DataKeyring::from_bytes(self.key_state.as_slice())
-            .map_err(|error| Reject::new("invalid-chat-key-state", error.to_string()))?;
+        let keys = &self.keys;
         let log_id = match operation.header.extensions.class {
             ChatClass::Channel
             | ChatClass::Message
@@ -524,7 +522,7 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                 .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 validate_current_checkpoint_authority(stable_author, authority, &checkpoint)
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
-                validate_checkpoint_epoch_inventory(&keys, &checkpoint)
+                validate_checkpoint_epoch_inventory(keys, &checkpoint)
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 CHAT_CHECKPOINT_LOG
             },
@@ -652,12 +650,16 @@ pub struct ChatReplica<B: Backend + Clone> {
     signing_seed: [u8; 32],
     stable_author: [u8; 32],
     author_attestation: Option<DerivedKeyAttestation>,
-    keys: DataKeyring,
+    keys: GroupKeys,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
 }
 
 impl ChatReplica<MemoryBackend> {
-    pub fn in_memory(space_id: [u8; 32], signing_seed: [u8; 32], keys: DataKeyring) -> Self {
+    pub fn in_memory(
+        space_id: [u8; 32],
+        signing_seed: [u8; 32],
+        keys: impl Into<GroupKeys>,
+    ) -> Self {
         Self::new(MemoryBackend::new(), space_id, signing_seed, keys)
     }
 
@@ -665,7 +667,7 @@ impl ChatReplica<MemoryBackend> {
     pub fn in_memory_for_identity<P: IdentityProvider + ?Sized>(
         space_id: [u8; 32],
         identity: &P,
-        keys: DataKeyring,
+        keys: impl Into<GroupKeys>,
     ) -> Result<Self, ChatReplicaIdentityError> {
         Self::for_identity(MemoryBackend::new(), space_id, identity, keys)
     }
@@ -675,8 +677,14 @@ impl<B: Backend + Clone> ChatReplica<B> {
     /// Direct-root compatibility constructor.
     ///
     /// Product hosts with a Personae identity should use
-    /// [`Self::for_identity`].
-    pub fn new(backend: B, space_id: [u8; 32], signing_seed: [u8; 32], keys: DataKeyring) -> Self {
+    /// [`Self::for_identity`]. Every constructor takes a [`GroupKeys`] clone
+    /// to share a refreshable handle, or a `DataKeyring` for a fresh one.
+    pub fn new(
+        backend: B,
+        space_id: [u8; 32],
+        signing_seed: [u8; 32],
+        keys: impl Into<GroupKeys>,
+    ) -> Self {
         debug_assert_eq!(COMMONS_CHAT_PROFILE.mode, GroupEncryptionMode::Data);
         let stable_author = *SigningKey::from_bytes(&signing_seed)
             .verifying_key()
@@ -687,7 +695,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             signing_seed,
             stable_author,
             author_attestation: None,
-            keys,
+            keys: keys.into(),
             checkpoint_authority: None,
         }
     }
@@ -701,7 +709,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         backend: B,
         space_id: [u8; 32],
         identity: &P,
-        keys: DataKeyring,
+        keys: impl Into<GroupKeys>,
     ) -> Result<Self, ChatReplicaIdentityError> {
         debug_assert_eq!(COMMONS_CHAT_PROFILE.mode, GroupEncryptionMode::Data);
         let salt = chat_identity_salt(space_id);
@@ -730,7 +738,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             signing_seed: keypair.to_seed(),
             stable_author,
             author_attestation: Some(author_attestation),
-            keys,
+            keys: keys.into(),
             checkpoint_authority: None,
         })
     }
@@ -751,6 +759,12 @@ impl<B: Backend + Clone> ChatReplica<B> {
 
     pub fn key_state(&self) -> Result<Vec<u8>, GroupCryptoError> {
         self.keys.to_bytes()
+    }
+
+    /// The key handle this replica and its joined lane read. Replace its
+    /// keyring after draining a rotation; no rejoin is needed.
+    pub fn keys(&self) -> &GroupKeys {
+        &self.keys
     }
 
     pub async fn author(&mut self, event: ChatEvent) -> Result<Operation<ChatExt>, ChatError> {
@@ -778,6 +792,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let plaintext = encode_cbor(&record).map_err(|error| ChatError::Wire(error.to_string()))?;
         let envelope = self
             .keys
+            .current()
             .seal(&plaintext, &p2panda_encryption::Rng::default())?;
         let body_bytes =
             encode_cbor(&envelope).map_err(|error| ChatError::Wire(error.to_string()))?;
@@ -851,8 +866,12 @@ impl<B: Backend + Clone> ChatReplica<B> {
         data_records: &[StoredChatOperation],
         original: [u8; 32],
     ) -> Result<(), ChatError> {
-        let projection =
-            project_records(&self.keys, self.space_id, data_records, &AllowAllAuthority)?;
+        let projection = project_records(
+            &self.keys.current(),
+            self.space_id,
+            data_records,
+            &AllowAllAuthority,
+        )?;
         let message = projection
             .messages
             .iter()
@@ -885,15 +904,15 @@ impl<B: Backend + Clone> ChatReplica<B> {
         operation: &Operation<ChatExt>,
         retained: RetainedChatRecords,
     ) -> Result<bool, ChatError> {
-        let policy = chat_policy(
+        admit_onto(
+            &self.store,
             self.space_id,
-            &self.keys,
-            Arc::new(self.keys.to_bytes()?),
+            self.keys.current(),
             self.checkpoint_authority.clone(),
+            operation,
             retained,
-        )?;
-        let processor = OperationProcessor::new(self.store.clone(), policy);
-        Ok(processor.process(operation).await?.inserted())
+        )
+        .await
     }
 
     /// Causally closed chat state with structural admission as the authority
@@ -913,7 +932,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         authority: &A,
     ) -> Result<ChatProjection, ChatError> {
         let records = self.load_data_operations().await?;
-        project_records(&self.keys, self.space_id, &records, authority)
+        project_records(&self.keys.current(), self.space_id, &records, authority)
     }
 
     async fn load_data_operations(&self) -> Result<Vec<StoredChatOperation>, ChatError> {
@@ -938,14 +957,16 @@ impl<B: Backend + Clone> ChatReplica<B> {
     pub async fn latest_checkpoint(&self) -> Result<Option<StoredChatCheckpoint>, ChatError> {
         latest_checkpoint_from_records(
             self.space_id,
-            &self.keys,
+            &self.keys.current(),
             self.load_checkpoint_operations().await?,
         )
     }
 
     /// Build, encrypt, sign, authorize, and retain a checkpoint.
     pub async fn author_checkpoint(&mut self) -> Result<Operation<ChatExt>, ChatError> {
-        let checkpoint = self.build_checkpoint().await?;
+        // One snapshot builds and seals, so the named epoch is the sealing one.
+        let keys = self.keys.current();
+        let checkpoint = self.build_checkpoint_with(&keys).await?;
         let checkpoint_records = self.load_checkpoint_operations().await?;
         let entries = causal_entries(&checkpoint_records);
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
@@ -953,9 +974,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let (seq_num, backlink) = author_head(&entries, *author.as_bytes(), &CHAT_CHECKPOINT_LOG)?;
         let record = ChatAuthored::new(checkpoint.clone(), self.author_attestation.clone());
         let plaintext = encode_cbor(&record).map_err(|error| ChatError::Wire(error.to_string()))?;
-        let envelope = self
-            .keys
-            .seal(&plaintext, &p2panda_encryption::Rng::default())?;
+        let envelope = keys.seal(&plaintext, &p2panda_encryption::Rng::default())?;
         debug_assert_eq!(envelope.epoch, checkpoint.current_epoch);
         let body_bytes =
             encode_cbor(&envelope).map_err(|error| ChatError::Wire(error.to_string()))?;
@@ -988,6 +1007,10 @@ impl<B: Backend + Clone> ChatReplica<B> {
 
     /// Construct the checkpoint candidate without mutating the store.
     pub async fn build_checkpoint(&self) -> Result<ChatCheckpoint, ChatError> {
+        self.build_checkpoint_with(&self.keys.current()).await
+    }
+
+    async fn build_checkpoint_with(&self, keys: &DataKeyring) -> Result<ChatCheckpoint, ChatError> {
         let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
             ChatError::Checkpoint("checkpoint authority is not configured".into())
         })?;
@@ -1010,7 +1033,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         // an epoch held for `AuthorityReevaluation` must stay decryptable so a
         // later capability change can be re-applied. The checkpoint carries the
         // revision it was sealed under instead.
-        let projection = project_records(&self.keys, self.space_id, &records, &AllowAllAuthority)?;
+        let projection = project_records(keys, self.space_id, &records, &AllowAllAuthority)?;
 
         let mut author_frontiers = BTreeMap::<[u8; 32], ChatAuthorFrontier>::new();
         for entry in &effective_entries {
@@ -1054,8 +1077,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
             })
             .collect();
 
-        let epoch_inventory = self
-            .keys
+        let epoch_inventory = keys
             .epochs_oldest_first()
             .ok_or_else(|| {
                 ChatError::Checkpoint(
@@ -1063,8 +1085,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                 )
             })?
             .to_vec();
-        let current_epoch = self
-            .keys
+        let current_epoch = keys
             .current_epoch()
             .ok_or(GroupCryptoError::MissingCurrentEpoch)?;
         let snapshot = ChatCheckpointSnapshot {
@@ -1110,7 +1131,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         };
         let records = self.load_data_operations().await?;
         project_checkpoint_tail(
-            &self.keys,
+            &self.keys.current(),
             self.space_id,
             &stored.checkpoint,
             &records,
@@ -1171,14 +1192,14 @@ impl<B: Backend + Clone> ChatReplica<B> {
         }));
         Ok(propose_epoch_pruning(
             COMMONS_CHAT_PROFILE,
-            &self.keys,
+            &self.keys.current(),
             &EpochRetentionFacts { checkpoint, holds },
         ))
     }
 
     /// Revalidate and explicitly execute a reviewed proposal. Key state and
     /// receipt land in one backend `apply`; only then does the live keyring
-    /// switch to the reduced state.
+    /// switch to the reduced state, for every holder of the key handle.
     pub async fn execute_epoch_pruning(
         &mut self,
         reviewed: &EpochPruningProposal,
@@ -1239,7 +1260,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                 },
             ])
             .await?;
-        self.keys = reduced;
+        self.keys.replace(reduced);
         Ok(receipt)
     }
 
@@ -1253,7 +1274,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         else {
             return Ok(false);
         };
-        self.keys = DataKeyring::from_bytes(&bytes)?;
+        self.keys.replace_from_bytes(&bytes)?;
         Ok(true)
     }
 
@@ -1277,7 +1298,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         &self,
         required_epoch: GroupSecretId,
     ) -> Result<OfflineMemberRecovery, ChatError> {
-        if self.keys.contains(&required_epoch) {
+        if self.keys.current().contains(&required_epoch) {
             return Ok(OfflineMemberRecovery::Resume);
         }
         Ok(OfflineMemberRecovery::BootstrapRequired {
@@ -1306,18 +1327,9 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
         let store = self.sync_store();
         let accept_store = self.store.clone();
         let space_id = self.space_id;
-        let key_state = Arc::new(
-            self.keys
-                .to_bytes()
-                .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?,
-        );
-        // Parsed once for the lane, not once per synced operation: the keyring
-        // is fixed for the life of the join, so re-deriving it per admission
-        // bought nothing.
-        let keys = Arc::new(
-            DataKeyring::from_bytes(key_state.as_slice())
-                .map_err(|error| JoinError::Spawn(format!("chat key state: {error}")))?,
-        );
+        // The handle, not a copy of the keys: a keyring replaced after a
+        // rotation reaches this lane's next admission.
+        let keys = self.keys.clone();
         let checkpoint_authority = self.checkpoint_authority.clone();
         JoinedSpace::join::<_, u64, _, _>(
             stickleback::lane_id(COMMONS_CHAT_LANE, space_id),
@@ -1327,30 +1339,45 @@ impl<B: Backend + Clone + Send + Sync + 'static> ChatReplica<B> {
             space_id,
             move |operation: Operation<ChatExt>| {
                 let accept_store = accept_store.clone();
-                let key_state = key_state.clone();
-                let keys = keys.clone();
+                let keys = keys.current();
                 let checkpoint_authority = checkpoint_authority.clone();
                 async move {
                     let Ok(records) = load_operations_from_store(&accept_store, space_id).await
                     else {
                         return false;
                     };
-                    let Ok(policy) = chat_policy(
-                        space_id,
-                        &keys,
-                        key_state,
-                        checkpoint_authority,
-                        split_chat_records(records),
-                    ) else {
-                        return false;
-                    };
-                    let processor = OperationProcessor::new(accept_store, policy);
-                    matches!(processor.process(&operation).await, Ok(out) if out.inserted())
+                    matches!(
+                        admit_onto(
+                            &accept_store,
+                            space_id,
+                            keys,
+                            checkpoint_authority,
+                            &operation,
+                            split_chat_records(records),
+                        )
+                        .await,
+                        Ok(true)
+                    )
                 }
             },
         )
         .await
     }
+}
+
+/// Admit one operation with one key snapshot against its retained history.
+/// Shared by [`ChatReplica::accept`] and the joined lane's accept closure.
+async fn admit_onto<B: Backend + Clone>(
+    store: &MunimentStore<B, ChatExt>,
+    space_id: [u8; 32],
+    keys: Arc<DataKeyring>,
+    checkpoint_authority: Option<ChatCheckpointAuthority>,
+    operation: &Operation<ChatExt>,
+    retained: RetainedChatRecords,
+) -> Result<bool, ChatError> {
+    let policy = chat_policy(space_id, keys, checkpoint_authority, retained)?;
+    let processor = OperationProcessor::new(store.clone(), policy);
+    Ok(processor.process(operation).await?.inserted())
 }
 
 /// The retained history split by log, loaded once.
@@ -1379,27 +1406,26 @@ fn split_chat_records(records: Vec<StoredChatOperation>) -> RetainedChatRecords 
 /// Assemble the admission policy from one decode of the retained history.
 fn chat_policy(
     space_id: [u8; 32],
-    keys: &DataKeyring,
-    key_state: Arc<Vec<u8>>,
+    keys: Arc<DataKeyring>,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     retained: RetainedChatRecords,
 ) -> Result<ChatPolicy, ChatError> {
     // The checkpoint chain is read before the projection so a broken chain
     // still reports itself first, as it did when these were two separate
     // replays of the history.
-    let current_checkpoint = latest_checkpoint_from_records(space_id, keys, retained.checkpoints)?;
+    let current_checkpoint = latest_checkpoint_from_records(space_id, &keys, retained.checkpoints)?;
     // Admission is structural: an operation is stored whatever the current
     // authority verdict says about its author, so revocation stays a projection
     // decision that a later re-evaluation can reverse.
     let projected_message_authors =
-        project_records(keys, space_id, &retained.data, &AllowAllAuthority)?
+        project_records(&keys, space_id, &retained.data, &AllowAllAuthority)?
             .messages
             .into_iter()
             .map(|message| (message.operation, message.author))
             .collect();
     Ok(ChatPolicy {
         space_id,
-        key_state,
+        keys,
         projected_message_authors,
         checkpoint_authority,
         current_checkpoint,
@@ -1869,6 +1895,7 @@ mod tests {
         let plaintext = encode_cbor(checkpoint).unwrap();
         let envelope = replica
             .keys
+            .current()
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
         let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
@@ -1907,6 +1934,7 @@ mod tests {
         let plaintext = encode_cbor(event).unwrap();
         let envelope = replica
             .keys
+            .current()
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
         let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
@@ -1944,6 +1972,7 @@ mod tests {
         let plaintext = encode_cbor(&record).unwrap();
         let envelope = replica
             .keys
+            .current()
             .seal(&plaintext, &p2panda_encryption::Rng::default())
             .unwrap();
         let body = Body::from_bytes(&encode_cbor(&envelope).unwrap());
@@ -2008,7 +2037,7 @@ mod tests {
             [writer.master_public_key().to_bytes()],
         ));
         let checkpoint = author.author_checkpoint().await.unwrap();
-        assert!(decode_checkpoint_operation(&author.keys, &checkpoint).is_ok());
+        assert!(decode_checkpoint_operation(&author.keys.current(), &checkpoint).is_ok());
 
         let relay = ChatReplica::in_memory(SPACE, [0x74; 32], relay_keys);
         let forged = bound_event_operation(
@@ -2393,7 +2422,7 @@ mod tests {
         assert_eq!(records.len(), 3);
         assert!(records.iter().any(|record| {
             matches!(
-                decode_event(&replica.keys, &record.operation),
+                decode_event(&replica.keys.current(), &record.operation),
                 Ok(event)
                     if event == ChatEvent::Message(Message {
                         channel: "general".into(),
@@ -2405,7 +2434,7 @@ mod tests {
         }));
         assert!(records.iter().any(|record| {
             matches!(
-                decode_event(&replica.keys, &record.operation),
+                decode_event(&replica.keys.current(), &record.operation),
                 Ok(event)
                     if event == ChatEvent::MessageEdit(MessageEdit {
                         original: *original.hash.as_bytes(),
@@ -2463,13 +2492,13 @@ mod tests {
         assert_eq!(records.len(), 2);
         assert!(records.iter().any(|record| {
             matches!(
-                decode_event(&replica.keys, &record.operation),
+                decode_event(&replica.keys.current(), &record.operation),
                 Ok(ChatEvent::Message(_))
             )
         }));
         assert!(records.iter().any(|record| {
             matches!(
-                decode_event(&replica.keys, &record.operation),
+                decode_event(&replica.keys.current(), &record.operation),
                 Ok(ChatEvent::MessageDelete(_))
             )
         }));
@@ -2595,12 +2624,11 @@ mod tests {
         );
         let pending_epoch = encrypted_body(&pending).unwrap().epoch;
         replica.accept(&pending).await.unwrap();
+        let mut rotated = DataKeyring::from_bytes(&replica.key_state().unwrap()).unwrap();
         for _ in 0..9 {
-            replica
-                .keys
-                .rotate(&p2panda_encryption::Rng::default())
-                .unwrap();
+            rotated.rotate(&p2panda_encryption::Rng::default()).unwrap();
         }
+        replica.keys().replace(rotated);
 
         let checkpoint = replica.build_checkpoint().await.unwrap();
         assert_eq!(
@@ -2694,13 +2722,13 @@ mod tests {
             Err(ChatError::StaleRetentionProposal)
         ));
         assert!(replica.epoch_execution_receipt().await.unwrap().is_none());
-        assert_eq!(replica.keys.epoch_count(), 10);
+        assert_eq!(replica.keys.current().epoch_count(), 10);
 
         let reviewed = replica.epoch_pruning_proposal(&[]).await.unwrap();
         let receipt = replica.execute_epoch_pruning(&reviewed, &[]).await.unwrap();
         assert_eq!(receipt.forgotten, epochs[..2]);
         assert_eq!(receipt.retained, epochs[2..]);
-        assert_eq!(replica.keys.epoch_count(), 8);
+        assert_eq!(replica.keys.current().epoch_count(), 8);
         assert_eq!(
             replica.epoch_execution_receipt().await.unwrap(),
             Some(receipt.clone())
@@ -2709,7 +2737,10 @@ mod tests {
         let mut reopened = ChatReplica::new(backend, SPACE, seed, DataKeyring::new());
         reopened.set_checkpoint_authority(authority);
         assert!(reopened.restore_persisted_keyring().await.unwrap());
-        assert_eq!(reopened.keys.epochs_oldest_first().unwrap(), &epochs[2..]);
+        assert_eq!(
+            reopened.keys.current().epochs_oldest_first().unwrap(),
+            &epochs[2..]
+        );
         assert_eq!(
             reopened.offline_member_recovery(epochs[2]).await.unwrap(),
             OfflineMemberRecovery::Resume
@@ -2854,6 +2885,86 @@ mod tests {
         assert_eq!(a.channels.len(), 1);
         assert_eq!(a.messages.len(), 2);
         assert!(a.pending.is_empty());
+    }
+
+    fn bodies(projection: &ChatProjection) -> Vec<&str> {
+        projection
+            .messages
+            .iter()
+            .map(|message| message.message.body.as_str())
+            .collect()
+    }
+
+    /// Replicas built before a rotation follow it through their key handles.
+    /// `stale` is B's twin whose handle is never replaced; C is removed.
+    #[tokio::test]
+    async fn chat_replicas_follow_a_rotation_through_their_key_handles() {
+        use crate::keys::test_group::{Group, keyring};
+
+        let mut group = Group::found();
+        let a_keys = GroupKeys::new(keyring(&group.a));
+        let b_keys = GroupKeys::new(keyring(&group.b));
+        let stale_keys = GroupKeys::new(keyring(&group.b));
+        let c_keys = GroupKeys::new(keyring(&group.c));
+        let mut a = ChatReplica::in_memory(SPACE, [0xa1; 32], a_keys.clone());
+        let b = ChatReplica::in_memory(SPACE, [0xb2; 32], b_keys.clone());
+        let stale = ChatReplica::in_memory(SPACE, [0xb3; 32], stale_keys.clone());
+        let c = ChatReplica::in_memory(SPACE, [0xc3; 32], c_keys.clone());
+        let message = |body: &str, sent_at_ms| {
+            ChatEvent::Message(Message {
+                channel: "general".into(),
+                body: body.into(),
+                sent_at_ms,
+                reply_to: None,
+            })
+        };
+
+        let before = a.author(message("before rotation", 1)).await.unwrap();
+        for replica in [&b, &stale, &c] {
+            assert!(replica.accept(&before).await.unwrap(), "positive control");
+        }
+
+        group.remove_c_and_rotate();
+        a_keys.replace(keyring(&group.a));
+        b_keys.replace(keyring(&group.b));
+        c_keys.replace(keyring(&group.c));
+
+        let after = a.author(message("after rotation", 2)).await.unwrap();
+        let rotated = a_keys.current().current_epoch().unwrap();
+        assert_eq!(
+            encrypted_body(&before).unwrap().epoch,
+            group.c.current_epoch().unwrap()
+        );
+        assert_eq!(encrypted_body(&after).unwrap().epoch, rotated);
+        assert!(b.accept(&after).await.unwrap());
+        assert_eq!(
+            bodies(&b.projection().await.unwrap()),
+            ["before rotation", "after rotation"]
+        );
+        for (who, replica) in [("stale handle", &stale), ("removed member", &c)] {
+            assert!(
+                matches!(
+                    replica.accept(&after).await,
+                    Err(ChatError::Process(ProcessError::Rejected(reject)))
+                        if reject.code == "unreadable-chat-event"
+                ),
+                "{who}"
+            );
+            assert_eq!(
+                bodies(&replica.projection().await.unwrap()),
+                ["before rotation"],
+                "{who}"
+            );
+        }
+
+        // Nothing was stored, so once its handle is replaced the stale replica
+        // admits the same record.
+        stale_keys.replace(keyring(&group.b));
+        assert!(stale.accept(&after).await.unwrap());
+        assert_eq!(
+            stale.projection().await.unwrap(),
+            b.projection().await.unwrap()
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

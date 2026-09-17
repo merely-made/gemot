@@ -34,22 +34,27 @@
 
 pub mod call;
 pub mod chat;
+pub mod encrypted;
+mod keys;
+
+pub use keys::GroupKeys;
 
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
 use muniment::Backend;
 use muniment::Journal;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
-use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
+use p2panda_core::{Body, Extensions, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::topics::TopicStore;
 use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalIndex, CausalLimits, MunimentStore, OperationPolicy,
-    OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
-    causal_projection, observed_frontier, stable_writer_subject, validate_causal_metadata,
+    Admission, CausalEntry, CausalError, CausalIndex, CausalLimits, GroupCryptoError,
+    MunimentStore, OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError,
+    Reject, StoreTarget, author_head, causal_projection, observed_frontier, stable_writer_subject,
+    validate_causal_metadata,
 };
 
 /// One log per author. The commons has no second log class (no separate
@@ -72,6 +77,17 @@ pub const MAX_EDITS_PER_BATCH: usize = 1024;
 pub struct CommonsExt {
     /// The container's stable id, and the LogSync topic.
     pub container: [u8; 32],
+}
+
+/// What the shared fold reads from a graph profile's signed header.
+trait GraphHeader: Extensions {
+    fn container(&self) -> [u8; 32];
+}
+
+impl GraphHeader for CommonsExt {
+    fn container(&self) -> [u8; 32] {
+        self.container
+    }
 }
 
 /// A chartulary journal batch, the unit that rides the lane.
@@ -171,14 +187,14 @@ pub fn commons_identity_salt(container: [u8; 32]) -> Vec<u8> {
     salt
 }
 
-fn stable_subject(
-    operation: &Operation<CommonsExt>,
+fn stable_subject<E: GraphHeader>(
+    operation: &Operation<E>,
     record: &CommonsRecord,
 ) -> Result<[u8; 32], Reject> {
     stable_writer_subject(
         *operation.header.verifying_key.as_bytes(),
         record.writer_attestation.as_ref(),
-        &commons_identity_salt(operation.header.extensions.container),
+        &commons_identity_salt(operation.header.extensions.container()),
     )
     .map_err(|error| Reject::new(error.code(), error.to_string()))
 }
@@ -261,23 +277,33 @@ impl OperationPolicy<CommonsExt> for CommonsPolicy {
             .map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
         validate_causal_metadata(operation, &record.parents, COMMONS_CAUSAL_LIMITS)
             .map_err(|err| Reject::new("invalid-commons-causality", err.to_string()))?;
-        if record.batch.edits.len() > MAX_EDITS_PER_BATCH {
-            return Err(Reject::new(
-                "commons-edit-limit",
-                format!(
-                    "batch contains {} edits; maximum is {MAX_EDITS_PER_BATCH}",
-                    record.batch.edits.len()
-                ),
-            ));
-        }
-        stable_subject(operation, &record)?;
-        let writer = WriterId(*operation.header.verifying_key.as_bytes());
-        record_connect_counters(&record, writer)?;
+        check_batch(operation, &record)?;
         Ok(Admission::keep(StoreTarget::new(
             Topic::from(self.container),
             COMMONS_LOG,
         )))
     }
+}
+
+/// Record checks both graph profiles run after decoding: batch size, writer
+/// binding, and edge ids minted under the signer.
+fn check_batch<E: GraphHeader>(
+    operation: &Operation<E>,
+    record: &CommonsRecord,
+) -> Result<(), Reject> {
+    if record.batch.edits.len() > MAX_EDITS_PER_BATCH {
+        return Err(Reject::new(
+            "commons-edit-limit",
+            format!(
+                "batch contains {} edits; maximum is {MAX_EDITS_PER_BATCH}",
+                record.batch.edits.len()
+            ),
+        ));
+    }
+    stable_subject(operation, record)?;
+    let writer = WriterId(*operation.header.verifying_key.as_bytes());
+    record_connect_counters(record, writer)?;
+    Ok(())
 }
 
 /// A failure while folding the store back into a graph.
@@ -291,19 +317,35 @@ pub enum MaterializeError {
     Causal(#[from] CausalError),
     #[error("stored commons operation has an invalid writer binding: {0}")]
     WriterBinding(String),
+    #[error("stored encrypted commons operation: {0}")]
+    Encrypted(Reject),
 }
 
 #[derive(Clone)]
-struct StoredRecord {
-    operation: Operation<CommonsExt>,
+struct StoredRecord<E = CommonsExt> {
+    operation: Operation<E>,
     record: CommonsRecord,
     log_id: u64,
 }
 
-async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
+async fn load_plaintext_records<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, CommonsExt>,
     container: [u8; 32],
 ) -> Result<Vec<StoredRecord>, MaterializeError> {
+    load_records(store, container, |operation| Ok(from_operation(operation)?)).await
+}
+
+/// Every stored record for `container`, each decoded by the profile's `open`.
+async fn load_records<B, E, D>(
+    store: &MunimentStore<B, E>,
+    container: [u8; 32],
+    open: D,
+) -> Result<Vec<StoredRecord<E>>, MaterializeError>
+where
+    B: Backend + Clone + Send + Sync + 'static,
+    E: GraphHeader,
+    D: Fn(&Operation<E>) -> Result<CommonsRecord, MaterializeError>,
+{
     let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
         TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(container)).await?;
     let mut records = Vec::new();
@@ -318,7 +360,7 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
             // The tuple's second element is encoded header bytes, not the
             // payload. The signed record is reconstructed from `operation.body`.
             for (operation, _header_bytes) in entries {
-                let record = from_operation(&operation)?;
+                let record = open(&operation)?;
                 records.push(StoredRecord {
                     operation,
                     record,
@@ -330,7 +372,7 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
     Ok(records)
 }
 
-fn causal_entries(records: &[StoredRecord]) -> Vec<CausalEntry<u64>> {
+fn causal_entries<E: GraphHeader>(records: &[StoredRecord<E>]) -> Vec<CausalEntry<u64>> {
     records
         .iter()
         .map(|record| {
@@ -343,8 +385,8 @@ fn causal_entries(records: &[StoredRecord]) -> Vec<CausalEntry<u64>> {
         .collect()
 }
 
-fn causal_journal(
-    records: &[StoredRecord],
+fn causal_journal<E: GraphHeader>(
+    records: &[StoredRecord<E>],
 ) -> Result<(Journal<CommonsBatch>, Vec<PendingCausalOperation>), MaterializeError> {
     let entries = causal_entries(records);
     let projection = causal_projection(&entries)?;
@@ -367,7 +409,10 @@ fn causal_journal(
 /// quadratic term came from.
 type RemovalIndex<'a> = BTreeMap<&'a <Container as Identified>::Id, Vec<usize>>;
 
-fn removal_index<'a>(records: &'a [StoredRecord], effective: &BTreeSet<usize>) -> RemovalIndex<'a> {
+fn removal_index<'a, E>(
+    records: &'a [StoredRecord<E>],
+    effective: &BTreeSet<usize>,
+) -> RemovalIndex<'a> {
     let mut removals = RemovalIndex::new();
     for index in effective {
         for edit in &records[*index].record.batch.edits {
@@ -385,8 +430,8 @@ fn removal_index<'a>(records: &'a [StoredRecord], effective: &BTreeSet<usize>) -
 /// `causal` and `removals` are built once per fold by the caller: this asks a
 /// reachability question per insert edit per competing removal, and rebuilding
 /// either of them here made the fold cubic in record count.
-fn remove_wins_batch(
-    records: &[StoredRecord],
+fn remove_wins_batch<E>(
+    records: &[StoredRecord<E>],
     entries: &[CausalEntry<u64>],
     causal: &CausalIndex<'_, u64>,
     removals: &RemovalIndex<'_>,
@@ -412,11 +457,18 @@ fn remove_wins_batch(
     batch
 }
 
-async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
-    store: &MunimentStore<B, CommonsExt>,
-    operation: &Operation<CommonsExt>,
+/// `open_stored` decodes the writer's already-stored records.
+async fn validate_counter_frontier<B, E, D>(
+    store: &MunimentStore<B, E>,
+    operation: &Operation<E>,
     record: &CommonsRecord,
-) -> Result<(), ProcessError> {
+    open_stored: D,
+) -> Result<(), ProcessError>
+where
+    B: Backend + Clone + Send + Sync + 'static,
+    E: GraphHeader,
+    D: Fn(&Operation<E>) -> Result<CommonsRecord, Reject>,
+{
     if store.has_operation(&operation.hash).await? {
         return Ok(());
     }
@@ -428,12 +480,11 @@ async fn validate_counter_frontier<B: Backend + Clone + Send + Sync + 'static>(
 
     let entries = store
         .get_log_entries(&operation.header.verifying_key, &COMMONS_LOG, None, None)
-    .await?
-    .unwrap_or_default();
+        .await?
+        .unwrap_or_default();
     let mut next = 0u64;
     for (stored, _header_bytes) in entries {
-        let stored_record = from_operation(&stored)
-            .map_err(|err| Reject::new("invalid-stored-commons-batch", err.to_string()))?;
+        let stored_record = open_stored(&stored)?;
         for counter in record_connect_counters(&stored_record, writer)? {
             next = next.max(counter.saturating_add(1));
         }
@@ -466,7 +517,11 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
     processor.preflight(op)?;
     let record =
         from_operation(op).map_err(|err| Reject::new("invalid-commons-batch", err.to_string()))?;
-    validate_counter_frontier(store, op, &record).await?;
+    validate_counter_frontier(store, op, &record, |stored| {
+        from_operation(stored)
+            .map_err(|err| Reject::new("invalid-stored-commons-batch", err.to_string()))
+    })
+    .await?;
     Ok(processor.process(op).await?.inserted())
 }
 
@@ -593,7 +648,19 @@ pub async fn materialize_with_authority<
     container: [u8; 32],
     authority: &A,
 ) -> Result<CommonsProjection, MaterializeError> {
-    let records = load_records(store, container).await?;
+    fold_with_authority(
+        load_plaintext_records(store, container).await?,
+        container,
+        authority,
+    )
+}
+
+/// The authority-classified causal fold both graph profiles project with.
+fn fold_with_authority<E: GraphHeader, A: CommonsAuthority>(
+    records: Vec<StoredRecord<E>>,
+    container: [u8; 32],
+    authority: &A,
+) -> Result<CommonsProjection, MaterializeError> {
     let entries = causal_entries(&records);
     let causal = causal_projection(&entries)?;
     let capability = commons_write_capability(container);
@@ -664,6 +731,76 @@ pub enum ReplicaError {
     PendingHistory(usize),
     #[error("one authoring turn must append exactly one batch, appended {0}")]
     BatchCount(usize),
+    #[error(transparent)]
+    Crypto(#[from] GroupCryptoError),
+}
+
+/// One authoring turn's batch and its place in the causal history.
+struct AuthoredBatch {
+    batch: CommonsBatch,
+    parents: Vec<[u8; 32]>,
+    seq_num: u32,
+    backlink: Option<[u8; 32]>,
+}
+
+/// Replay the stored history for `writer`, apply `edit`, and take the single
+/// batch it appended, positioned after `author`'s log head.
+fn author_batch<E: GraphHeader>(
+    records: &[StoredRecord<E>],
+    writer: WriterId,
+    author: [u8; 32],
+    edit: impl FnOnce(&mut GraphLog<Container, Relation>),
+) -> Result<AuthoredBatch, ReplicaError> {
+    let entries = causal_entries(records);
+    let parents = observed_frontier(&entries).map_err(MaterializeError::from)?;
+    let (journal, pending) = causal_journal(records)?;
+    if !pending.is_empty() {
+        return Err(ReplicaError::PendingHistory(pending.len()));
+    }
+    let mut shared = GraphLog::replay_for_writer(journal, writer);
+    let before = shared.log().entries().len();
+    edit(&mut shared);
+    let appended = shared.log().entries().len().saturating_sub(before);
+    if appended != 1 {
+        return Err(ReplicaError::BatchCount(appended));
+    }
+    let batch = shared
+        .log()
+        .entries()
+        .get(before)
+        .expect("an edit appends exactly one batch")
+        .clone();
+    let (seq_num, backlink) =
+        author_head(&entries, author, &COMMONS_LOG).map_err(MaterializeError::from)?;
+    Ok(AuthoredBatch {
+        batch,
+        parents,
+        seq_num,
+        backlink,
+    })
+}
+
+/// The container's derived writer key, its seed, and the root attestation.
+fn derived_writer<P: IdentityProvider + ?Sized>(
+    identity: &P,
+    container: [u8; 32],
+) -> Result<(WriterId, [u8; 32], DerivedKeyAttestation), ReplicaIdentityError> {
+    let salt = commons_identity_salt(container);
+    let keypair = identity.derive_keypair(&salt)?;
+    let writer_attestation = identity.attest_derived_key(&salt)?;
+    if !writer_attestation.verify(&salt) {
+        return Err(ReplicaIdentityError::InvalidAttestation);
+    }
+    let writer = WriterId(keypair.public_key().to_bytes());
+    if writer_attestation
+        .derived_public_key()
+        .map_err(|_| ReplicaIdentityError::InvalidAttestation)?
+        .to_bytes()
+        != writer.0
+    {
+        return Err(ReplicaIdentityError::WriterMismatch);
+    }
+    Ok((writer, keypair.to_seed(), writer_attestation))
 }
 
 /// Failure to bind a Commons replica to its stable Personae identity.
@@ -719,26 +856,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
         container: [u8; 32],
         identity: &P,
     ) -> Result<Self, ReplicaIdentityError> {
-        let salt = commons_identity_salt(container);
-        let keypair = identity.derive_keypair(&salt)?;
-        let writer_attestation = identity.attest_derived_key(&salt)?;
-        if !writer_attestation.verify(&salt) {
-            return Err(ReplicaIdentityError::InvalidAttestation);
-        }
-        let writer = WriterId(keypair.public_key().to_bytes());
-        if writer_attestation
-            .derived_public_key()
-            .map_err(|_| ReplicaIdentityError::InvalidAttestation)?
-            .to_bytes()
-            != writer.0
-        {
-            return Err(ReplicaIdentityError::WriterMismatch);
-        }
+        let (writer, signing_seed, writer_attestation) = derived_writer(identity, container)?;
         Ok(Self {
             store: MunimentStore::new(backend),
             container,
             writer,
-            signing_seed: keypair.to_seed(),
+            signing_seed,
             writer_attestation: Some(writer_attestation),
         })
     }
@@ -793,41 +916,18 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
         &mut self,
         edit: impl FnOnce(&mut GraphLog<Container, Relation>),
     ) -> Result<Operation<CommonsExt>, ReplicaError> {
-        let records = load_records(&self.store, self.container).await?;
-        let entries = causal_entries(&records);
-        let parents = observed_frontier(&entries).map_err(MaterializeError::from)?;
-        let (journal, pending) = causal_journal(&records)?;
-        if !pending.is_empty() {
-            return Err(ReplicaError::PendingHistory(pending.len()));
-        }
-        let mut shared = GraphLog::replay_for_writer(journal, self.writer);
-        let before = shared.log().entries().len();
-        edit(&mut shared);
-        let appended = shared.log().entries().len().saturating_sub(before);
-        if appended != 1 {
-            return Err(ReplicaError::BatchCount(appended));
-        }
-        let batch = shared
-            .log()
-            .entries()
-            .get(before)
-            .expect("an edit appends exactly one batch")
-            .clone();
-
-        let signing_key = SigningKey::from_bytes(&self.signing_seed);
-        let (seq, backlink) = author_head(
-            &entries,
-            *signing_key.verifying_key().as_bytes(),
-            &COMMONS_LOG,
-        )
-        .map_err(MaterializeError::from)?;
+        let records = load_plaintext_records(&self.store, self.container).await?;
+        let author = *SigningKey::from_bytes(&self.signing_seed)
+            .verifying_key()
+            .as_bytes();
+        let authored = author_batch(&records, self.writer, author, edit)?;
         let op = to_operation_with_attestation(
             self.signing_seed,
             self.container,
-            &batch,
-            parents,
-            seq,
-            backlink,
+            &authored.batch,
+            authored.parents,
+            authored.seq_num,
+            authored.backlink,
             self.writer_attestation.clone(),
         );
         self.accept(&op).await?;
@@ -889,7 +989,7 @@ mod tests {
     const ROOT_GRANT: [u8; 32] = [0x67; 32];
     const AUTHORITY_NOW_MS: u64 = 50;
 
-    fn cites() -> Relation {
+    pub(super) fn cites() -> Relation {
         Relation::new(RelationClass::recognized(Recognized::Cites))
     }
 
@@ -949,12 +1049,12 @@ mod tests {
         }
     }
 
-    type Fingerprint = (
+    pub(super) type Fingerprint = (
         Vec<(String, String, Vec<String>)>,
         Vec<(String, String, String)>,
     );
 
-    fn fingerprint(log: &GraphLog<Container, Relation>) -> Fingerprint {
+    pub(super) fn fingerprint(log: &GraphLog<Container, Relation>) -> Fingerprint {
         let graph = log.graph();
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
