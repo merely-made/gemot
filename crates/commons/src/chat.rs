@@ -12,8 +12,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
-use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
+use muniment::{Backend, MemoryBackend, StoreError};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
@@ -27,10 +28,10 @@ use servitor::{Cap, Mode, Subject};
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, CheckpointAuthority, DataKeyring,
     EpochCheckpointBasis, EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts,
-    GroupCiphertext, GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile, JoinError,
-    JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor, PendingCausalOperation,
-    ProcessError, Reject, StoreTarget, author_head, causal_projection, observed_frontier,
-    propose_epoch_pruning, validate_causal_metadata,
+    EpochRetentionReason, GroupCiphertext, GroupCryptoError, GroupEncryptionMode,
+    GroupEncryptionProfile, JoinError, JoinedSpace, MunimentStore, OperationPolicy,
+    OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
+    causal_projection, observed_frontier, propose_epoch_pruning, validate_causal_metadata,
 };
 
 /// This chat profile's sync-lane kind, combined with the space id through
@@ -41,6 +42,9 @@ pub const COMMONS_CHAT_LANE: &str = "commons/chat/v1";
 const CHAT_LOG: u64 = 0;
 const CHAT_CHECKPOINT_LOG: u64 = 1;
 const CHAT_AUTHORED_VERSION: u16 = 1;
+/// Version 2 adds the signed header link and the covered-author index.
+/// Version 1 checkpoints are refused.
+pub const CHAT_CHECKPOINT_VERSION: u16 = 2;
 const CHAT_LIMITS: CausalLimits = CausalLimits {
     max_parents: 64,
     max_payload_bytes: 1024 * 1024,
@@ -78,6 +82,16 @@ pub struct ChatExt {
     pub class: ChatClass,
     #[serde(default)]
     pub parents: Vec<[u8; 32]>,
+    /// Present only on checkpoints, so the chain is walked without decrypting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<ChatCheckpointLink>,
+}
+
+/// Signed checkpoint chain link, mirrored by the encrypted body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatCheckpointLink {
+    pub version: u16,
+    pub previous: Option<[u8; 32]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,13 +274,35 @@ pub struct ChatProjection {
     pub revoked: Vec<AuthorityOperation>,
 }
 
-/// Current materialized chat state committed by a retention checkpoint.
+/// Current materialized chat state committed by a retention checkpoint, plus
+/// what re-evaluating authority over covered records needs without their keys.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatCheckpointSnapshot {
     pub channels: Vec<Channel>,
     pub messages: Vec<AuthoredMessage>,
     #[serde(default)]
     pub deleted_messages: Vec<DeletedMessage>,
+    /// Every covered data operation, grouped by stable author root.
+    #[serde(default)]
+    pub covered: Vec<ChatCoveredAuthor>,
+    /// Each author's last covered write per channel id.
+    #[serde(default)]
+    pub channel_writes: Vec<ChatChannelWrite>,
+}
+
+/// Covered operations of one stable author root, in causal order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatCoveredAuthor {
+    pub author: [u8; 32],
+    pub operations: Vec<[u8; 32]>,
+}
+
+/// One covered channel write, kept so a withdrawn author's write can be undone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatChannelWrite {
+    pub operation: [u8; 32],
+    pub author: [u8; 32],
+    pub channel: Channel,
 }
 
 /// Highest complete chat operation represented for one author.
@@ -358,19 +394,6 @@ pub struct OfflineMemberEpochHold {
     pub epoch: GroupSecretId,
 }
 
-/// Atomic host receipt for one explicit, revalidated epoch erasure.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChatEpochExecutionReceipt {
-    pub version: u16,
-    pub space_id: [u8; 32],
-    pub checkpoint: Digest,
-    pub authority_revision: Digest,
-    pub forgotten: Vec<GroupSecretId>,
-    pub retained: Vec<GroupSecretId>,
-    pub previous_keyring: Digest,
-    pub persisted_keyring: Digest,
-}
-
 /// Explicit recovery result after a member misses one or more rotations.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OfflineMemberRecovery {
@@ -390,10 +413,8 @@ pub enum ChatError {
     Crypto(#[from] GroupCryptoError),
     #[error("chat checkpoint: {0}")]
     Checkpoint(String),
-    #[error("reviewed epoch proposal is stale")]
-    StaleRetentionProposal,
-    #[error("epoch proposal is blocked")]
-    BlockedRetentionProposal,
+    #[error("unsupported chat checkpoint version {0}")]
+    UnsupportedCheckpointVersion(u16),
     #[error("message mutation: {0}")]
     MessageMutation(String),
     #[error("chat wire: {0}")]
@@ -423,6 +444,8 @@ struct ChatPolicy {
     projected_message_authors: BTreeMap<[u8; 32], [u8; 32]>,
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     current_checkpoint: Option<StoredChatCheckpoint>,
+    /// Retained data records, against which a new checkpoint is rebuilt.
+    data: Vec<StoredChatOperation>,
 }
 
 impl OperationPolicy<ChatExt> for ChatPolicy {
@@ -451,6 +474,12 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
             | ChatClass::Message
             | ChatClass::MessageEdit
             | ChatClass::MessageDelete => {
+                if operation.header.extensions.checkpoint.is_some() {
+                    return Err(Reject::new(
+                        "unexpected-checkpoint-link",
+                        "only a checkpoint carries a checkpoint link",
+                    ));
+                }
                 let plaintext = keys
                     .open(&envelope)
                     .map_err(|error| Reject::new("unreadable-chat-event", error.to_string()))?;
@@ -503,6 +532,9 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                         ),
                     ));
                 }
+                let link = checkpoint_link(operation).map_err(|error| {
+                    Reject::new("unsupported-chat-checkpoint-version", error.to_string())
+                })?;
                 let plaintext = keys.open(&envelope).map_err(|error| {
                     Reject::new("unreadable-chat-checkpoint", error.to_string())
                 })?;
@@ -512,17 +544,22 @@ impl OperationPolicy<ChatExt> for ChatPolicy {
                     Reject::new("invalid-chat-author-binding", error.to_string())
                 })?;
                 let checkpoint = record.payload;
-                validate_retained_checkpoint(
-                    self.space_id,
-                    self.current_checkpoint.as_ref(),
-                    &envelope,
-                    &operation.header.extensions.parents,
-                    &checkpoint,
-                )
-                .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
-                validate_current_checkpoint_authority(stable_author, authority, &checkpoint)
-                    .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
-                validate_checkpoint_epoch_inventory(keys, &checkpoint)
+                let current = self.current_checkpoint.as_ref();
+                validate_checkpoint_body(self.space_id, operation, link, &envelope, &checkpoint)
+                    .and_then(|()| validate_checkpoint_succession(current, &checkpoint))
+                    .and_then(|()| {
+                        validate_current_checkpoint_authority(stable_author, authority, &checkpoint)
+                    })
+                    .and_then(|()| validate_checkpoint_epoch_inventory(keys, &checkpoint))
+                    .and_then(|()| {
+                        verify_checkpoint_content(
+                            keys,
+                            self.space_id,
+                            current.map(|stored| &stored.checkpoint),
+                            &self.data,
+                            &checkpoint,
+                        )
+                    })
                     .map_err(|error| Reject::new("invalid-chat-checkpoint", error))?;
                 CHAT_CHECKPOINT_LOG
             },
@@ -560,14 +597,25 @@ fn validate_checkpoint_epoch_inventory(
     Ok(())
 }
 
-fn validate_retained_checkpoint(
+/// The signed chain link of a checkpoint record. A record without one is a
+/// version 1 checkpoint.
+fn checkpoint_link(operation: &Operation<ChatExt>) -> Result<ChatCheckpointLink, ChatError> {
+    match operation.header.extensions.checkpoint {
+        Some(link) if link.version == CHAT_CHECKPOINT_VERSION => Ok(link),
+        Some(link) => Err(ChatError::UnsupportedCheckpointVersion(link.version)),
+        None => Err(ChatError::UnsupportedCheckpointVersion(1)),
+    }
+}
+
+/// Checks one checkpoint needs no predecessor for.
+fn validate_checkpoint_body(
     expected_space: [u8; 32],
-    current: Option<&StoredChatCheckpoint>,
+    operation: &Operation<ChatExt>,
+    link: ChatCheckpointLink,
     envelope: &GroupCiphertext,
-    signed_parents: &[[u8; 32]],
     candidate: &ChatCheckpoint,
 ) -> Result<(), String> {
-    if candidate.version != 1 {
+    if candidate.version != CHAT_CHECKPOINT_VERSION {
         return Err(format!(
             "unsupported checkpoint version {}",
             candidate.version
@@ -576,16 +624,17 @@ fn validate_retained_checkpoint(
     if candidate.space_id != expected_space {
         return Err("checkpoint addresses another Commons".into());
     }
-    if candidate.previous_checkpoint != current.map(|stored| stored.operation) {
-        return Err("checkpoint does not extend the latest accepted checkpoint".into());
+    if candidate.previous_checkpoint != link.previous {
+        return Err("signed checkpoint link does not match its encrypted body".into());
     }
+    let signed_parents = &operation.header.extensions.parents;
     if candidate.snapshot_commitment
         != ChatCheckpoint::snapshot_commitment(&candidate.snapshot)
             .map_err(|error| error.to_string())?
     {
         return Err("checkpoint snapshot commitment is false".into());
     }
-    if signed_parents != candidate.causal_frontier {
+    if *signed_parents != candidate.causal_frontier {
         return Err("signed checkpoint frontier does not match its encrypted body".into());
     }
     let unique_causal: BTreeSet<_> = candidate.causal_frontier.iter().copied().collect();
@@ -598,26 +647,13 @@ fn validate_retained_checkpoint(
         return Err("checkpoint is not protected under its named current epoch".into());
     }
 
-    let mut candidate_authors = BTreeMap::new();
-    for frontier in &candidate.author_frontiers {
-        if candidate_authors
-            .insert(frontier.author, frontier)
-            .is_some()
-        {
-            return Err("checkpoint author frontier contains duplicates".into());
-        }
-    }
-    if let Some(current) = current {
-        for previous in &current.checkpoint.author_frontiers {
-            let Some(next) = candidate_authors.get(&previous.author) else {
-                return Err("checkpoint drops an existing author frontier".into());
-            };
-            if next.seq_num < previous.seq_num
-                || (next.seq_num == previous.seq_num && next.operation != previous.operation)
-            {
-                return Err("checkpoint author frontier rewinds".into());
-            }
-        }
+    let authors: BTreeSet<_> = candidate
+        .author_frontiers
+        .iter()
+        .map(|frontier| frontier.author)
+        .collect();
+    if authors.len() != candidate.author_frontiers.len() {
+        return Err("checkpoint author frontier contains duplicates".into());
     }
 
     let mut held_operations = BTreeSet::new();
@@ -635,6 +671,74 @@ fn validate_retained_checkpoint(
         }
     }
     Ok(())
+}
+
+/// A new checkpoint must extend the latest accepted one without rewinding.
+fn validate_checkpoint_succession(
+    current: Option<&StoredChatCheckpoint>,
+    candidate: &ChatCheckpoint,
+) -> Result<(), String> {
+    if candidate.previous_checkpoint != current.map(|stored| stored.operation) {
+        return Err("checkpoint does not extend the latest accepted checkpoint".into());
+    }
+    let Some(current) = current else {
+        return Ok(());
+    };
+    let next: BTreeMap<_, _> = candidate
+        .author_frontiers
+        .iter()
+        .map(|frontier| (frontier.author, frontier))
+        .collect();
+    for previous in &current.checkpoint.author_frontiers {
+        let Some(next) = next.get(&previous.author) else {
+            return Err("checkpoint drops an existing author frontier".into());
+        };
+        if next.seq_num < previous.seq_num
+            || (next.seq_num == previous.seq_num && next.operation != previous.operation)
+        {
+            return Err("checkpoint author frontier rewinds".into());
+        }
+    }
+    Ok(())
+}
+
+/// Rebuild the candidate from the retained records it covers, folded onto
+/// the current checkpoint, and require the same content. Covered records are
+/// verified here, while they are still readable, so pruning can trust them.
+fn verify_checkpoint_content(
+    keys: &DataKeyring,
+    space_id: [u8; 32],
+    current: Option<&ChatCheckpoint>,
+    data: &[StoredChatOperation],
+    candidate: &ChatCheckpoint,
+) -> Result<(), String> {
+    let covered: BTreeSet<_> = covered_operations(candidate).collect();
+    let records: Vec<_> = data
+        .iter()
+        .filter(|record| covered.contains(record.operation.hash.as_bytes()))
+        .cloned()
+        .collect();
+    if records.len() != covered.len() {
+        return Err("checkpoint covers operations this replica does not retain".into());
+    }
+    let rebuilt =
+        checkpoint_content(keys, space_id, &records, current).map_err(|error| error.to_string())?;
+    if !rebuilt.pending.is_empty()
+        || rebuilt.snapshot != candidate.snapshot
+        || rebuilt.causal_frontier != candidate.causal_frontier
+        || rebuilt.author_frontiers != candidate.author_frontiers
+    {
+        return Err("checkpoint content does not match the retained operations it covers".into());
+    }
+    Ok(())
+}
+
+fn covered_operations(checkpoint: &ChatCheckpoint) -> impl Iterator<Item = [u8; 32]> + '_ {
+    checkpoint
+        .snapshot
+        .covered
+        .iter()
+        .flat_map(|author| author.operations.iter().copied())
 }
 
 #[derive(Clone)]
@@ -812,6 +916,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     space_id: self.space_id,
                     class,
                     parents,
+                    checkpoint: None,
                 },
             );
         let operation = Operation {
@@ -831,7 +936,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         edited_at_ms: u64,
     ) -> Result<Operation<ChatExt>, ChatError> {
         let retained = self.load_retained().await?;
-        self.ensure_owned_projected_message(&retained.data, original)?;
+        self.ensure_owned_projected_message(&retained, original)?;
         self.author_onto(
             ChatEvent::MessageEdit(MessageEdit {
                 original,
@@ -850,7 +955,7 @@ impl<B: Backend + Clone> ChatReplica<B> {
         deleted_at_ms: u64,
     ) -> Result<Operation<ChatExt>, ChatError> {
         let retained = self.load_retained().await?;
-        self.ensure_owned_projected_message(&retained.data, original)?;
+        self.ensure_owned_projected_message(&retained, original)?;
         self.author_onto(
             ChatEvent::MessageDelete(MessageDelete {
                 original,
@@ -863,15 +968,10 @@ impl<B: Backend + Clone> ChatReplica<B> {
 
     fn ensure_owned_projected_message(
         &self,
-        data_records: &[StoredChatOperation],
+        retained: &RetainedChatRecords,
         original: [u8; 32],
     ) -> Result<(), ChatError> {
-        let projection = project_records(
-            &self.keys.current(),
-            self.space_id,
-            data_records,
-            &AllowAllAuthority,
-        )?;
+        let projection = retained.fold(&self.keys.current(), self.space_id, &AllowAllAuthority)?;
         let message = projection
             .messages
             .iter()
@@ -925,40 +1025,30 @@ impl<B: Backend + Clone> ChatReplica<B> {
     ///
     /// Product ports must use this for communal projection. The authority view
     /// receives retained Personae/Gemot facts; session, relay, and transport
-    /// identity never enter the decision. This folds the full retained history,
-    /// so a withdrawn capability retracts that author's whole contribution.
+    /// identity never enter the decision. Every retained record is classified,
+    /// checkpoint-covered ones included, so a withdrawn capability retracts
+    /// that author's whole contribution. Covered records are read from the
+    /// latest checkpoint instead of being decrypted.
     pub async fn projection_with_authority<A: CommonsAuthority>(
         &self,
         authority: &A,
     ) -> Result<ChatProjection, ChatError> {
-        let records = self.load_data_operations().await?;
-        project_records(&self.keys.current(), self.space_id, &records, authority)
+        self.load_retained()
+            .await?
+            .fold(&self.keys.current(), self.space_id, authority)
     }
 
+    #[cfg(test)]
     async fn load_data_operations(&self) -> Result<Vec<StoredChatOperation>, ChatError> {
-        Ok(self
-            .load_operations()
-            .await?
-            .into_iter()
-            .filter(|record| record.log_id == CHAT_LOG)
-            .collect())
+        Ok(self.load_retained().await?.data)
     }
 
-    async fn load_checkpoint_operations(&self) -> Result<Vec<StoredChatOperation>, ChatError> {
-        Ok(self
-            .load_operations()
-            .await?
-            .into_iter()
-            .filter(|record| record.log_id == CHAT_CHECKPOINT_LOG)
-            .collect())
-    }
-
-    /// Latest structurally valid checkpoint in the signed predecessor chain.
+    /// Latest checkpoint in the signed header chain; only it is decrypted.
     pub async fn latest_checkpoint(&self) -> Result<Option<StoredChatCheckpoint>, ChatError> {
         latest_checkpoint_from_records(
             self.space_id,
             &self.keys.current(),
-            self.load_checkpoint_operations().await?,
+            &self.load_retained().await?.checkpoints,
         )
     }
 
@@ -966,9 +1056,9 @@ impl<B: Backend + Clone> ChatReplica<B> {
     pub async fn author_checkpoint(&mut self) -> Result<Operation<ChatExt>, ChatError> {
         // One snapshot builds and seals, so the named epoch is the sealing one.
         let keys = self.keys.current();
-        let checkpoint = self.build_checkpoint_with(&keys).await?;
-        let checkpoint_records = self.load_checkpoint_operations().await?;
-        let entries = causal_entries(&checkpoint_records);
+        let retained = self.load_retained().await?;
+        let checkpoint = self.build_checkpoint_onto(&keys, &retained)?;
+        let entries = causal_entries(&retained.checkpoints);
         let signing_key = SigningKey::from_bytes(&self.signing_seed);
         let author = signing_key.verifying_key();
         let (seq_num, backlink) = author_head(&entries, *author.as_bytes(), &CHAT_CHECKPOINT_LOG)?;
@@ -994,6 +1084,10 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     space_id: self.space_id,
                     class: ChatClass::Checkpoint,
                     parents: checkpoint.causal_frontier.clone(),
+                    checkpoint: Some(ChatCheckpointLink {
+                        version: CHAT_CHECKPOINT_VERSION,
+                        previous: checkpoint.previous_checkpoint,
+                    }),
                 },
             );
         let operation = Operation {
@@ -1001,16 +1095,21 @@ impl<B: Backend + Clone> ChatReplica<B> {
             header,
             body: Some(body),
         };
-        self.accept(&operation).await?;
+        self.accept_onto(&operation, retained).await?;
         Ok(operation)
     }
 
     /// Construct the checkpoint candidate without mutating the store.
     pub async fn build_checkpoint(&self) -> Result<ChatCheckpoint, ChatError> {
-        self.build_checkpoint_with(&self.keys.current()).await
+        let retained = self.load_retained().await?;
+        self.build_checkpoint_onto(&self.keys.current(), &retained)
     }
 
-    async fn build_checkpoint_with(&self, keys: &DataKeyring) -> Result<ChatCheckpoint, ChatError> {
+    fn build_checkpoint_onto(
+        &self,
+        keys: &DataKeyring,
+        retained: &RetainedChatRecords,
+    ) -> Result<ChatCheckpoint, ChatError> {
         let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
             ChatError::Checkpoint("checkpoint authority is not configured".into())
         })?;
@@ -1019,43 +1118,23 @@ impl<B: Backend + Clone> ChatReplica<B> {
                 "local signer is not the current checkpoint authority".into(),
             ));
         }
-        let records = self.load_data_operations().await?;
-        let entries = causal_entries(&records);
-        let causal = causal_projection(&entries)?;
-        let effective_entries: Vec<_> = causal
-            .order
-            .iter()
-            .map(|index| entries[*index].clone())
-            .collect();
-        let mut causal_frontier = observed_frontier(&effective_entries)?;
-        causal_frontier.sort_unstable();
+        let previous = latest_checkpoint_from_records(self.space_id, keys, &retained.checkpoints)?;
         // Retention commits retained facts, not the current authority verdict:
-        // an epoch held for `AuthorityReevaluation` must stay decryptable so a
-        // later capability change can be re-applied. The checkpoint carries the
-        // revision it was sealed under instead.
-        let projection = project_records(keys, self.space_id, &records, &AllowAllAuthority)?;
+        // the covered-author index lets a later capability change reach them.
+        let content = checkpoint_content(
+            keys,
+            self.space_id,
+            &retained.data,
+            previous.as_ref().map(|stored| &stored.checkpoint),
+        )?;
 
-        let mut author_frontiers = BTreeMap::<[u8; 32], ChatAuthorFrontier>::new();
-        for entry in &effective_entries {
-            let frontier = ChatAuthorFrontier {
-                author: entry.author,
-                seq_num: entry.seq_num,
-                operation: entry.operation,
-            };
-            match author_frontiers.get(&entry.author) {
-                Some(current) if current.seq_num >= entry.seq_num => {},
-                _ => {
-                    author_frontiers.insert(entry.author, frontier);
-                },
-            }
-        }
-
-        let by_operation: BTreeMap<_, _> = records
+        let by_operation: BTreeMap<_, _> = retained
+            .data
             .iter()
             .map(|record| (*record.operation.hash.as_bytes(), record))
             .collect();
         let mut pending_by_epoch = BTreeMap::<GroupSecretId, Vec<[u8; 32]>>::new();
-        for pending in &causal.pending {
+        for pending in &content.pending {
             let record = by_operation.get(&pending.operation).ok_or_else(|| {
                 ChatError::Checkpoint("pending operation is absent from the retained store".into())
             })?;
@@ -1088,55 +1167,20 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let current_epoch = keys
             .current_epoch()
             .ok_or(GroupCryptoError::MissingCurrentEpoch)?;
-        let snapshot = ChatCheckpointSnapshot {
-            channels: projection.channels,
-            messages: projection.messages,
-            deleted_messages: projection.deleted_messages,
-        };
-        let snapshot_commitment = ChatCheckpoint::snapshot_commitment(&snapshot)?;
+        let snapshot_commitment = ChatCheckpoint::snapshot_commitment(&content.snapshot)?;
         Ok(ChatCheckpoint {
-            version: 1,
+            version: CHAT_CHECKPOINT_VERSION,
             space_id: self.space_id,
             authority_revision: authority.authority_revision(),
-            previous_checkpoint: self
-                .latest_checkpoint()
-                .await?
-                .map(|stored| stored.operation),
-            causal_frontier,
-            author_frontiers: author_frontiers.into_values().collect(),
+            previous_checkpoint: previous.map(|stored| stored.operation),
+            causal_frontier: content.causal_frontier,
+            author_frontiers: content.author_frontiers,
             epoch_inventory,
             current_epoch,
             holds,
-            snapshot,
+            snapshot: content.snapshot,
             snapshot_commitment,
         })
-    }
-
-    /// Rebuild current state from the latest checkpoint plus retained tail.
-    pub async fn projection_from_checkpoint(&self) -> Result<ChatProjection, ChatError> {
-        self.projection_from_checkpoint_with_authority(&AllowAllAuthority)
-            .await
-    }
-
-    /// Checkpoint-rooted rebuild with authority applied to the retained tail.
-    ///
-    /// See [`project_checkpoint_tail`]: the committed prefix keeps the
-    /// authority revision it was sealed under.
-    pub async fn projection_from_checkpoint_with_authority<A: CommonsAuthority>(
-        &self,
-        authority: &A,
-    ) -> Result<ChatProjection, ChatError> {
-        let Some(stored) = self.latest_checkpoint().await? else {
-            return self.projection_with_authority(authority).await;
-        };
-        let records = self.load_data_operations().await?;
-        project_checkpoint_tail(
-            &self.keys.current(),
-            self.space_id,
-            &stored.checkpoint,
-            &records,
-            authority,
-        )
     }
 
     /// Compute the dry-run epoch proposal from Commons-owned retention facts.
@@ -1144,7 +1188,9 @@ impl<B: Backend + Clone> ChatReplica<B> {
         &self,
         offline_members: &[OfflineMemberEpochHold],
     ) -> Result<EpochPruningProposal, ChatError> {
-        let stored = self.latest_checkpoint().await?;
+        let keys = self.keys.current();
+        let retained = self.load_retained().await?;
+        let stored = latest_checkpoint_from_records(self.space_id, &keys, &retained.checkpoints)?;
         let mut holds = Vec::new();
         let checkpoint = if let Some(stored) = stored {
             let authority = self.checkpoint_authority.as_ref().ok_or_else(|| {
@@ -1152,12 +1198,18 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     "checkpoint authority must be configured before proposing retention".into(),
                 )
             })?;
-            let records = self.load_data_operations().await?;
-            for record in records_after_checkpoint(&stored.checkpoint, &records) {
-                holds.push(EpochHold {
-                    epoch: encrypted_body(&record.operation)?.epoch,
-                    reason: EpochHoldReason::DecryptionReachability,
-                });
+            let covered: BTreeSet<_> = covered_operations(&stored.checkpoint).collect();
+            let mut retained_operations = BTreeSet::new();
+            for record in &retained.data {
+                let operation = *record.operation.hash.as_bytes();
+                retained_operations.insert(operation);
+                // Replay decrypts only what the checkpoint does not cover.
+                if !covered.contains(&operation) {
+                    holds.push(EpochHold {
+                        epoch: encrypted_body(&record.operation)?.epoch,
+                        reason: EpochHoldReason::DecryptionReachability,
+                    });
+                }
             }
             holds.push(EpochHold {
                 epoch: stored.checkpoint.current_epoch,
@@ -1175,8 +1227,8 @@ impl<B: Backend + Clone> ChatReplica<B> {
                     reason,
                 });
             }
-            let author_continuation_ready =
-                self.projection_from_checkpoint().await? == self.projection().await?;
+            // Replay orders the tail around every covered record's header.
+            let author_continuation_ready = covered.is_subset(&retained_operations);
             Some(EpochCheckpointBasis {
                 checkpoint: Digest::p2panda_operation(stored.operation),
                 authority_revision: stored.checkpoint.authority_revision,
@@ -1192,106 +1244,37 @@ impl<B: Backend + Clone> ChatReplica<B> {
         }));
         Ok(propose_epoch_pruning(
             COMMONS_CHAT_PROFILE,
-            &self.keys.current(),
+            &keys,
             &EpochRetentionFacts { checkpoint, holds },
         ))
     }
 
-    /// Revalidate and explicitly execute a reviewed proposal. Key state and
-    /// receipt land in one backend `apply`; only then does the live keyring
-    /// switch to the reduced state, for every holder of the key handle.
-    pub async fn execute_epoch_pruning(
-        &mut self,
-        reviewed: &EpochPruningProposal,
-        offline_members: &[OfflineMemberEpochHold],
-    ) -> Result<ChatEpochExecutionReceipt, ChatError> {
-        let current = self.epoch_pruning_proposal(offline_members).await?;
-        if &current != reviewed {
-            return Err(ChatError::StaleRetentionProposal);
-        }
-        if !current.is_executable() {
-            return Err(ChatError::BlockedRetentionProposal);
-        }
-        let checkpoint = current
-            .checkpoint
-            .clone()
-            .ok_or(ChatError::BlockedRetentionProposal)?;
-        let stored = self
-            .latest_checkpoint()
-            .await?
-            .ok_or(ChatError::BlockedRetentionProposal)?;
-        let before = self.keys.to_bytes()?;
-        let mut reduced = DataKeyring::from_bytes(&before)?;
-        for epoch in &current.forget {
-            if !reduced.forget_authorized(epoch) {
-                return Err(ChatError::StaleRetentionProposal);
-            }
-        }
-        let after = reduced.to_bytes()?;
-        let receipt = ChatEpochExecutionReceipt {
-            version: 1,
-            space_id: self.space_id,
-            checkpoint,
-            authority_revision: stored.checkpoint.authority_revision,
-            forgotten: current.forget,
-            retained: reduced
-                .epochs_oldest_first()
-                .ok_or_else(|| {
-                    ChatError::Checkpoint(
-                        "executed keyring lost its proven epoch chronology".into(),
-                    )
-                })?
-                .to_vec(),
-            previous_keyring: Digest::blake3(&before),
-            persisted_keyring: Digest::blake3(&after),
-        };
-        let receipt_bytes =
-            encode_cbor(&receipt).map_err(|error| ChatError::Wire(error.to_string()))?;
-        self.store
-            .backend()
-            .apply(&[
-                WriteOp::Put {
-                    key: chat_keyring_key(self.space_id),
-                    value: after,
-                },
-                WriteOp::Put {
-                    key: chat_epoch_receipt_key(self.space_id),
-                    value: receipt_bytes,
-                },
-            ])
-            .await?;
-        self.keys.replace(reduced);
-        Ok(receipt)
-    }
-
-    /// Restore the atomically persisted reduced keyring, if one exists.
-    pub async fn restore_persisted_keyring(&mut self) -> Result<bool, ChatError> {
-        let Some(bytes) = self
-            .store
-            .backend()
-            .get(&chat_keyring_key(self.space_id))
-            .await?
-        else {
-            return Ok(false);
-        };
-        self.keys.replace_from_bytes(&bytes)?;
-        Ok(true)
-    }
-
-    pub async fn epoch_execution_receipt(
+    /// What chat's retained records still need and what chat alone could
+    /// release, for the host's [`crate::pruning::release_epochs`]. The host,
+    /// not chat, forgets epochs in its group session and refreshes the handle.
+    pub async fn epoch_report(
         &self,
-    ) -> Result<Option<ChatEpochExecutionReceipt>, ChatError> {
-        let Some(bytes) = self
-            .store
-            .backend()
-            .get(&chat_epoch_receipt_key(self.space_id))
-            .await?
-        else {
-            return Ok(None);
-        };
-        decode_cbor(bytes.as_slice())
-            .map(Some)
-            .map_err(|error| ChatError::Wire(error.to_string()))
+        offline_members: &[OfflineMemberEpochHold],
+    ) -> Result<LaneEpochReport, ChatError> {
+        let proposal = self.epoch_pruning_proposal(offline_members).await?;
+        let needed = proposal
+            .retain
+            .iter()
+            .flat_map(|retained| {
+                retained.reasons.iter().map(|reason| EpochNeed {
+                    epoch: retained.epoch,
+                    reason: match reason {
+                        EpochRetentionReason::Current => EpochNeedReason::Current,
+                        other => EpochNeedReason::Chat(other.clone()),
+                    },
+                })
+            })
+            .collect();
+        Ok(LaneEpochReport {
+            lane: COMMONS_CHAT_LANE,
+            needed,
+            releasable: proposal.forget,
+        })
     }
 
     pub async fn offline_member_recovery(
@@ -1403,6 +1386,20 @@ fn split_chat_records(records: Vec<StoredChatOperation>) -> RetainedChatRecords 
     RetainedChatRecords { data, checkpoints }
 }
 
+impl RetainedChatRecords {
+    /// Project from the latest checkpoint plus the records it does not cover.
+    fn fold<A: CommonsAuthority>(
+        &self,
+        keys: &DataKeyring,
+        space_id: [u8; 32],
+        authority: &A,
+    ) -> Result<ChatProjection, ChatError> {
+        let checkpoint = latest_checkpoint_from_records(space_id, keys, &self.checkpoints)?;
+        let checkpoint = checkpoint.as_ref().map(|stored| &stored.checkpoint);
+        Ok(fold_chat(keys, space_id, &self.data, checkpoint, authority)?.projection)
+    }
+}
+
 /// Assemble the admission policy from one decode of the retained history.
 fn chat_policy(
     space_id: [u8; 32],
@@ -1410,25 +1407,30 @@ fn chat_policy(
     checkpoint_authority: Option<ChatCheckpointAuthority>,
     retained: RetainedChatRecords,
 ) -> Result<ChatPolicy, ChatError> {
-    // The checkpoint chain is read before the projection so a broken chain
-    // still reports itself first, as it did when these were two separate
-    // replays of the history.
-    let current_checkpoint = latest_checkpoint_from_records(space_id, &keys, retained.checkpoints)?;
+    let current_checkpoint =
+        latest_checkpoint_from_records(space_id, &keys, &retained.checkpoints)?;
     // Admission is structural: an operation is stored whatever the current
     // authority verdict says about its author, so revocation stays a projection
     // decision that a later re-evaluation can reverse.
-    let projected_message_authors =
-        project_records(&keys, space_id, &retained.data, &AllowAllAuthority)?
-            .messages
-            .into_iter()
-            .map(|message| (message.operation, message.author))
-            .collect();
+    let projected_message_authors = fold_chat(
+        &keys,
+        space_id,
+        &retained.data,
+        current_checkpoint.as_ref().map(|stored| &stored.checkpoint),
+        &AllowAllAuthority,
+    )?
+    .projection
+    .messages
+    .into_iter()
+    .map(|message| (message.operation, message.author))
+    .collect();
     Ok(ChatPolicy {
         space_id,
         keys,
         projected_message_authors,
         checkpoint_authority,
         current_checkpoint,
+        data: retained.data,
     })
 }
 
@@ -1445,16 +1447,6 @@ fn causal_entries<'a>(
             )
         })
         .collect()
-}
-
-fn chat_keyring_key(space_id: [u8; 32]) -> String {
-    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("commons/chat/{hex}/data-keyring")
-}
-
-fn chat_epoch_receipt_key(space_id: [u8; 32]) -> String {
-    let hex: String = space_id.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("commons/chat/{hex}/epoch-pruning-receipt")
 }
 
 async fn load_operations_from_store<B: Backend + Clone>(
@@ -1479,50 +1471,50 @@ async fn load_operations_from_store<B: Backend + Clone>(
     Ok(records)
 }
 
+/// Walk the signed header links to the chain's tip and decrypt only the tip.
+/// Each earlier link was checked against its predecessor at admission.
 fn latest_checkpoint_from_records(
     space_id: [u8; 32],
     keys: &DataKeyring,
-    records: Vec<StoredChatOperation>,
+    records: &[StoredChatOperation],
 ) -> Result<Option<StoredChatCheckpoint>, ChatError> {
-    let mut decoded = records
-        .into_iter()
-        .map(|record| {
-            let operation = *record.operation.hash.as_bytes();
-            let signed_parents = record.operation.header.extensions.parents.clone();
-            let (checkpoint, envelope) = decode_checkpoint_operation(keys, &record.operation)?;
-            Ok((operation, signed_parents, checkpoint, envelope))
-        })
-        .collect::<Result<Vec<_>, ChatError>>()?;
-    let mut current: Option<StoredChatCheckpoint> = None;
-    while !decoded.is_empty() {
-        let expected_previous = current.as_ref().map(|stored| stored.operation);
-        let matches: Vec<_> = decoded
-            .iter()
-            .enumerate()
-            .filter_map(|(index, (_, _, checkpoint, _))| {
-                (checkpoint.previous_checkpoint == expected_previous).then_some(index)
-            })
-            .collect();
-        if matches.len() != 1 {
+    let mut successors = BTreeMap::new();
+    for record in records {
+        let link = checkpoint_link(&record.operation)?;
+        if successors
+            .insert(link.previous, &record.operation)
+            .is_some()
+        {
             return Err(ChatError::Checkpoint(
                 "checkpoint history is forked or missing a predecessor".into(),
             ));
         }
-        let (operation, signed_parents, checkpoint, envelope) = decoded.remove(matches[0]);
-        validate_retained_checkpoint(
-            space_id,
-            current.as_ref(),
-            &envelope,
-            &signed_parents,
-            &checkpoint,
-        )
-        .map_err(ChatError::Checkpoint)?;
-        current = Some(StoredChatCheckpoint {
-            operation,
-            checkpoint,
-        });
     }
-    Ok(current)
+    let mut tip: Option<&Operation<ChatExt>> = None;
+    while let Some(next) = successors.remove(&tip.map(|operation| *operation.hash.as_bytes())) {
+        tip = Some(next);
+    }
+    if !successors.is_empty() {
+        return Err(ChatError::Checkpoint(
+            "checkpoint history is forked or missing a predecessor".into(),
+        ));
+    }
+    let Some(operation) = tip else {
+        return Ok(None);
+    };
+    let (checkpoint, envelope) = decode_checkpoint_operation(keys, operation)?;
+    validate_checkpoint_body(
+        space_id,
+        operation,
+        checkpoint_link(operation)?,
+        &envelope,
+        &checkpoint,
+    )
+    .map_err(ChatError::Checkpoint)?;
+    Ok(Some(StoredChatCheckpoint {
+        operation: *operation.hash.as_bytes(),
+        checkpoint,
+    }))
 }
 
 /// Classify one decrypted record against the caller's converged authority.
@@ -1547,172 +1539,200 @@ fn classify_record(
     )
 }
 
-fn project_records<A: CommonsAuthority>(
+/// One checkpoint's covered records, by operation.
+#[derive(Default)]
+struct CheckpointIndex<'a> {
+    authors: BTreeMap<[u8; 32], [u8; 32]>,
+    messages: BTreeMap<[u8; 32], &'a AuthoredMessage>,
+    deleted: BTreeMap<[u8; 32], &'a DeletedMessage>,
+    channels: BTreeMap<[u8; 32], &'a ChatChannelWrite>,
+}
+
+impl<'a> CheckpointIndex<'a> {
+    fn new(checkpoint: Option<&'a ChatCheckpoint>) -> Self {
+        let Some(checkpoint) = checkpoint else {
+            return Self::default();
+        };
+        let snapshot = &checkpoint.snapshot;
+        Self {
+            authors: snapshot
+                .covered
+                .iter()
+                .flat_map(|covered| {
+                    covered
+                        .operations
+                        .iter()
+                        .map(|operation| (*operation, covered.author))
+                })
+                .collect(),
+            messages: snapshot
+                .messages
+                .iter()
+                .map(|message| (message.operation, message))
+                .collect(),
+            deleted: snapshot
+                .deleted_messages
+                .iter()
+                .map(|deleted| (deleted.deletion, deleted))
+                .collect(),
+            channels: snapshot
+                .channel_writes
+                .iter()
+                .map(|write| (write.operation, write))
+                .collect(),
+        }
+    }
+}
+
+/// A chat fold plus what a checkpoint over the same records commits.
+struct ChatFold {
+    projection: ChatProjection,
+    /// Causal order, as indices into the folded records.
+    order: Vec<usize>,
+    /// Stable author of each ordered record.
+    authors: Vec<[u8; 32]>,
+    /// Last write per channel id and author.
+    channel_writes: BTreeMap<(String, [u8; 32]), ChatChannelWrite>,
+}
+
+/// Fold in causal order over every retained header, exactly as a full replay
+/// would. Records the checkpoint covers come from its author index and
+/// snapshot; only the rest are decrypted.
+fn fold_chat<A: CommonsAuthority>(
     keys: &DataKeyring,
     space_id: [u8; 32],
     records: &[StoredChatOperation],
+    checkpoint: Option<&ChatCheckpoint>,
     authority: &A,
-) -> Result<ChatProjection, ChatError> {
+) -> Result<ChatFold, ChatError> {
+    let covered = CheckpointIndex::new(checkpoint);
     let causal = causal_projection(&causal_entries(records))?;
     let capability = chat_write_capability(space_id);
     let mut channels = BTreeMap::new();
-    let mut messages = Vec::new();
-    let mut deleted_messages = Vec::new();
-    let mut pending_authority = Vec::new();
-    let mut revoked = Vec::new();
-    for index in causal.order {
+    let mut projection = ChatProjection::default();
+    let mut authors = Vec::with_capacity(causal.order.len());
+    let mut channel_writes = BTreeMap::new();
+    for &index in &causal.order {
         let operation = &records[index].operation;
-        let (event, author) = decode_event_record(keys, operation)?;
+        let id = *operation.hash.as_bytes();
+        let (author, event) = match covered.authors.get(&id) {
+            Some(author) => (*author, None),
+            None => {
+                let (event, author) = decode_event_record(keys, operation)?;
+                (author, Some(event))
+            },
+        };
+        authors.push(author);
+        let write = match &event {
+            Some(ChatEvent::Channel(channel)) => Some(ChatChannelWrite {
+                operation: id,
+                author,
+                channel: channel.clone(),
+            }),
+            Some(_) => None,
+            // Absent when the same author overwrote it before the checkpoint.
+            None => covered.channels.get(&id).map(|write| (*write).clone()),
+        };
+        if let Some(write) = &write {
+            channel_writes.insert((write.channel.id.clone(), author), write.clone());
+        }
         let (state, classified) = classify_record(authority, &capability, operation, author);
         match state {
             AuthorityState::Pending => {
-                pending_authority.push(classified);
+                projection.pending_authority.push(classified);
                 continue;
             },
             AuthorityState::Revoked => {
-                revoked.push(classified);
+                projection.revoked.push(classified);
                 continue;
             },
             AuthorityState::Effective => {},
         }
-        apply_event(
-            &mut channels,
-            &mut messages,
-            &mut deleted_messages,
-            operation,
-            author,
-            event,
-        )?;
+        match event {
+            Some(event) => apply_event(
+                &mut channels,
+                &mut projection.messages,
+                &mut projection.deleted_messages,
+                operation,
+                author,
+                event,
+            )?,
+            // A covered message arrives with its covered edits already applied.
+            None => {
+                if let Some(write) = write {
+                    channels.insert(write.channel.id.clone(), write.channel);
+                }
+                if let Some(message) = covered.messages.get(&id) {
+                    projection.messages.push((*message).clone());
+                }
+                if let Some(deleted) = covered.deleted.get(&id) {
+                    projection.deleted_messages.push((*deleted).clone());
+                }
+            },
+        }
     }
-    Ok(ChatProjection {
-        channels: channels.into_values().collect(),
-        messages,
-        deleted_messages,
-        pending: causal.pending,
-        pending_authority,
-        revoked,
+    projection.channels = channels.into_values().collect();
+    projection.pending = causal.pending;
+    Ok(ChatFold {
+        projection,
+        order: causal.order,
+        authors,
+        channel_writes,
     })
 }
 
-/// Fold the retained tail onto a checkpoint-committed prefix.
-///
-/// Authority filtering reaches the tail only. The prefix was sealed under the
-/// checkpoint's own `authority_revision`, so a capability withdrawn afterwards
-/// does not retract content this checkpoint already committed. Callers that
-/// need withdrawal to apply to the whole history must fold from
-/// [`ChatReplica::projection_with_authority`] instead.
-fn project_checkpoint_tail<A: CommonsAuthority>(
+/// What a checkpoint over `records` commits, folded onto `previous`.
+struct CheckpointContent {
+    causal_frontier: Vec<[u8; 32]>,
+    author_frontiers: Vec<ChatAuthorFrontier>,
+    snapshot: ChatCheckpointSnapshot,
+    pending: Vec<PendingCausalOperation>,
+}
+
+fn checkpoint_content(
     keys: &DataKeyring,
     space_id: [u8; 32],
-    checkpoint: &ChatCheckpoint,
     records: &[StoredChatOperation],
-    authority: &A,
-) -> Result<ChatProjection, ChatError> {
-    let tail_records = records_after_checkpoint(checkpoint, records);
-    let checkpoint_dependencies: BTreeSet<_> = checkpoint
-        .causal_frontier
-        .iter()
-        .copied()
-        .chain(
-            checkpoint
-                .author_frontiers
-                .iter()
-                .map(|frontier| frontier.operation),
-        )
-        .collect();
-    let tail_entries: Vec<_> = tail_records
-        .iter()
-        .map(|record| {
-            let mut entry = CausalEntry::from_operation(
-                &record.operation,
-                record.log_id,
-                record
-                    .operation
-                    .header
-                    .extensions
-                    .parents
-                    .iter()
-                    .copied()
-                    .filter(|parent| !checkpoint_dependencies.contains(parent))
-                    .collect(),
-            );
-            if entry
-                .backlink
-                .is_some_and(|backlink| checkpoint_dependencies.contains(&backlink))
-            {
-                entry.backlink = None;
-            }
-            entry
-        })
-        .collect();
-    let causal = causal_projection(&tail_entries)?;
-    let mut channels: BTreeMap<_, _> = checkpoint
-        .snapshot
-        .channels
-        .iter()
-        .cloned()
-        .map(|channel| (channel.id.clone(), channel))
-        .collect();
-    let mut messages = checkpoint.snapshot.messages.clone();
-    let mut deleted_messages = checkpoint.snapshot.deleted_messages.clone();
-    let capability = chat_write_capability(space_id);
-    let mut pending_authority = Vec::new();
-    let mut revoked = Vec::new();
-    for index in causal.order {
-        let operation = &tail_records[index].operation;
-        let (event, author) = decode_event_record(keys, operation)?;
-        let (state, classified) = classify_record(authority, &capability, operation, author);
-        match state {
-            AuthorityState::Pending => {
-                pending_authority.push(classified);
-                continue;
-            },
-            AuthorityState::Revoked => {
-                revoked.push(classified);
-                continue;
-            },
-            AuthorityState::Effective => {},
-        }
-        apply_event(
-            &mut channels,
-            &mut messages,
-            &mut deleted_messages,
-            operation,
-            author,
-            event,
-        )?;
-    }
-    Ok(ChatProjection {
-        channels: channels.into_values().collect(),
-        messages,
-        deleted_messages,
-        pending: causal.pending,
-        pending_authority,
-        revoked,
-    })
-}
-
-fn records_after_checkpoint<'a>(
-    checkpoint: &ChatCheckpoint,
-    records: &'a [StoredChatOperation],
-) -> Vec<&'a StoredChatOperation> {
-    let author_frontiers: BTreeMap<_, _> = checkpoint
-        .author_frontiers
-        .iter()
-        .map(|frontier| (frontier.author, frontier))
-        .collect();
-    let mut tail_records = Vec::new();
-    for record in records {
-        let author = *record.operation.header.verifying_key.as_bytes();
+    previous: Option<&ChatCheckpoint>,
+) -> Result<CheckpointContent, ChatError> {
+    let fold = fold_chat(keys, space_id, records, previous, &AllowAllAuthority)?;
+    let effective = causal_entries(fold.order.iter().map(|index| &records[*index]));
+    let mut causal_frontier = observed_frontier(&effective)?;
+    causal_frontier.sort_unstable();
+    let mut author_frontiers = BTreeMap::<[u8; 32], ChatAuthorFrontier>::new();
+    let mut covered = BTreeMap::<[u8; 32], Vec<[u8; 32]>>::new();
+    for (entry, author) in effective.iter().zip(&fold.authors) {
         if author_frontiers
-            .get(&author)
-            .is_some_and(|frontier| record.operation.header.seq_num <= frontier.seq_num)
+            .get(&entry.author)
+            .is_none_or(|current| current.seq_num < entry.seq_num)
         {
-            continue;
+            author_frontiers.insert(
+                entry.author,
+                ChatAuthorFrontier {
+                    author: entry.author,
+                    seq_num: entry.seq_num,
+                    operation: entry.operation,
+                },
+            );
         }
-        tail_records.push(record);
+        covered.entry(*author).or_default().push(entry.operation);
     }
-    tail_records
+    let projection = fold.projection;
+    Ok(CheckpointContent {
+        causal_frontier,
+        author_frontiers: author_frontiers.into_values().collect(),
+        snapshot: ChatCheckpointSnapshot {
+            channels: projection.channels,
+            messages: projection.messages,
+            deleted_messages: projection.deleted_messages,
+            covered: covered
+                .into_iter()
+                .map(|(author, operations)| ChatCoveredAuthor { author, operations })
+                .collect(),
+            channel_writes: fold.channel_writes.into_values().collect(),
+        },
+        pending: projection.pending,
+    })
 }
 
 fn apply_event(
@@ -1864,6 +1884,17 @@ mod tests {
     const MOOT: [u8; 32] = [0x6d; 32];
     const ROOT_GRANT: [u8; 32] = [0x67; 32];
 
+    /// Every retained record decrypted and no checkpoint consulted: the
+    /// reference a checkpoint-rooted projection must reproduce.
+    async fn full_replay<B: Backend + Clone>(
+        replica: &ChatReplica<B>,
+        authority: &impl CommonsAuthority,
+    ) -> Result<ChatProjection, ChatError> {
+        let records = replica.load_data_operations().await?;
+        let keys = replica.keys.current();
+        Ok(fold_chat(&keys, replica.space_id, &records, None, authority)?.projection)
+    }
+
     fn paired_keys() -> (DataKeyring, DataKeyring) {
         let rng = p2panda_encryption::Rng::default();
         let mut alice = DataKeyring::new();
@@ -1892,6 +1923,28 @@ mod tests {
         seq_num: u32,
         backlink: Option<[u8; 32]>,
     ) -> Operation<ChatExt> {
+        let link = ChatCheckpointLink {
+            version: CHAT_CHECKPOINT_VERSION,
+            previous: checkpoint.previous_checkpoint,
+        };
+        linked_checkpoint_operation(
+            replica,
+            checkpoint,
+            signing_seed,
+            seq_num,
+            backlink,
+            Some(link),
+        )
+    }
+
+    fn linked_checkpoint_operation(
+        replica: &ChatReplica<MemoryBackend>,
+        checkpoint: &ChatCheckpoint,
+        signing_seed: [u8; 32],
+        seq_num: u32,
+        backlink: Option<[u8; 32]>,
+        link: Option<ChatCheckpointLink>,
+    ) -> Operation<ChatExt> {
         let plaintext = encode_cbor(checkpoint).unwrap();
         let envelope = replica
             .keys
@@ -1914,6 +1967,7 @@ mod tests {
                     space_id: replica.space_id,
                     class: ChatClass::Checkpoint,
                     parents: checkpoint.causal_frontier.clone(),
+                    checkpoint: link,
                 },
             );
         Operation {
@@ -1953,6 +2007,7 @@ mod tests {
                     space_id: replica.space_id,
                     class: event.class(),
                     parents,
+                    checkpoint: None,
                 },
             );
         Operation {
@@ -1991,6 +2046,7 @@ mod tests {
                     space_id: replica.space_id,
                     class: record.payload.class(),
                     parents: Vec::new(),
+                    checkpoint: None,
                 },
             );
         Operation {
@@ -2484,8 +2540,9 @@ mod tests {
         ));
 
         replica.author_checkpoint().await.unwrap();
+        assert_eq!(replica.projection().await.unwrap(), projection);
         assert_eq!(
-            replica.projection_from_checkpoint().await.unwrap(),
+            full_replay(&replica, &AllowAllAuthority).await.unwrap(),
             projection
         );
         let records = replica.load_data_operations().await.unwrap();
@@ -2585,8 +2642,8 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            replica.projection_from_checkpoint().await.unwrap(),
-            replica.projection().await.unwrap()
+            replica.projection().await.unwrap(),
+            full_replay(&replica, &AllowAllAuthority).await.unwrap()
         );
 
         let second = replica.author_checkpoint().await.unwrap();
@@ -2641,8 +2698,8 @@ mod tests {
         );
         replica.author_checkpoint().await.unwrap();
         assert_eq!(
-            replica.projection_from_checkpoint().await.unwrap(),
-            replica.projection().await.unwrap()
+            replica.projection().await.unwrap(),
+            full_replay(&replica, &AllowAllAuthority).await.unwrap()
         );
         let proposal = replica.epoch_pruning_proposal(&[]).await.unwrap();
         assert!(proposal.is_executable());
@@ -2697,46 +2754,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn authorized_execution_is_atomic_revalidated_and_reopens() {
+    async fn host_pruning_reopens_from_the_persisted_session() {
+        use crate::keys::test_group::{Group, keyring};
+
         let seed = [0xa1; 32];
         let directory = tempfile::tempdir().unwrap();
         let backend = RedbBackend::open(directory.path().join("commons.redb")).unwrap();
-        let mut keys = DataKeyring::new();
-        let mut epochs = Vec::new();
-        for _ in 0..10 {
-            epochs.push(
-                keys.rotate(&p2panda_encryption::Rng::default())
-                    .unwrap()
-                    .id(),
-            );
-        }
+        let mut group = Group::found();
+        let keys = GroupKeys::new(keyring(&group.a));
         let authority = checkpoint_authority(seed, b"commons authority 1");
-        let mut replica = ChatReplica::new(backend.clone(), SPACE, seed, keys);
+        let mut replica = ChatReplica::new(backend.clone(), SPACE, seed, keys.clone());
         replica.set_checkpoint_authority(authority.clone());
+        replica
+            .author(message("sealed before rotation", 1))
+            .await
+            .unwrap();
+        for _ in 0..9 {
+            group.rotate();
+        }
+        keys.replace(keyring(&group.a));
+        let epochs = keys.current().epochs_oldest_first().unwrap().to_vec();
         replica.author_checkpoint().await.unwrap();
-
-        let stale = replica.epoch_pruning_proposal(&[]).await.unwrap();
         replica.author_checkpoint().await.unwrap();
-        assert!(matches!(
-            replica.execute_epoch_pruning(&stale, &[]).await,
-            Err(ChatError::StaleRetentionProposal)
-        ));
-        assert!(replica.epoch_execution_receipt().await.unwrap().is_none());
-        assert_eq!(replica.keys.current().epoch_count(), 10);
+        let before = replica.projection().await.unwrap();
 
-        let reviewed = replica.epoch_pruning_proposal(&[]).await.unwrap();
-        let receipt = replica.execute_epoch_pruning(&reviewed, &[]).await.unwrap();
-        assert_eq!(receipt.forgotten, epochs[..2]);
-        assert_eq!(receipt.retained, epochs[2..]);
-        assert_eq!(replica.keys.current().epoch_count(), 8);
-        assert_eq!(
-            replica.epoch_execution_receipt().await.unwrap(),
-            Some(receipt.clone())
+        let release = crate::pruning::host::apply(
+            &mut group.a,
+            &keys,
+            &[replica.epoch_report(&[]).await.unwrap()],
         );
+        assert_eq!(release.release, epochs[..2]);
+        assert_eq!(group.a.epoch_count(), 8);
+        assert_eq!(keys.current().epochs_oldest_first().unwrap(), &epochs[2..]);
 
-        let mut reopened = ChatReplica::new(backend, SPACE, seed, DataKeyring::new());
+        // Reopen from the persisted session, not from anything chat stored.
+        let session = stickleback::GroupSession::from_bytes(&group.a.to_bytes().unwrap()).unwrap();
+        let reopened_keys = GroupKeys::from_bytes(&session.data_keyring_state().unwrap()).unwrap();
+        let mut reopened = ChatReplica::new(backend, SPACE, seed, reopened_keys);
         reopened.set_checkpoint_authority(authority);
-        assert!(reopened.restore_persisted_keyring().await.unwrap());
         assert_eq!(
             reopened.keys.current().epochs_oldest_first().unwrap(),
             &epochs[2..]
@@ -2751,10 +2806,14 @@ mod tests {
                 checkpoint: Some(_)
             }
         ));
-        assert_eq!(
-            reopened.projection_from_checkpoint().await.unwrap(),
-            reopened.projection().await.unwrap()
+        assert!(
+            matches!(
+                full_replay(&reopened, &AllowAllAuthority).await,
+                Err(ChatError::Crypto(GroupCryptoError::UnknownEpoch(_)))
+            ),
+            "positive control: the message's epoch is gone"
         );
+        assert_eq!(reopened.projection().await.unwrap(), before);
     }
 
     #[tokio::test]
@@ -2965,6 +3024,252 @@ mod tests {
             stale.projection().await.unwrap(),
             b.projection().await.unwrap()
         );
+    }
+
+    fn message(body: &str, sent_at_ms: u64) -> ChatEvent {
+        ChatEvent::Message(Message {
+            channel: "general".into(),
+            body: body.into(),
+            sent_at_ms,
+            reply_to: None,
+        })
+    }
+
+    /// The host path with chat as the only lane on the handle.
+    async fn host_prune(
+        session: &mut stickleback::GroupSession,
+        keys: &GroupKeys,
+        chat: &ChatReplica<MemoryBackend>,
+    ) -> Vec<GroupSecretId> {
+        let report = chat.epoch_report(&[]).await.unwrap();
+        crate::pruning::host::apply(session, keys, &[report]).release
+    }
+
+    #[tokio::test]
+    async fn host_pruning_a_checkpoint_covered_epoch_keeps_chat_working() {
+        use crate::keys::test_group::{Group, keyring};
+
+        let mut group = Group::found();
+        let a_keys = GroupKeys::new(keyring(&group.a));
+        let b_keys = GroupKeys::new(keyring(&group.b));
+        let a_seed = [0xa1; 32];
+        let mut a = ChatReplica::in_memory(SPACE, a_seed, a_keys.clone());
+        a.set_checkpoint_authority(checkpoint_authority(a_seed, b"pruning authority"));
+        let mut b = ChatReplica::in_memory(SPACE, [0xb2; 32], b_keys.clone());
+
+        let early = a.author(message("founding epoch", 1)).await.unwrap();
+        let founding = encrypted_body(&early).unwrap().epoch;
+        assert!(b.accept(&early).await.unwrap());
+        for _ in 0..9 {
+            group.rotate();
+        }
+        a_keys.replace(keyring(&group.a));
+        b_keys.replace(keyring(&group.b));
+        a.author_checkpoint().await.unwrap();
+        let before = a.projection().await.unwrap();
+
+        let released = host_prune(&mut group.a, &a_keys, &a).await;
+        assert!(released.contains(&founding), "{released:?}");
+        assert!(!a_keys.current().contains(&founding));
+
+        assert_eq!(a.projection().await.unwrap(), before);
+        let peer = b.author(message("from the peer", 2)).await.unwrap();
+        assert!(a.accept(&peer).await.unwrap());
+        a.author(message("after pruning", 3)).await.unwrap();
+        assert_eq!(
+            bodies(&a.projection().await.unwrap()),
+            ["founding epoch", "from the peer", "after pruning"]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_latest_checkpoint_is_found_after_an_older_checkpoint_epoch_is_released() {
+        use crate::keys::test_group::{Group, keyring};
+
+        let mut group = Group::found();
+        let keys = GroupKeys::new(keyring(&group.a));
+        let seed = [0xa1; 32];
+        let mut a = ChatReplica::in_memory(SPACE, seed, keys.clone());
+        a.set_checkpoint_authority(checkpoint_authority(seed, b"pruning authority"));
+        a.author(message("founding epoch", 1)).await.unwrap();
+        let first = a.author_checkpoint().await.unwrap();
+        let first_epoch = encrypted_body(&first).unwrap().epoch;
+        for _ in 0..9 {
+            group.rotate();
+        }
+        keys.replace(keyring(&group.a));
+        let second = a.author_checkpoint().await.unwrap();
+
+        let released = host_prune(&mut group.a, &keys, &a).await;
+        assert!(released.contains(&first_epoch), "{released:?}");
+        assert!(
+            matches!(
+                decode_checkpoint_operation(&keys.current(), &first),
+                Err(ChatError::Crypto(GroupCryptoError::UnknownEpoch(_)))
+            ),
+            "positive control: the older checkpoint is unreadable"
+        );
+        let latest = a.latest_checkpoint().await.unwrap().unwrap();
+        assert_eq!(latest.operation, *second.hash.as_bytes());
+        assert_eq!(
+            latest.checkpoint.previous_checkpoint,
+            Some(*first.hash.as_bytes())
+        );
+        let third = a.author_checkpoint().await.unwrap();
+        assert_eq!(
+            a.latest_checkpoint().await.unwrap().unwrap().operation,
+            *third.hash.as_bytes()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_writer_revoked_after_a_checkpoint_loses_covered_records_before_and_after_pruning() {
+        use crate::keys::test_group::{Group, keyring};
+
+        let founder = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let subject = writer.master_public_key().to_bytes();
+        let mut group = Group::found();
+        let keys = GroupKeys::new(keyring(&group.a));
+        let mut f = ChatReplica::in_memory_for_identity(SPACE, &founder, keys.clone()).unwrap();
+        f.set_checkpoint_authority(ChatCheckpointAuthority::new(
+            Digest::blake3(b"revocation checkpoint"),
+            [founder.master_public_key().to_bytes()],
+        ));
+        let mut w = ChatReplica::in_memory_for_identity(SPACE, &writer, keyring(&group.b)).unwrap();
+        let hall = |title: &str| {
+            ChatEvent::Channel(Channel {
+                id: "hall".into(),
+                title: title.into(),
+            })
+        };
+        let founded = f.author(hall("Hall")).await.unwrap();
+        assert!(w.accept(&founded).await.unwrap());
+        let renamed = w.author(hall("Writer's hall")).await.unwrap();
+        let written = w.author(message("covered", 1)).await.unwrap();
+        for operation in [&renamed, &written] {
+            assert!(f.accept(operation).await.unwrap());
+        }
+        for _ in 0..9 {
+            group.rotate();
+        }
+        keys.replace(keyring(&group.a));
+        f.author_checkpoint().await.unwrap();
+
+        let (granted, granted_rules) = chat_authority_fixture(&founder, subject, false);
+        let (withdrawn, withdrawn_rules) = chat_authority_fixture(&founder, subject, true);
+        let granted = gemot_view(&granted, &granted_rules);
+        let withdrawn = gemot_view(&withdrawn, &withdrawn_rules);
+        let check = |effective: &ChatProjection, filtered: &ChatProjection| {
+            assert_eq!(bodies(effective), ["covered"]);
+            assert_eq!(effective.channels[0].title, "Writer's hall");
+            assert!(
+                filtered.messages.is_empty(),
+                "revoked content must not project"
+            );
+            assert_eq!(
+                filtered.channels[0].title, "Hall",
+                "the founder's write returns"
+            );
+            let revoked: BTreeSet<_> = filtered.revoked.iter().map(|op| op.operation).collect();
+            assert_eq!(
+                revoked,
+                BTreeSet::from([*renamed.hash.as_bytes(), *written.hash.as_bytes()])
+            );
+            assert!(filtered.revoked.iter().all(|op| op.subject == subject));
+        };
+
+        let effective = f.projection_with_authority(&granted).await.unwrap();
+        let filtered = f.projection_with_authority(&withdrawn).await.unwrap();
+        check(&effective, &filtered);
+        assert_eq!(effective, full_replay(&f, &granted).await.unwrap());
+        assert_eq!(filtered, full_replay(&f, &withdrawn).await.unwrap());
+
+        host_prune(&mut group.a, &keys, &f).await;
+        assert!(
+            matches!(
+                full_replay(&f, &withdrawn).await,
+                Err(ChatError::Crypto(GroupCryptoError::UnknownEpoch(_)))
+            ),
+            "positive control: the covered records are no longer readable"
+        );
+        assert_eq!(
+            f.projection_with_authority(&granted).await.unwrap(),
+            effective
+        );
+        assert_eq!(
+            f.projection_with_authority(&withdrawn).await.unwrap(),
+            filtered
+        );
+    }
+
+    #[tokio::test]
+    async fn a_concurrent_record_after_a_checkpoint_folds_in_full_replay_order() {
+        let key = |seed: [u8; 32]| *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let (low, high) = if key([0x11; 32]) < key([0x22; 32]) {
+            ([0x11; 32], [0x22; 32])
+        } else {
+            ([0x22; 32], [0x11; 32])
+        };
+        let (high_keys, low_keys) = paired_keys();
+        let mut committed = ChatReplica::in_memory(SPACE, high, high_keys);
+        committed.set_checkpoint_authority(checkpoint_authority(high, b"order authority"));
+        let mut concurrent = ChatReplica::in_memory(SPACE, low, low_keys);
+        committed.author(message("committed", 1)).await.unwrap();
+        committed.author_checkpoint().await.unwrap();
+        let late = concurrent.author(message("late", 2)).await.unwrap();
+        assert!(committed.accept(&late).await.unwrap());
+
+        // The lower key orders first between concurrent records, checkpoint or not.
+        let projection = committed.projection().await.unwrap();
+        assert_eq!(bodies(&projection), ["late", "committed"]);
+        assert_eq!(
+            projection,
+            full_replay(&committed, &AllowAllAuthority).await.unwrap()
+        );
+    }
+
+    /// Stores any chat record unchecked, standing in for an older store.
+    struct UncheckedChat;
+
+    impl OperationPolicy<ChatExt> for UncheckedChat {
+        type LogId = u64;
+
+        fn admit(&self, operation: &Operation<ChatExt>) -> Result<Admission<u64>, Reject> {
+            let log = match operation.header.extensions.class {
+                ChatClass::Checkpoint => CHAT_CHECKPOINT_LOG,
+                _ => CHAT_LOG,
+            };
+            Ok(Admission::keep(StoreTarget::new(Topic::from(SPACE), log)))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_version_one_checkpoint_is_refused_by_name() {
+        let seed = [0xa1; 32];
+        let (keys, _) = paired_keys();
+        let mut replica = ChatReplica::in_memory(SPACE, seed, keys);
+        replica.set_checkpoint_authority(checkpoint_authority(seed, b"commons authority 1"));
+        replica.author(message("before", 1)).await.unwrap();
+        let mut legacy = replica.build_checkpoint().await.unwrap();
+        legacy.version = 1;
+        let unlinked = linked_checkpoint_operation(&replica, &legacy, seed, 0, None, None);
+        assert!(matches!(
+            replica.accept(&unlinked).await,
+            Err(ChatError::Process(ProcessError::Rejected(reject)))
+                if reject.code == "unsupported-chat-checkpoint-version"
+        ));
+        assert!(replica.latest_checkpoint().await.unwrap().is_none());
+
+        // One already retained is refused by name on read.
+        OperationProcessor::new(replica.sync_store(), UncheckedChat)
+            .process(&unlinked)
+            .await
+            .unwrap();
+        assert!(matches!(
+            replica.projection().await,
+            Err(ChatError::UnsupportedCheckpointVersion(1))
+        ));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

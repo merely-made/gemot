@@ -36,6 +36,7 @@ pub mod call;
 pub mod chat;
 pub mod encrypted;
 mod keys;
+pub mod pruning;
 
 pub use keys::GroupKeys;
 
@@ -335,20 +336,18 @@ async fn load_plaintext_records<B: Backend + Clone + Send + Sync + 'static>(
     load_records(store, container, |operation| Ok(from_operation(operation)?)).await
 }
 
-/// Every stored record for `container`, each decoded by the profile's `open`.
-async fn load_records<B, E, D>(
+/// Every stored operation for `container`, with its log id, undecoded.
+async fn load_operations<B, E>(
     store: &MunimentStore<B, E>,
     container: [u8; 32],
-    open: D,
-) -> Result<Vec<StoredRecord<E>>, MaterializeError>
+) -> Result<Vec<(Operation<E>, u64)>, MaterializeError>
 where
     B: Backend + Clone + Send + Sync + 'static,
     E: GraphHeader,
-    D: Fn(&Operation<E>) -> Result<CommonsRecord, MaterializeError>,
 {
     let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
         TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(container)).await?;
-    let mut records = Vec::new();
+    let mut operations = Vec::new();
     for (author, mut logs) in by_author {
         logs.sort_unstable();
         logs.dedup();
@@ -360,16 +359,35 @@ where
             // The tuple's second element is encoded header bytes, not the
             // payload. The signed record is reconstructed from `operation.body`.
             for (operation, _header_bytes) in entries {
-                let record = open(&operation)?;
-                records.push(StoredRecord {
-                    operation,
-                    record,
-                    log_id,
-                });
+                operations.push((operation, log_id));
             }
         }
     }
-    Ok(records)
+    Ok(operations)
+}
+
+/// Every stored record for `container`, each decoded by the profile's `open`.
+async fn load_records<B, E, D>(
+    store: &MunimentStore<B, E>,
+    container: [u8; 32],
+    open: D,
+) -> Result<Vec<StoredRecord<E>>, MaterializeError>
+where
+    B: Backend + Clone + Send + Sync + 'static,
+    E: GraphHeader,
+    D: Fn(&Operation<E>) -> Result<CommonsRecord, MaterializeError>,
+{
+    load_operations(store, container)
+        .await?
+        .into_iter()
+        .map(|(operation, log_id)| {
+            Ok(StoredRecord {
+                record: open(&operation)?,
+                operation,
+                log_id,
+            })
+        })
+        .collect()
 }
 
 fn causal_entries<E: GraphHeader>(records: &[StoredRecord<E>]) -> Vec<CausalEntry<u64>> {
