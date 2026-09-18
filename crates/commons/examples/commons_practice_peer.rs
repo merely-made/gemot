@@ -29,6 +29,7 @@ use gemot::moot::delegation::{
     self, MootDelegationEvent, MootDelegationExt, MootDelegationFileStore,
 };
 use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
+use moot::coop;
 use muniment::RedbBackend;
 use p2panda_core::Topic;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -152,6 +153,18 @@ impl Lifecycle {
     /// revocation before it syncs.
     fn installed(self) -> bool {
         !matches!(self, Self::NotJoined | Self::Left)
+    }
+
+    /// This fixture's verdicts map one for one onto the coop contract's.
+    fn coop_verdict(self) -> coop::Verdict {
+        match self {
+            Self::NotJoined => coop::Verdict::NotJoined,
+            Self::Left => coop::Verdict::Left,
+            Self::Joined => coop::Verdict::Joined,
+            Self::Expired => coop::Verdict::Expired,
+            Self::Revoked => coop::Verdict::Revoked,
+            Self::NotAdmitted => coop::Verdict::NotAdmitted,
+        }
     }
 }
 
@@ -683,6 +696,92 @@ impl Peer {
         }))
     }
 
+    /// The revocation this peer's own certificate retained, when its
+    /// delegation was withdrawn. `by` and `at_ms` come from the signed
+    /// revocation statement carried on the delegation lane, not the local
+    /// clock, so they name the issuer and time it was authored.
+    async fn own_revocation(
+        &self,
+        authority: &AuthorityState,
+        now_ms: u64,
+    ) -> Result<Option<coop::Revocation>, String> {
+        let certificate_id = authority
+            .delegations
+            .projections(MOOT, &authority.rules, now_ms)
+            .into_iter()
+            .find(|grant| grant.subject == self.root && grant.directly_revoked)
+            .map(|grant| grant.certificate);
+        let Some(certificate_id) = certificate_id else {
+            return Ok(None);
+        };
+        for operation in self
+            .lane
+            .operations()
+            .await
+            .map_err(|error| error.to_string())?
+        {
+            if let Ok(MootDelegationEvent::Revoked(signed)) = delegation::from_operation(&operation)
+                && signed.revocation.certificate == certificate_id
+            {
+                return Ok(Some(coop::Revocation {
+                    by: Some(signed.revocation.issuer),
+                    at_ms: Some(signed.revocation.at_ms),
+                }));
+            }
+        }
+        Ok(None)
+    }
+
+    /// This peer's coop lifecycle contract report (K2), built from the same
+    /// authority evaluation `status` already performs. One grant is this
+    /// fixture's whole authority and its records are plaintext, so reading
+    /// only ever answers `Continues` (once revoked) or `Unknown` otherwise.
+    async fn contract_report(
+        &self,
+        authority: Option<&AuthorityState>,
+        lifecycle: Lifecycle,
+        now_ms: u64,
+    ) -> Result<coop::LifecycleReport, String> {
+        let verdict = lifecycle.coop_verdict();
+        let reason =
+            (lifecycle != Lifecycle::Joined).then(|| refusal(authority, lifecycle, self.root, now_ms));
+        let membership = authority.map(|authority| coop::Membership {
+            members: authority.delegations.certificate_count() as u32,
+            access: coop::Access::Write,
+        });
+        let own_expiry = authority.and_then(|authority| {
+            authority
+                .delegations
+                .projections(MOOT, &authority.rules, now_ms)
+                .into_iter()
+                .filter(|grant| grant.subject == self.root)
+                .filter_map(|grant| grant.expires_at_ms)
+                .max()
+        });
+        let grant = authority.map(|_| coop::Grant {
+            expires_at_ms: own_expiry,
+            expired_at_ms: own_expiry.filter(|&expires| now_ms > expires),
+        });
+        let revocation = match authority {
+            Some(authority) => self.own_revocation(authority, now_ms).await?,
+            None => None,
+        };
+        let reading = if verdict == coop::Verdict::Revoked {
+            coop::Reading::Continues
+        } else {
+            coop::Reading::Unknown
+        };
+        let mut report = coop::LifecycleReport::new(verdict, reason, now_ms);
+        report.membership = membership;
+        report.grant = grant;
+        report.revocation = revocation;
+        report.reading = reading;
+        report
+            .check_invariants()
+            .map_err(|mismatch| format!("coop contract report invariant: {mismatch}"))?;
+        Ok(report)
+    }
+
     async fn status(&self) -> Result<Value, String> {
         let retained = self.operation_records().await?;
         let (authority, lifecycle, now_ms) = self.standing().await?;
@@ -773,6 +872,9 @@ impl Peer {
                     .collect()
             })
             .unwrap_or_default();
+        let contract = self
+            .contract_report(authority.as_ref(), lifecycle, now_ms)
+            .await?;
         Ok(json!({
             "ok": true,
             "role": self.role.name(),
@@ -783,6 +885,7 @@ impl Peer {
             "lifecycle": lifecycle.name(),
             "lifecycle_reason": (lifecycle != Lifecycle::Joined)
                 .then(|| refusal(authority.as_ref(), lifecycle, self.root, now_ms)),
+            "contract": contract,
             "retained_count": retained.len(),
             "retained_delegation_count": self.lane_count().await?,
             "revoked_members": revoked_members,
@@ -945,6 +1048,229 @@ async fn check_revocation(store: &Path, container: [u8; 32]) -> Result<bool, Str
             }))
 }
 
+/// Drives the coop lifecycle contract's conformance harness (K2) against a
+/// founder store and a member store under one temp dir, exchanging records
+/// in-process the way `check_revocation` above already does by hand.
+///
+/// [`coop::LifecycleDriver`] is a sync trait; each method blocks on this
+/// driver's own dedicated runtime rather than the ambient one, so the driver
+/// must run on a plain OS thread with no Tokio context already on it (see
+/// `check_contract_conformance`).
+struct ContractDriver {
+    runtime: tokio::runtime::Runtime,
+    root: PathBuf,
+    container: [u8; 32],
+    founder: Peer,
+    member: Option<Peer>,
+    invitation: Option<Invitation>,
+    /// The last record this driver imported into the member, for
+    /// `replay_duplicate` to redeliver.
+    last_operation_hex: Option<String>,
+}
+
+impl ContractDriver {
+    fn open(root: &Path, container: [u8; 32]) -> Result<Self, String> {
+        let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+        let founder = Peer::open(Role::Founder, &root.join("founder"), container)?;
+        let member = Peer::open(Role::Member, &root.join("member"), container)?;
+        Ok(Self {
+            runtime,
+            root: root.to_path_buf(),
+            container,
+            founder,
+            member: Some(member),
+            invitation: None,
+            last_operation_hex: None,
+        })
+    }
+}
+
+impl coop::LifecycleDriver for ContractDriver {
+    fn invite_wrong_target(&mut self) -> Result<(), String> {
+        let member = self
+            .member
+            .as_ref()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime.block_on(async {
+            // Another space's envelope, never written to disk: `require_joined`
+            // refuses it on the container binding alone.
+            let envelope = fixture_envelope([0xee; 32])?;
+            member.require_joined(&envelope).await
+        })
+    }
+
+    fn invite(&mut self) -> Result<(), String> {
+        let founder = &mut self.founder;
+        let invitation = self.runtime.block_on(async {
+            let (value, _) = handle(founder, Request::Init).await?;
+            serde_json::from_value::<Invitation>(value["invitation"].clone())
+                .map_err(|error| error.to_string())
+        })?;
+        self.invitation = Some(invitation);
+        Ok(())
+    }
+
+    fn join(&mut self) -> Result<(), String> {
+        let invitation = self
+            .invitation
+            .clone()
+            .ok_or_else(|| "invite must run before join".to_string())?;
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime.block_on(async {
+            handle(member, Request::InstallAuthority { invitation })
+                .await
+                .map(|_| ())
+        })
+    }
+
+    fn report(&mut self) -> coop::LifecycleReport {
+        let fallback = |reason: &str| {
+            coop::LifecycleReport::new(coop::Verdict::NotJoined, Some(reason.to_owned()), 0)
+        };
+        let Some(member) = self.member.as_ref() else {
+            return fallback("member store not open");
+        };
+        self.runtime.block_on(async {
+            match member.status().await {
+                Ok(value) => match value.get("contract").cloned() {
+                    Some(contract) => serde_json::from_value(contract)
+                        .unwrap_or_else(|error| fallback(&format!("contract deserialize: {error}"))),
+                    None => fallback("status carried no contract field"),
+                },
+                Err(error) => fallback(&error),
+            }
+        })
+    }
+
+    fn leave(&mut self) -> Result<(), String> {
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime
+            .block_on(async { handle(member, Request::Leave).await.map(|_| ()) })
+    }
+
+    fn rejoin(&mut self) -> Result<(), String> {
+        let invitation = self
+            .invitation
+            .clone()
+            .ok_or_else(|| "no invitation to rejoin with".to_string())?;
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime.block_on(async {
+            handle(member, Request::InstallAuthority { invitation })
+                .await
+                .map(|_| ())
+        })
+    }
+
+    fn restart(&mut self) -> Result<(), String> {
+        // Drop the live member store and reopen it from the same directory,
+        // so the next reconnect really rechecks rather than restoring.
+        self.member = None;
+        self.member = Some(Peer::open(
+            Role::Member,
+            &self.root.join("member"),
+            self.container,
+        )?);
+        Ok(())
+    }
+
+    fn reconnect(&mut self) -> Result<(), String> {
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime
+            .block_on(async { handle(member, Request::Recheck).await.map(|_| ()) })
+    }
+
+    fn expire(&mut self) -> Result<(), String> {
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime.block_on(async {
+            handle(
+                member,
+                Request::AdvanceClock {
+                    now_ms: GRANT_EXPIRES_MS + 1,
+                },
+            )
+            .await
+            .map(|_| ())
+        })
+    }
+
+    fn revoke(&mut self) -> Result<(), String> {
+        let founder = &mut self.founder;
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        let mut last_operation_hex = None;
+        self.runtime.block_on(async {
+            handle(founder, Request::RevokeMember).await?;
+            let (exported, _) = handle(founder, Request::Export).await?;
+            for record in exported["operations"]
+                .as_array()
+                .ok_or("no exported operations")?
+            {
+                let encoded = record
+                    .as_str()
+                    .ok_or("exported operation is not hex")?
+                    .to_owned();
+                member.import(&encoded).await?;
+                last_operation_hex = Some(encoded);
+            }
+            Ok::<(), String>(())
+        })?;
+        self.last_operation_hex = last_operation_hex;
+        Ok(())
+    }
+
+    fn replay_duplicate(&mut self) -> Result<(), String> {
+        let encoded = self
+            .last_operation_hex
+            .clone()
+            .ok_or_else(|| "no operation to replay".to_string())?;
+        let member = self
+            .member
+            .as_mut()
+            .ok_or_else(|| "member store not open".to_string())?;
+        self.runtime
+            .block_on(async { member.import(&encoded).await.map(|_| ()) })
+    }
+}
+
+/// Run [`coop::conform`] against a fresh [`ContractDriver`] under the
+/// fixture's declared capabilities. `LifecycleDriver` blocks on its own
+/// runtime internally, which panics if any ambient Tokio context is already
+/// driving the calling thread — so the caller runs this on a blocking-pool
+/// thread (`tokio::task::spawn_blocking`), never directly on an async task.
+fn check_contract_conformance(store: PathBuf, container: [u8; 32]) -> Value {
+    let outcome = (|| {
+        let mut driver = ContractDriver::open(&store.join("self-check-contract"), container)?;
+        let capabilities = coop::Capabilities {
+            grant_is_all_authority: true,
+            cuts_reading_on_revoke: false,
+            receipts_duplicate_replay: true,
+            clock: coop::Clock::Fixed,
+        };
+        coop::conform(&mut driver, &capabilities).map_err(|failure| failure.to_string())
+    })();
+    match outcome {
+        Ok(conformance) => json!({ "ok": true, "conformance": conformance }),
+        Err(mismatch) => json!({ "ok": false, "mismatch": mismatch }),
+    }
+}
+
 async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> {
     if store.join("self-check-founder").exists() {
         return Err("self-check needs a fresh --store directory".into());
@@ -1006,6 +1332,12 @@ async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> 
         receiver.import(&foreign_record).await,
         "operation addresses another Commons container",
     );
+    let contract_conformance = {
+        let store = store.to_path_buf();
+        tokio::task::spawn_blocking(move || check_contract_conformance(store, container))
+            .await
+            .map_err(|error| error.to_string())?
+    };
     let mut checks = json!({
         "invitation_roundtrip_installed": invitation_roundtrip_installed,
         "tampered_grant_rejected": tampered_grant_rejected,
@@ -1019,11 +1351,15 @@ async fn self_check(store: &Path, container: [u8; 32]) -> Result<Value, String> 
             check_expiry(store, container, &invitation).await?,
         "revocation_refuses_recheck_and_withdraws_later_operation":
             check_revocation(store, container).await?,
+        "contract_conformance": contract_conformance["ok"].as_bool().unwrap_or(false),
     });
     let ok = checks
         .as_object()
         .is_some_and(|checks| checks.values().all(|value| value.as_bool() == Some(true)));
     checks["ok"] = json!(ok);
+    // Recorded beside the boolean checks, not folded into them: the ten-step
+    // walk itself, or the step whose verdict disagreed.
+    checks["contract_conformance_detail"] = contract_conformance;
     Ok(checks)
 }
 
