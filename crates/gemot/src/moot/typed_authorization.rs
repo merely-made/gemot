@@ -9,7 +9,7 @@
 //! trait, when the caller exists; this is that caller).
 //!
 //! Both tiers already speak personae's signed delegation certificates: the
-//! denizen tier through `servitor::DelegationTable`, the moot tier through
+//! participant tier through `servitor::DelegationTable`, the moot tier through
 //! [`MootDelegations`]. What they did NOT share until now is the capability
 //! vocabulary. [`MootGroup`]'s provider answers `capability_covers` from the
 //! member's access level and **ignores the request's path entirely**, so a
@@ -21,7 +21,7 @@
 //! parsed at boundaries, never compared inside a decision) and answered from
 //! the moot's delegation certificates through the same `power/...` /
 //! `scope/...` encoding servitor writes. A moot capability check and a
-//! denizen capability check are now the SAME question in the SAME vocabulary
+//! participant capability check are now the SAME question in the SAME vocabulary
 //! against the SAME certificate grammar; the two tiers differ only in where
 //! chains root (a constitution grant here, the profile identity there).
 //!
@@ -95,12 +95,12 @@ impl<M: MootAuthorizationProvider> MootAuthorizationProvider for TypedMootAuthor
 
 /// The moot's delegated authority as a **servitor** [`AuthorityProvider`].
 ///
-/// This is what makes "one gate for every denizen" true rather than aspirational:
+/// This is what makes "one gate for every participant" true rather than aspirational:
 /// a moot peer petitions a shared graph through the same `servitor::Gate` a
 /// resident script or wasm component uses, with the same projection guard,
 /// scope check, and attributed revision-checked commit. Only the AUTHORITY
 /// differs — chains root at a constitutional capability grant here, at the
-/// profile identity in turnstone's denizen table.
+/// profile identity in turnstone's participant table.
 ///
 /// **Mode mapping.** The moot vocabulary carries a single action today
 /// ([`MOOT_ACT_ACTION`](super::delegation::MOOT_ACT_ACTION)): holding it means
@@ -399,7 +399,7 @@ mod tests {
         let claimed = ScopePath::parse("shared").unwrap();
 
         // In scope: commits, attributed to the PEER — the same attributed
-        // revision-checked commit a denizen gets.
+        // revision-checked commit a participant gets.
         let revision = graph.revision();
         let committed = gate
             .petition(
@@ -455,7 +455,7 @@ mod tests {
     }
 
     /// Revoking the moot certificate stops the peer AT THE GATE — the moot
-    /// tier's revocation reaching the same petition path the denizen tier's
+    /// tier's revocation reaching the same petition path the participant tier's
     /// uninstall reaches.
     #[test]
     fn revoking_the_moot_certificate_stops_the_peer_at_the_gate() {
