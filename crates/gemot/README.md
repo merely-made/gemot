@@ -85,7 +85,7 @@ ids. `stickleback` for `MunimentStore`, `OperationProcessor`, `JoinedSpace`, and
 native drops. `muniment` (`redb`) for durable backing. `identity` (the
 `personae` package, renamed by the workspace alias) for keypairs, derived-key
 attestations, and delegation certificates. `mere-capability` for the shared
-typed vocabulary; `servitor` for the denizen-gate adapter. `mooting` for
+typed vocabulary; `servitor` for the participant-gate adapter. `mooting` for
 `RecognitionContext`, used by
 `MootRoster::recognition_context`. `proofs`, `serde`, `redb`, `thiserror`.
 
