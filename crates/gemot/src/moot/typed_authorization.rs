@@ -43,7 +43,7 @@
 //! raw [`MootDelegations::covers`]; there is no silent bridge between the
 //! vocabularies, because a silent bridge is the F1 ambiguity again.
 
-use capability::{Cap, Mode};
+use servitor::cap::{Cap, Mode};
 use servitor::{AuthorityProvider, Subject, cap_path};
 
 use super::constitution::ConstitutionRules;
@@ -142,7 +142,7 @@ mod tests {
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
     use mien::gate::StandingFacts;
-    use capability::ScopePath;
+    use servitor::cap::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{
         CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,

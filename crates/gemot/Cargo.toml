@@ -28,7 +28,6 @@ identity.workspace = true
 # algebra and
 # answers them from delegation certificates through the same power/scope
 # encoding the participant tier writes — one capability question, two tiers.
-capability.workspace = true
 servitor.workspace = true
 stickleback = { workspace = true }
 proofs.workspace = true
