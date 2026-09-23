@@ -38,6 +38,7 @@ p2panda-store = { version = "0.7.0", default-features = false }
 # Recognition policy remains in mooting. The generic store moved to
 # stickleback.
 mooting = { workspace = true }
+mien.workspace = true
 muniment = { workspace = true, features = ["redb"] }
 redb = "2"
 thiserror = "1"

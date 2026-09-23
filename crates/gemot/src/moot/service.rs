@@ -45,7 +45,7 @@ use super::records::{
     CollectionRef, CollectionView, ErasurePolicy, FaunaEntry, MootEvent, MootRetentionPolicy,
     MootRoster, MootStore, MootStoreError, PolicyRevision, collection_cap, fauna_cap,
 };
-use super::standing::{
+use mien::{
     DenyReason, GateDecision, StandingEvent, StandingExt, StandingFacts, StandingFileStore,
     StandingStore, StandingStoreError, authorize,
 };
@@ -1619,7 +1619,7 @@ mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-    use crate::moot::standing::{
+    use mien::{
         ChainRoot, DenyReason, GateConfig, GateDecision, Policy, StandingEvent, StandingFacts,
     };
     use crate::moot::tulpa::{TulpaEvent, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion};

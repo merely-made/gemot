@@ -12,7 +12,7 @@
 //! This adapter is the bridge: it derives a persona's signing keypair from the
 //! vault, maps it to the standing [`PersonaId`] (the derived public key), and
 //! builds a [`PersonaChains`] forest from the persona model's parent links — so
-//! standing operations are signed by the right persona ([`crate::moot::standing::wire`])
+//! standing operations are signed by the right persona ([`crate::wire`])
 //! and the depreciation chain resolves to real chain roots.
 //!
 //! `persona_id` here is a persona's *logical* id (e.g. a UUID's bytes), distinct
@@ -24,7 +24,7 @@
 use identity::{Ed25519Keypair, IdentityError, IdentityProvider};
 use p2panda_core::Hash;
 
-use crate::moot::standing::persona_chain::{PersonaChains, PersonaId};
+use crate::persona_chain::{PersonaChains, PersonaId};
 
 /// The vault salt for a persona's keypair: `BLAKE3("persona" || persona_id)`,
 /// where `persona_id` is the persona's logical id.
@@ -74,7 +74,7 @@ pub fn build_chains<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::standing::ChainRoot;
+    use crate::ChainRoot;
     use identity::InMemoryProvider;
 
     fn provider() -> InMemoryProvider {
@@ -114,8 +114,8 @@ mod tests {
 
     #[test]
     fn the_derived_keypair_signs_a_verifiable_standing_operation() {
-        use crate::moot::standing::event::{ChainRoot, StandingEvent};
-        use crate::moot::standing::wire::{to_operation, verify};
+        use crate::event::{ChainRoot, StandingEvent};
+        use crate::wire::{to_operation, verify};
         let p = provider();
         let kp = persona_keypair(&p, b"work").unwrap();
         let event = StandingEvent::GovernanceParticipation {

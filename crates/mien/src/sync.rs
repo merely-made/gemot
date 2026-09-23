@@ -25,10 +25,10 @@ use p2panda_net::{Endpoint, Gossip};
 use stickleback::JoinedSpace;
 use transport::{P2pandaTransport, PeerID};
 
-use crate::moot::standing::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
-use crate::moot::standing::ledger::{Ledger, StandingConfig};
-use crate::moot::standing::store::{StandingStore, StandingStoreError};
-use crate::moot::standing::wire::{StandingExt, to_operation};
+use crate::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
+use crate::ledger::{Ledger, StandingConfig};
+use crate::store::{StandingStore, StandingStoreError};
+use crate::wire::{StandingExt, to_operation};
 
 const MOOT: [u8; 32] = [0x33; 32];
 

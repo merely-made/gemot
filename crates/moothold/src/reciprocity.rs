@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use crate::concord::MootId;
+use gemot::moot::MootId;
 
 /// The directed give-and-take ledger between moots: how much each moot has
 /// provided to each other moot.

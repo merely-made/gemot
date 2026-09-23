@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Name reservation for **mien**, reputation in the Mere platform's moot tier.
+//! **mien**, reputation in the Mere platform's moot tier.
 //!
 //! A mien is a persona's standing *as one moot sees it*. Reputation here is
 //! per-moot primary: standing lives in each moot's own ledger, and there is no
@@ -23,7 +23,74 @@
 //!
 //! Not the proof of who you are: that is `insigne`.
 //!
-//! No implementation yet. The working code is in `moothold`'s concord module
-//! and `gemot`'s standing store.
+//! ## Standing
+//!
+//! Standing is the event-sourced community-trust receipt.
+//!
+//! Standing is a **receipt of followed-through commitment**, not a coin. You earn
+//! it by doing what you said (hosting, pinning, governance) and lose it by
+//! visibly failing to (ghosting a commitment). Like the rest of the substrate it
+//! is event-sourced: signed [`StandingEvent`]s on the DAG are authoritative, and
+//! the score is a [projection](ledger). It accrues against a persona-chain
+//! **root**, so reputation is the cost of continuity and anonymity is the cost
+//! of starting over.
+//!
+//! ### Layering
+//!
+//! - [`event`] — the event grammar (the authoritative layer): the logical
+//!   standing events, decoupled from the operation wire (a later phase bridges
+//!   them to signed operations, exactly as Murm's `Post` ↔ `Operation`).
+//! - [`ledger`] — the projection: folds an event sequence into a per-chain-root
+//!   score, deriving lapse from missing heartbeats. Deterministic integer math,
+//!   so every peer computing it over the same events + clock agrees.
+//! - [`store`] — the operation store over the muniment substrate (the shared
+//!   `stickleback::MunimentStore` adapter murm and mesh also ride): persists a moot's
+//!   standing operations, exposes the `LogStore` + `TopicStore` LogSync reconciles,
+//!   and folds the moot-wide projection ([`fold_moot`](store::StandingStore::fold_moot),
+//!   every member's log into one ledger). Sync is host-composed after the
+//!   sibling-posture purity split: this crate provides the store, wire-level
+//!   admission, and fold, and the host builds the `LogSync` +
+//!   `stickleback::SyncedSpace` pump (the test-only `sync` module plays
+//!   that host for the two-peer convergence tests).
+//! - [`persona_chain`] (Phase 2) — the persona forest over the root-keyed ledger:
+//!   resolves a leaf persona to its chain root + depth, and presents a
+//!   depreciated *effective* score (the Sybil cost of a fresh face), while debt
+//!   carries fully to forks (no laundering).
+//!
+//! - [`composite`] (Phase 5) — a viewer moot's lens over its own and its
+//!   concorded moots' standing: the mien composed. Concord agreements and
+//!   reciprocity credits stay in `moothold`; they are federation state, not
+//!   standing.
+//! - [`gate`] (Phase 4) — the §8.8 policy slot: standing [facts](gate::StandingFacts)
+//!   plus a reference gate that allows an action only when a structural cap covers
+//!   it *and* the facts clear the moot's threshold + rate limit.
+//!
+//! Standing is the **facts** layer for the §8.8 capability stack's policy slot
+//! (the score / freshness / role a policy engine reads); it is deliberately not
+//! the policy *engine* (the Biscuit candidate) itself.
+//!
+//! Moved here 2026-09-23 from `gemot::moot::standing` and `moothold::concord`.
 
-#![doc(html_no_source)]
+pub mod composite;
+pub mod event;
+pub mod gate;
+pub mod ledger;
+pub mod persona_chain;
+pub mod persona_vault;
+pub mod store;
+#[cfg(test)]
+mod sync;
+pub mod wire;
+
+pub use crate::composite::{CompositionPolicy, RepLens};
+pub use crate::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
+pub use crate::gate::{
+    DenyReason, GateConfig, GateDecision, Policy, StandingFacts, authorize, may_act,
+};
+pub use crate::ledger::{Ledger, StandingConfig};
+pub use crate::persona_chain::{PersonaChains, PersonaId};
+pub use crate::store::{StandingFileStore, StandingStore, StandingStoreError};
+pub use crate::wire::{
+    StandingExt, WireError, from_operation, stable_author, standing_identity_salt, to_operation,
+    to_operation_seed, to_operation_seed_with_attestation, verify,
+};
