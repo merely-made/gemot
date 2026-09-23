@@ -4,7 +4,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Moot concords + composite reputation — Phase 5 (federation, t3).
+//! Composite reputation, Phase 5 (federation, t3): a viewer moot's lens over its
+//! own and its concorded moots' standing.
 //!
 //! Reputation is per-moot primary: a persona's standing lives in each moot's own
 //! [`Ledger`] (Phase 1 accrual + the Phase 2 depreciation). There is no single
@@ -31,10 +32,11 @@
 
 use std::collections::HashMap;
 
-pub use gemot::moot::MootId;
-use gemot::moot::standing::event::BASIS_POINTS;
-use gemot::moot::standing::ledger::Ledger;
-use gemot::moot::standing::persona_chain::{PersonaChains, PersonaId};
+use std::hash::Hash;
+
+use crate::event::BASIS_POINTS;
+use crate::ledger::Ledger;
+use crate::persona_chain::{PersonaChains, PersonaId};
 use serde::{Deserialize, Serialize};
 
 /// How a viewer moot folds concorded moots' reputations into its own view.
@@ -57,17 +59,18 @@ pub enum CompositionPolicy {
 
 /// A viewer moot's reputation lens: its own id, its composition policy, and the
 /// moots it concords (each at a weight in basis points). One hop — only these
-/// direct concords contribute to a composite score.
+/// direct concords contribute to a composite score. `K` is whatever identifies a
+/// moot to the host.
 #[derive(Clone, Debug)]
-pub struct RepLens {
-    moot: MootId,
+pub struct RepLens<K> {
+    moot: K,
     composition: CompositionPolicy,
-    concords: HashMap<MootId, u16>,
+    concords: HashMap<K, u16>,
 }
 
-impl RepLens {
+impl<K: Hash + Eq> RepLens<K> {
     /// A lens for `moot` under `composition`, with no concords yet.
-    pub fn new(moot: MootId, composition: CompositionPolicy) -> Self {
+    pub fn new(moot: K, composition: CompositionPolicy) -> Self {
         Self {
             moot,
             composition,
@@ -77,13 +80,13 @@ impl RepLens {
 
     /// Honour `other`'s reputations at `weight_bp` basis points. Builder-style;
     /// re-concording the same moot overwrites the weight.
-    pub fn concord(&mut self, other: MootId, weight_bp: u16) -> &mut Self {
+    pub fn concord(&mut self, other: K, weight_bp: u16) -> &mut Self {
         self.concords.insert(other, weight_bp);
         self
     }
 
     /// The weight this lens gives a moot (`0` if not concorded).
-    pub fn weight(&self, other: &MootId) -> u16 {
+    pub fn weight(&self, other: &K) -> u16 {
         self.concords.get(other).copied().unwrap_or(0)
     }
 
@@ -97,11 +100,11 @@ impl RepLens {
     pub fn composite_score(
         &self,
         persona: PersonaId,
-        ledgers: &HashMap<MootId, Ledger>,
+        ledgers: &HashMap<K, Ledger>,
         chains: &PersonaChains,
         now_ms: u64,
     ) -> i64 {
-        let effective = |moot: &MootId| -> i64 {
+        let effective = |moot: &K| -> i64 {
             ledgers
                 .get(moot)
                 .map(|l| chains.effective_score(persona, l, now_ms))
@@ -142,11 +145,11 @@ impl RepLens {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gemot::moot::standing::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
-    use gemot::moot::standing::ledger::StandingConfig;
+    use crate::event::{ChainRoot, CommitmentId, Scope, StandingEvent};
+    use crate::ledger::StandingConfig;
 
-    fn moot(n: u8) -> MootId {
-        MootId([n; 32])
+    fn moot(n: u8) -> u8 {
+        n
     }
     fn persona(n: u8) -> PersonaId {
         PersonaId([n; 32])

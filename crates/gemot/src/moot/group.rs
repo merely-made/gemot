@@ -38,7 +38,7 @@ use super::delegation::MootScopeKeyEpoch;
 use super::service::{
     MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,
 };
-use super::standing::StandingFacts;
+use mien::StandingFacts;
 
 /// A local identity wrapper required by p2panda-auth's generic group graph.
 ///

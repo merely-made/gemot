@@ -12,7 +12,7 @@ use p2panda_core::cbor::encode_cbor;
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
 
-use crate::moot::standing::{Policy, StandingFacts};
+use mien::{Policy, StandingFacts};
 use mooting::MemberKey;
 
 /// The rule controlling amendments to the shared constitution.

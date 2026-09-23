@@ -25,8 +25,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::moot::standing::event::{BASIS_POINTS, ChainRoot};
-use crate::moot::standing::ledger::Ledger;
+use crate::event::{BASIS_POINTS, ChainRoot};
+use crate::ledger::Ledger;
 
 /// A persona's leaf identity (its public key). Derives in production from
 /// `master + persona_id`; Phase 2 treats it as an opaque key, like Phase 1's
@@ -99,8 +99,8 @@ impl PersonaChains {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::standing::event::{CommitmentId, Scope, StandingEvent};
-    use crate::moot::standing::ledger::StandingConfig;
+    use crate::event::{CommitmentId, Scope, StandingEvent};
+    use crate::ledger::StandingConfig;
 
     fn persona(n: u8) -> PersonaId {
         PersonaId([n; 32])

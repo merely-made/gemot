@@ -12,14 +12,14 @@
 
 #![doc(html_root_url = "https://docs.rs/moothold/0.1.0")]
 
-pub mod concord;
 mod event;
 mod fold;
 pub mod reciprocity;
 mod store;
 mod wire;
 
-pub use concord::{CompositionPolicy, MootId, RepLens};
+use gemot::moot::MootId;
+use mien::CompositionPolicy;
 pub use event::{MemberTerms, MootholdEvent, MootholdId};
 pub use fold::{Moothold, MootholdError};
 pub use reciprocity::Reciprocity;

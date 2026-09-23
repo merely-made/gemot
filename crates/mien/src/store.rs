@@ -38,9 +38,9 @@ use stickleback::{
     StoreTarget,
 };
 
-use crate::moot::standing::event::StandingEvent;
-use crate::moot::standing::ledger::{Ledger, StandingConfig};
-use crate::moot::standing::wire::{
+use crate::event::StandingEvent;
+use crate::ledger::{Ledger, StandingConfig};
+use crate::wire::{
     StandingExt, authored_from_operation, from_operation, stable_author, standing_identity_salt,
     to_operation_seed, to_operation_seed_with_attestation,
 };
@@ -317,8 +317,8 @@ impl<B: Backend + Clone> StandingStore<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::standing::event::{ChainRoot, CommitmentId, Scope};
-    use crate::moot::standing::wire::to_operation;
+    use crate::event::{ChainRoot, CommitmentId, Scope};
+    use crate::wire::to_operation;
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
     use tempfile::tempdir;
 

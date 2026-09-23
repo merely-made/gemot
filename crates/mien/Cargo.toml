@@ -4,9 +4,31 @@ version = "0.0.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Name reservation. A mien is a persona's standing as one moot sees it: reputation in the Mere platform's moot tier, which is per-moot primary with no global score. A viewer moot folds its own ledger together with the moots it concords, one hop and no further, under a composition policy it chooses. A mien is therefore always someone's view of someone, never an objective fact about them."
+description = "A mien is a persona's standing as one moot sees it: reputation in the Mere platform's moot tier, which is per-moot primary with no global score. A viewer moot folds its own ledger together with the moots it concords, one hop and no further, under a composition policy it chooses. A mien is therefore always someone's view of someone, never an objective fact about them."
 readme = "README.md"
 keywords = ["reputation", "standing", "moot", "federation", "trust"]
 categories = ["algorithms"]
 
 [dependencies]
+identity.workspace = true
+muniment = { workspace = true, features = ["redb"] }
+p2panda-core = "0.7.0"
+p2panda-store = { version = "0.7.0", default-features = false }
+serde = { version = "1", features = ["derive"] }
+stickleback.workspace = true
+thiserror = "1"
+
+[dev-dependencies]
+p2panda-net = { package = "mere-p2panda-net", version = "=0.7.4", default-features = false, features = [
+  "address_book",
+  "iroh_endpoint",
+  "iroh_mdns",
+  "discovery",
+  "gossip",
+  "sync",
+] }
+p2panda-sync = "0.7.0"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio-stream = "0.1"
+transport.workspace = true

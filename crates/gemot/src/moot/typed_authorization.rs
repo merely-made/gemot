@@ -141,7 +141,7 @@ mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-    use crate::moot::standing::gate::StandingFacts;
+    use mien::gate::StandingFacts;
     use capability::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{

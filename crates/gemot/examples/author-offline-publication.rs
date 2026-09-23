@@ -32,10 +32,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use errand::serve::{Item, SourceRequest};
 use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
 use gemot::moot::records::fauna_cap;
-use gemot::moot::standing::wire::{
+use mien::wire::{
     StandingExt, from_operation as standing_from_operation, verify as verify_standing,
 };
-use gemot::moot::standing::{ChainRoot, CommitmentId, GateDecision, Scope, StandingEvent};
+use mien::{ChainRoot, CommitmentId, GateDecision, Scope, StandingEvent};
 use gemot::moot::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, MootAccessLevel, MootAuthorizationRequest,
     MootError, MootEvent, MootExt, MootFile, MootId, MootMember, MootMembershipAction,
@@ -524,7 +524,7 @@ fn validate_bundle(bundle: &PublicProofBundle, content: &[u8]) -> Result<(), Any
         "Standing operation addresses another moot",
     )?;
     ensure(
-        gemot::moot::standing::stable_author(&standing)?.0 == bundle.hosting.commitment.host_root,
+        mien::stable_author(&standing)?.0 == bundle.hosting.commitment.host_root,
         "Standing signer is not bound to the host root",
     )?;
     match event {
@@ -593,7 +593,7 @@ async fn author_process(root: &Path) -> Result<(), AnyError> {
     let founder_root = founder().master_public_key().to_bytes();
     let moot = MootFile::open(&store_path, MootId(MOOT_ID), founder_root, retention()).await?;
     let mut rules = ConstitutionRules::founder_only(founder_root);
-    rules.admission = gemot::moot::standing::Policy::MembersOnly {
+    rules.admission = mien::Policy::MembersOnly {
         rate_limit: 20,
         rate_window_ms: 60_000,
     };

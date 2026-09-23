@@ -7,8 +7,8 @@
 //! A Moot community and its bounded record lanes.
 //!
 //! [`Moot`] is the command and snapshot boundary. Its retained domains are
-//! [`constitution`], [`delegation`], [`group`], [`records`], [`standing`],
-//! [`tulpa`], and [`flora`].
+//! [`constitution`], [`delegation`], [`group`], [`records`], [`tulpa`], and
+//! [`flora`]; standing lives in the [`mien`] crate.
 //! Hosts may adapt the signed wire/store types for LogSync, but Gemot owns
 //! neither a network session nor a UI runtime.
 //!
@@ -35,61 +35,8 @@ mod lane_coexistence;
 mod lanes;
 pub mod records;
 mod service;
-pub mod standing;
 pub mod tulpa;
 pub mod typed_authorization;
-
-/// Read-only source-compatibility bridge for callers moving from the former
-/// Tessera spelling. The signed event and extension layouts are unchanged, so
-/// an existing `tessera.redb` corpus can be read as Standing facts. New
-/// publication must use [`standing`] and `gemot/standing/v1`.
-#[deprecated(note = "use gemot::moot::standing; the public lane is gemot/standing/v1")]
-pub mod tessera {
-    pub use super::standing::*;
-
-    pub mod event {
-        pub use super::super::standing::event::*;
-        pub type TesseraEvent = super::super::standing::event::StandingEvent;
-    }
-
-    pub mod gate {
-        pub use super::super::standing::gate::*;
-        pub type TesseraFacts = super::super::standing::gate::StandingFacts;
-    }
-
-    pub mod ledger {
-        pub use super::super::standing::ledger::*;
-        pub type TesseraConfig = super::super::standing::ledger::StandingConfig;
-    }
-
-    pub mod persona_chain {
-        pub use super::super::standing::persona_chain::*;
-    }
-
-    pub mod persona_vault {
-        pub use super::super::standing::persona_vault::*;
-    }
-
-    pub mod store {
-        pub use super::super::standing::store::*;
-        pub type TesseraFileStore = super::super::standing::store::StandingFileStore;
-        pub type TesseraStore<B> = super::super::standing::store::StandingStore<B>;
-        pub type TesseraStoreError = super::super::standing::store::StandingStoreError;
-    }
-
-    pub mod wire {
-        pub use super::super::standing::wire::*;
-        pub type TesseraExt = super::super::standing::wire::StandingExt;
-    }
-
-    pub type TesseraEvent = super::standing::StandingEvent;
-    pub type TesseraFacts = super::standing::StandingFacts;
-    pub type TesseraConfig = super::standing::StandingConfig;
-    pub type TesseraFileStore = super::standing::StandingFileStore;
-    pub type TesseraStore<B> = super::standing::StandingStore<B>;
-    pub type TesseraStoreError = super::standing::StandingStoreError;
-    pub type TesseraExt = super::standing::StandingExt;
-}
 
 pub use artifact::ArtifactRef;
 pub use constitution::{

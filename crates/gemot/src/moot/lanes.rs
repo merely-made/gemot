@@ -29,7 +29,7 @@ use super::delegation::MootDelegationExt;
 use super::flora::FloraExt;
 use super::records::{MootExt, MootLogId};
 use super::service::Moot;
-use super::standing::StandingExt;
+use mien::StandingExt;
 use super::tulpa::TulpaExt;
 
 /// Lane kinds, one spelling each, so both peers derive identical protocol ids.

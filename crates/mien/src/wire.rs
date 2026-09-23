@@ -24,7 +24,7 @@ use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 use stickleback::stable_writer_subject;
 
-use crate::moot::standing::event::{ChainRoot, StandingEvent};
+use crate::event::{ChainRoot, StandingEvent};
 
 const STANDING_AUTHORED_VERSION: u16 = 1;
 
@@ -210,7 +210,7 @@ pub fn verify(operation: &Operation<StandingExt>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::moot::standing::event::{ChainRoot, CommitmentId, Scope};
+    use crate::event::{ChainRoot, CommitmentId, Scope};
     use identity::{IdentityProvider, InMemoryProvider};
 
     const MOOT: [u8; 32] = [0x30; 32];

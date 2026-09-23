@@ -12,6 +12,7 @@ categories = ["network-programming"]
 
 [dependencies]
 gemot.workspace = true
+mien.workspace = true
 muniment = { workspace = true, features = ["redb"] }
 stickleback.workspace = true
 p2panda-core = "0.7.0"
