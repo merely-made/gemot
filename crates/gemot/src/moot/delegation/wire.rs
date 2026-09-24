@@ -89,6 +89,7 @@ pub fn verify(operation: &Operation<MootDelegationExt>) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use identity::delegation::Issue;
     use std::collections::BTreeSet;
 
     use identity::delegation::{

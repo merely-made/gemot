@@ -15,6 +15,8 @@
 //! through Gemot's delegation lane, whose signed records ride the same
 //! export/import wire as Commons operations.
 
+use personae::AttestationKeys;
+use personae::delegation::Issue;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, BufRead};

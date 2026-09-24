@@ -1627,6 +1627,7 @@ mod tests {
         ArtifactRef, FloraEvent, FloraParticipant, FloraRoundId, FloraRoundSpec, FloraWeight,
         KeepBound, MootAccessLevel, MootMember, MootMembershipAction, MootStoreError,
     };
+    use identity::delegation::Issue;
     use identity::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,

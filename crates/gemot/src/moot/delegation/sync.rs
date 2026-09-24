@@ -6,6 +6,7 @@
 
 //! Live two-peer convergence proof for independent Moot delegation.
 
+use identity::delegation::Issue;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;

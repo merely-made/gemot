@@ -32,6 +32,7 @@
 //! split the statement kernel brief draws: the log accumulates, the graph is
 //! recomputed.
 
+use personae::AttestationKeys;
 pub mod call;
 pub mod chat;
 pub mod encrypted;
@@ -991,6 +992,8 @@ mod tests {
     use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
     use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
     use muniment::{MemoryBackend, RedbBackend};
+    use personae::AttestationKeys;
+    use personae::delegation::Issue;
     use personae::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation,

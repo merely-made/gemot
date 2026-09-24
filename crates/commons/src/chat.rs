@@ -9,6 +9,7 @@
 //! This is intentionally distinct from Murm's bilateral `Post` grammar. It is
 //! the second consumer of Stickleback's causal projection seam after Knot.
 
+use personae::AttestationKeys;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -1990,6 +1991,7 @@ fn decode_event_record(
 
 #[cfg(test)]
 mod tests {
+    use personae::delegation::Issue;
     use std::io::Cursor;
     use std::net::{SocketAddr, TcpListener};
     use std::sync::Arc;

@@ -11,6 +11,7 @@
 //! Participant graphs may project this state for inspection, but graph
 //! statements are never accepted as authority by this fold.
 
+use identity::AttestationKeys;
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity::delegation::{
@@ -380,6 +381,7 @@ fn expiry_within(child: Option<u64>, parent: Option<u64>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use identity::delegation::Issue;
     use identity::delegation::{DelegationRevocation, SignedDelegationRevocation};
     use identity::{IdentityProvider, InMemoryProvider};
 
