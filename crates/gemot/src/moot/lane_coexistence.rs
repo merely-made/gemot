@@ -27,6 +27,7 @@
 //! Upstream p2panda has the same hardcoded id as of 2026-07-31, so this stays
 //! a fork divergence until it is offered upstream.
 
+use identity::delegation::Issue;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Duration;

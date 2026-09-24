@@ -144,6 +144,7 @@ mod tests {
     use mien::gate::StandingFacts;
     use servitor::cap::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
+    use identity::delegation::Issue;
     use identity::delegation::{
         CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
         DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,

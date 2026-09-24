@@ -10,6 +10,7 @@
 //! `p2panda-auth` at materialization time, so the upstream CRDT's internal
 //! serde representation is not part of the Moot protocol.
 
+use identity::AttestationKeys;
 use identity::{DerivedKeyAttestation, IdentityError};
 use p2panda_auth::group::{GroupAction, GroupMember};
 use p2panda_auth::{Access, AccessLevel};

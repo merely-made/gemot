@@ -21,6 +21,7 @@
 //! cargo run -p gemot --example author-offline-publication -- run [receipt-dir]
 //! ```
 
+use identity::AttestationKeys;
 use std::error::Error;
 use std::fs;
 use std::io::{Cursor, Error as IoError, ErrorKind};

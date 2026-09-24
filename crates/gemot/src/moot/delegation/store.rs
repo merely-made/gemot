@@ -321,6 +321,7 @@ impl<B: Backend + Clone> MootDelegationStore<B> {
 
 #[cfg(test)]
 mod tests {
+    use identity::delegation::Issue;
     use std::collections::BTreeSet;
 
     use identity::delegation::{
