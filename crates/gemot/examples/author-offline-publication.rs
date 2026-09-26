@@ -350,12 +350,12 @@ fn verify_revision(
         revision.content.verifies(content),
         "content reference is false",
     )?;
+    let author = signed
+        .author_attestation
+        .check(PUBLICATION_SALT)
+        .map_err(|fault| failure(format!("author derived-key attestation: {fault}")))?;
     ensure(
-        signed.author_attestation.verify(PUBLICATION_SALT),
-        "author derived-key attestation is false",
-    )?;
-    ensure(
-        signed.author_attestation.master_public_key()?.to_bytes() == revision.author_root,
+        author.master() == &revision.author_root,
         "author attestation belongs to another root",
     )?;
     let signature: [u8; 64] = signed
@@ -376,12 +376,12 @@ fn verify_revision(
 fn verify_hosting(signed: &SignedHostingCommitmentV1) -> Result<(), AnyError> {
     let commitment = &signed.commitment;
     ensure(commitment.version == 1, "unsupported hosting commitment")?;
+    let host = signed
+        .host_attestation
+        .check(HOSTING_SALT)
+        .map_err(|fault| failure(format!("host derived-key attestation: {fault}")))?;
     ensure(
-        signed.host_attestation.verify(HOSTING_SALT),
-        "host derived-key attestation is false",
-    )?;
-    ensure(
-        signed.host_attestation.master_public_key()?.to_bytes() == commitment.host_root,
+        host.master() == &commitment.host_root,
         "host attestation belongs to another root",
     )?;
     let signature: [u8; 64] = signed

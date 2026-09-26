@@ -10,6 +10,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# The check conclusions and faults, named directly (insigne proofs plan, B).
+insigne = { workspace = true, features = ["verify"] }
 chartulary = { path = "../../eidetic/chartulary" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 personae = { path = "../../dramatis/personae" }

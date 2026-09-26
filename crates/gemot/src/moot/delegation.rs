@@ -12,6 +12,7 @@
 //! statements are never accepted as authority by this fold.
 
 use identity::AttestationKeys;
+use insigne::CheckFault;
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity::delegation::{
@@ -96,10 +97,10 @@ impl MootDelegationEvent {
         signer.derived_public_key().ok().map(|key| key.to_bytes())
     }
 
-    fn verifies(&self) -> bool {
+    fn check(&self) -> Result<(), CheckFault> {
         match self {
-            Self::Issued(signed) => signed.verify(),
-            Self::Revoked(signed) => signed.verify(),
+            Self::Issued(signed) => signed.check().map(drop),
+            Self::Revoked(signed) => signed.check().map(drop),
         }
     }
 
@@ -201,9 +202,9 @@ impl MootDelegations {
         rules: &ConstitutionRules,
         signed: SignedDelegationCertificate,
     ) -> Result<bool, MootDelegationError> {
-        if !signed.verify() {
-            return Err(MootDelegationError::InvalidSignature);
-        }
+        signed
+            .check()
+            .map_err(MootDelegationError::InvalidSignature)?;
         let certificate = &signed.certificate;
         if !is_moot_scope(&certificate.scope, moot_id) {
             return Err(MootDelegationError::WrongMoot);
@@ -248,9 +249,9 @@ impl MootDelegations {
         &mut self,
         signed: SignedDelegationRevocation,
     ) -> Result<bool, MootDelegationError> {
-        if !signed.verify() {
-            return Err(MootDelegationError::InvalidSignature);
-        }
+        signed
+            .check()
+            .map_err(MootDelegationError::InvalidSignature)?;
         let target = self
             .certificates
             .get(&signed.revocation.certificate)
@@ -314,9 +315,9 @@ impl MootDelegations {
 /// Rejection while folding independent Moot delegation state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum MootDelegationError {
-    /// Certificate or revocation signature/identity proof failed.
-    #[error("delegation signature or identity proof is invalid")]
-    InvalidSignature,
+    /// Certificate or revocation did not check; the fault says which step.
+    #[error("delegation signature or identity proof is invalid: {0}")]
+    InvalidSignature(CheckFault),
     /// Certificate is bound to a different Moot id.
     #[error("delegation addresses another Moot")]
     WrongMoot,
