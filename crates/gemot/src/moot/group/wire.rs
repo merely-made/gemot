@@ -12,6 +12,7 @@
 
 use identity::AttestationKeys;
 use identity::{DerivedKeyAttestation, IdentityError};
+use insigne::CheckFault;
 use p2panda_auth::group::{GroupAction, GroupMember};
 use p2panda_auth::{Access, AccessLevel};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -39,9 +40,9 @@ pub enum MootGroupWireError {
     /// Body is not a Gemot membership record.
     #[error("membership operation body is malformed")]
     Malformed,
-    /// Personae attestation does not verify for this Moot's membership lane.
-    #[error("membership author attestation is invalid")]
-    InvalidAttestation,
+    /// Personae attestation does not check for this Moot's membership lane.
+    #[error("membership author attestation is invalid: {0}")]
+    InvalidAttestation(CheckFault),
     /// Attestation does not bind the operation's signing key.
     #[error("membership author attestation does not bind the operation signer")]
     AttestationMismatch,
@@ -125,11 +126,11 @@ fn stable_author(
     let Some(attestation) = attestation else {
         return Ok(signer);
     };
-    if !attestation.verify(&membership_identity_salt(
-        operation.header.extensions.moot_id,
-    )) {
-        return Err(MootGroupWireError::InvalidAttestation);
-    }
+    let checked = attestation
+        .check(&membership_identity_salt(
+            operation.header.extensions.moot_id,
+        ))
+        .map_err(MootGroupWireError::InvalidAttestation)?;
     let derived = attestation
         .derived_public_key()
         .map_err(identity_error)?
@@ -137,10 +138,8 @@ fn stable_author(
     if derived != signer {
         return Err(MootGroupWireError::AttestationMismatch);
     }
-    attestation
-        .master_public_key()
-        .map(|key| key.to_bytes())
-        .map_err(identity_error)
+    // The check decoded the master key, so the root is well formed.
+    Ok(*checked.master())
 }
 
 fn identity_error(_: IdentityError) -> MootGroupWireError {

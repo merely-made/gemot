@@ -78,12 +78,12 @@ impl OperationPolicy<MootDelegationExt> for DelegationPolicy {
                 "operation body is not a delegation statement",
             )
         })?;
-        if !event.verifies() {
-            return Err(Reject::new(
+        event.check().map_err(|_| {
+            Reject::new(
                 "invalid-delegation-proof",
                 "inner delegation signature or signer proof is invalid",
-            ));
-        }
+            )
+        })?;
         if !is_moot_scope(event.scope(), self.moot_id) {
             return Err(Reject::new(
                 "wrong-inner-moot",

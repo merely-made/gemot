@@ -9,6 +9,7 @@
 //! This is intentionally distinct from Murm's bilateral `Post` grammar. It is
 //! the second consumer of Stickleback's causal projection seam after Knot.
 
+use insigne::CheckFault;
 use personae::AttestationKeys;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -186,8 +187,8 @@ pub fn chat_write_capability(space_id: [u8; 32]) -> Cap {
 pub enum ChatAuthorBindingError {
     #[error("unsupported authored-chat payload version {0}")]
     UnsupportedVersion(u16),
-    #[error("derived chat-author attestation does not verify for this space")]
-    InvalidAttestation,
+    #[error("derived chat-author attestation does not check for this space: {0}")]
+    InvalidAttestation(CheckFault),
     #[error("derived chat-author attestation contains an invalid key")]
     InvalidDerivedKey,
     #[error("derived chat-author attestation does not bind the operation signer")]
@@ -223,9 +224,9 @@ fn stable_chat_author<T>(
     let Some(attestation) = &record.author_attestation else {
         return Ok(signer);
     };
-    if !attestation.verify(&chat_identity_salt(operation.header.extensions.space_id)) {
-        return Err(ChatAuthorBindingError::InvalidAttestation);
-    }
+    let checked = attestation
+        .check(&chat_identity_salt(operation.header.extensions.space_id))
+        .map_err(ChatAuthorBindingError::InvalidAttestation)?;
     let derived = attestation
         .derived_public_key()
         .map_err(|_| ChatAuthorBindingError::InvalidDerivedKey)?
@@ -233,10 +234,8 @@ fn stable_chat_author<T>(
     if derived != signer {
         return Err(ChatAuthorBindingError::SignerMismatch);
     }
-    attestation
-        .master_public_key()
-        .map(|key| key.to_bytes())
-        .map_err(|_| ChatAuthorBindingError::InvalidRoot)
+    // The check decoded the master key, so the root is well formed.
+    Ok(*checked.master())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -432,8 +431,8 @@ pub enum ChatError {
 pub enum ChatReplicaIdentityError {
     #[error(transparent)]
     Identity(#[from] IdentityError),
-    #[error("identity provider returned an invalid chat-writer attestation")]
-    InvalidAttestation,
+    #[error("identity provider returned an invalid chat-writer attestation: {0}")]
+    InvalidAttestation(CheckFault),
     #[error("identity provider attested a different chat writer")]
     WriterMismatch,
     #[error("identity provider attested a different stable Personae root")]
@@ -862,20 +861,13 @@ impl<B: Backend + Clone> ChatReplica<B> {
         let salt = chat_identity_salt(space_id);
         let keypair = identity.derive_keypair(&salt)?;
         let author_attestation = identity.attest_derived_key(&salt)?;
-        if !author_attestation.verify(&salt) {
-            return Err(ChatReplicaIdentityError::InvalidAttestation);
-        }
-        let derived = author_attestation
-            .derived_public_key()
-            .map_err(|_| ChatReplicaIdentityError::InvalidAttestation)?
-            .to_bytes();
-        if derived != keypair.public_key().to_bytes() {
+        let checked = author_attestation
+            .check(&salt)
+            .map_err(ChatReplicaIdentityError::InvalidAttestation)?;
+        if *checked.derived() != keypair.public_key().to_bytes() {
             return Err(ChatReplicaIdentityError::WriterMismatch);
         }
-        let stable_author = author_attestation
-            .master_public_key()
-            .map_err(|_| ChatReplicaIdentityError::InvalidAttestation)?
-            .to_bytes();
+        let stable_author = *checked.master();
         if stable_author != identity.master_public_key().to_bytes() {
             return Err(ChatReplicaIdentityError::RootMismatch);
         }

@@ -32,7 +32,7 @@
 //! split the statement kernel brief draws: the log accumulates, the graph is
 //! recomputed.
 
-use personae::AttestationKeys;
+use insigne::CheckFault;
 pub mod call;
 pub mod chat;
 pub mod encrypted;
@@ -808,16 +808,11 @@ fn derived_writer<P: IdentityProvider + ?Sized>(
     let salt = commons_identity_salt(container);
     let keypair = identity.derive_keypair(&salt)?;
     let writer_attestation = identity.attest_derived_key(&salt)?;
-    if !writer_attestation.verify(&salt) {
-        return Err(ReplicaIdentityError::InvalidAttestation);
-    }
+    let checked = writer_attestation
+        .check(&salt)
+        .map_err(ReplicaIdentityError::InvalidAttestation)?;
     let writer = WriterId(keypair.public_key().to_bytes());
-    if writer_attestation
-        .derived_public_key()
-        .map_err(|_| ReplicaIdentityError::InvalidAttestation)?
-        .to_bytes()
-        != writer.0
-    {
+    if *checked.derived() != writer.0 {
         return Err(ReplicaIdentityError::WriterMismatch);
     }
     Ok((writer, keypair.to_seed(), writer_attestation))
@@ -828,8 +823,8 @@ fn derived_writer<P: IdentityProvider + ?Sized>(
 pub enum ReplicaIdentityError {
     #[error(transparent)]
     Identity(#[from] IdentityError),
-    #[error("identity provider returned an invalid Commons writer attestation")]
-    InvalidAttestation,
+    #[error("identity provider returned an invalid Commons writer attestation: {0}")]
+    InvalidAttestation(CheckFault),
     #[error("identity provider attested a different Commons writer")]
     WriterMismatch,
 }
