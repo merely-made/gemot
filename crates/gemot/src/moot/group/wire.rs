@@ -11,8 +11,9 @@
 //! serde representation is not part of the Moot protocol.
 
 use identity::AttestationKeys;
-use identity::{DerivedKeyAttestation, IdentityError};
+use identity::IdentityError;
 use insigne::CheckFault;
+use insigne::DerivedKeyAttestation;
 use p2panda_auth::group::{GroupAction, GroupMember};
 use p2panda_auth::{Access, AccessLevel};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};

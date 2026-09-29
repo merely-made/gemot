@@ -1628,7 +1628,7 @@ mod tests {
         KeepBound, MootAccessLevel, MootMember, MootMembershipAction, MootStoreError,
     };
     use identity::delegation::Issue;
-    use identity::delegation::{
+    use insigne::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
     };

@@ -169,7 +169,7 @@ impl<B: Backend + Clone> MootDelegationStore<B> {
         &self,
         keypair: &Ed25519Keypair,
         rules: &ConstitutionRules,
-        signed: identity::delegation::SignedDelegationCertificate,
+        signed: insigne::delegation::SignedDelegationCertificate,
     ) -> Result<Operation<MootDelegationExt>, MootDelegationStoreError> {
         let event = MootDelegationEvent::Issued(signed);
         self.preflight(keypair, rules, &event).await?;
@@ -181,7 +181,7 @@ impl<B: Backend + Clone> MootDelegationStore<B> {
         &self,
         keypair: &Ed25519Keypair,
         rules: &ConstitutionRules,
-        signed: identity::delegation::SignedDelegationRevocation,
+        signed: insigne::delegation::SignedDelegationRevocation,
     ) -> Result<Operation<MootDelegationExt>, MootDelegationStoreError> {
         let event = MootDelegationEvent::Revoked(signed);
         self.preflight(keypair, rules, &event).await?;
@@ -324,11 +324,11 @@ mod tests {
     use identity::delegation::Issue;
     use std::collections::BTreeSet;
 
-    use identity::delegation::{
+    use identity::{IdentityProvider, InMemoryProvider};
+    use insigne::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
         delegation_signing_salt,
     };
-    use identity::{IdentityProvider, InMemoryProvider};
 
     use super::*;
     use crate::moot::constitution::CapabilityGrant;

@@ -145,9 +145,9 @@ mod tests {
     use servitor::cap::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::Issue;
-    use identity::delegation::{
-        CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
-        DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,
+    use insigne::delegation::{
+        CapabilityScope, DelegationCertificate, DelegationId, DelegationParent, DelegationRevocation,
+        SignedDelegationCertificate, SignedDelegationRevocation,
     };
     use identity::{IdentityProvider, InMemoryProvider};
     use servitor::{Gate, GateError};

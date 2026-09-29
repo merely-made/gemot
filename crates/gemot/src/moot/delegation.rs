@@ -15,7 +15,7 @@ use identity::AttestationKeys;
 use insigne::CheckFault;
 use std::collections::{BTreeMap, BTreeSet};
 
-use identity::delegation::{
+use insigne::delegation::{
     CapabilityScope, DelegationCertificate, DelegationId, DelegationParent,
     SignedDelegationCertificate, SignedDelegationRevocation,
 };
@@ -383,8 +383,8 @@ fn expiry_within(child: Option<u64>, parent: Option<u64>) -> bool {
 mod tests {
     use super::*;
     use identity::delegation::Issue;
-    use identity::delegation::{DelegationRevocation, SignedDelegationRevocation};
     use identity::{IdentityProvider, InMemoryProvider};
+    use insigne::delegation::{DelegationRevocation, SignedDelegationRevocation};
 
     const MOOT: [u8; 32] = [9; 32];
     const ROOT: [u8; 32] = [7; 32];

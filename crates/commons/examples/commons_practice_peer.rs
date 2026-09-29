@@ -31,14 +31,14 @@ use gemot::moot::delegation::{
     self, MootDelegationEvent, MootDelegationExt, MootDelegationFileStore,
 };
 use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
+use insigne::delegation::{
+    CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+    SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
+};
 use moot::coop;
 use muniment::RedbBackend;
 use p2panda_core::Topic;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
-use personae::delegation::{
-    CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
-    SignedDelegationCertificate, SignedDelegationRevocation, delegation_signing_salt,
-};
 use personae::{IdentityProvider, InMemoryProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

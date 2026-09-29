@@ -92,11 +92,11 @@ mod tests {
     use identity::delegation::Issue;
     use std::collections::BTreeSet;
 
-    use identity::delegation::{
+    use identity::{IdentityProvider, InMemoryProvider};
+    use insigne::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
         delegation_signing_salt,
     };
-    use identity::{IdentityProvider, InMemoryProvider};
 
     use super::*;
 
