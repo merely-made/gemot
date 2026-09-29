@@ -10,6 +10,7 @@ keywords = ["reputation", "standing", "moot", "federation", "trust"]
 categories = ["algorithms"]
 
 [dependencies]
+insigne.workspace = true
 identity.workspace = true
 muniment = { workspace = true, features = ["redb"] }
 p2panda-core = "0.7.0"

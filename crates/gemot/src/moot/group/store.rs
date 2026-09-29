@@ -209,7 +209,7 @@ impl<B: Backend + Clone> MootGroupStore<B> {
     async fn author_record(
         &self,
         signing_seed: [u8; 32],
-        author_attestation: Option<identity::DerivedKeyAttestation>,
+        author_attestation: Option<insigne::DerivedKeyAttestation>,
         action: MootMembershipAction,
     ) -> Result<Operation<MootGroupExt>, MootGroupStoreError> {
         let group = self.group().await?;

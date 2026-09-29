@@ -19,13 +19,14 @@ use crate::parking::{
 };
 use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
+use insigne::DerivedKeyAttestation;
 use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
 use p2panda_net::{Endpoint, Gossip};
 use p2panda_store::topics::TopicStore;
-use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
+use personae::{IdentityError, IdentityProvider};
 use proofs::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -1992,12 +1993,12 @@ mod tests {
     use crate::{AuthorityState, CommonsAuthority, GemotAuthorityView};
     use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
     use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
-    use muniment::RedbBackend;
-    use murm::{CabalId, CabalKey, CabalKeyring};
-    use personae::delegation::{
+    use insigne::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation,
     };
+    use muniment::RedbBackend;
+    use murm::{CabalId, CabalKey, CabalKeyring};
     use personae::{IdentityProvider, InMemoryProvider};
     use servitor::{Mode, Subject, cap_path};
     use stickleback::{

@@ -19,7 +19,7 @@ pub mod wire;
 use std::collections::BTreeSet;
 use std::fmt;
 
-use identity::DerivedKeyAttestation;
+use insigne::DerivedKeyAttestation;
 use p2panda_auth::group::resolver::StrongRemove;
 use p2panda_auth::group::{GroupAction, GroupCrdt, GroupCrdtState};
 use p2panda_auth::traits::Operation;
@@ -534,7 +534,7 @@ mod tests {
             resource: id(9).to_vec(),
             path_prefix: "moot/fauna".into(),
             epoch: 1,
-            revoked_certificates: vec![identity::delegation::DelegationId(id(88))],
+            revoked_certificates: vec![insigne::delegation::DelegationId(id(88))],
         };
         let bound_scope = group.bind_scope_secret(&scope_epoch, id(78)).unwrap();
         assert_eq!(bound_scope.group, id(9));

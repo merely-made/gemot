@@ -11,11 +11,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
-use identity::delegation::{
+use identity::{IdentityProvider, InMemoryProvider};
+use insigne::delegation::{
     CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
     delegation_signing_salt,
 };
-use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use stickleback::JoinedSpace;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};

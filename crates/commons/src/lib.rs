@@ -43,13 +43,14 @@ pub mod pruning;
 pub use keys::GroupKeys;
 
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
+use insigne::DerivedKeyAttestation;
 use muniment::Backend;
 use muniment::Journal;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Extensions, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::topics::TopicStore;
-use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
+use personae::{IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 use std::collections::{BTreeMap, BTreeSet};
@@ -986,13 +987,13 @@ mod tests {
     use chartulary::{Author, EdgeId, FacetId};
     use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
     use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
-    use muniment::{MemoryBackend, RedbBackend};
-    use personae::AttestationKeys;
-    use personae::delegation::Issue;
-    use personae::delegation::{
+    use insigne::delegation::{
         CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
         SignedDelegationCertificate, SignedDelegationRevocation,
     };
+    use muniment::{MemoryBackend, RedbBackend};
+    use personae::AttestationKeys;
+    use personae::delegation::Issue;
     use personae::{IdentityProvider, InMemoryProvider};
     use proptest::prelude::*;
     use serde_json::json;

@@ -25,12 +25,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use chartulary::{Container, GraphLog, Relation, WriterId};
+use insigne::DerivedKeyAttestation;
 use muniment::{Backend, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
 use p2panda_net::{Endpoint, Gossip};
-use personae::{DerivedKeyAttestation, IdentityProvider};
+use personae::IdentityProvider;
 use serde::{Deserialize, Serialize};
 use stickleback::{
     Admission, DataKeyring, GroupCiphertext, GroupCryptoError, GroupSecretId, JoinError,

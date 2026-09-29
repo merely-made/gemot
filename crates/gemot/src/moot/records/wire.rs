@@ -12,7 +12,8 @@
 //! another; the author signs at its per-author log position, forming a
 //! valid p2panda log LogSync reconciles.
 
-use identity::{DerivedKeyAttestation, Ed25519Keypair};
+use identity::Ed25519Keypair;
+use insigne::DerivedKeyAttestation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::PruneFlag;

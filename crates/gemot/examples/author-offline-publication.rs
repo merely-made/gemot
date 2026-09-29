@@ -44,7 +44,8 @@ use gemot::moot::{
     from_operation as moot_from_operation, stable_author as stable_moot_author,
     verify as verify_moot,
 };
-use identity::{DerivedKeyAttestation, Ed25519Signature, IdentityProvider, InMemoryProvider};
+use identity::{Ed25519Signature, IdentityProvider, InMemoryProvider};
+use insigne::DerivedKeyAttestation;
 use p2panda_core::{Body, Header, Operation};
 use proofs::BlobRef;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
