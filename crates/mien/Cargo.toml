@@ -20,7 +20,7 @@ stickleback.workspace = true
 thiserror = "1"
 
 [dev-dependencies]
-p2panda-net = { package = "mere-p2panda-net", version = "=0.7.4", default-features = false, features = [
+p2panda-net = { package = "mere-p2panda-net", version = "=0.7.5", default-features = false, features = [
   "address_book",
   "iroh_endpoint",
   "iroh_mdns",

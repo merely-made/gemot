@@ -14,7 +14,7 @@
 
 use identity::Ed25519Keypair;
 use insigne::DerivedKeyAttestation;
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
@@ -252,7 +252,7 @@ fn to_operation_seed_with_prune(
 pub fn from_operation(op: &Operation<MootExt>) -> Result<([u8; 32], MootEvent), WireError> {
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
     let event: MootEvent =
-        decode_cbor(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)?;
+        decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)?;
     Ok((op.header.extensions.moot_id, event))
 }
 
@@ -272,6 +272,7 @@ pub fn verify(operation: &Operation<MootExt>) -> bool {
 mod tests {
     use super::*;
     use identity::{IdentityProvider, InMemoryProvider};
+    use p2panda_core::cbor::decode_cbor;
 
     const MOOT: [u8; 32] = [0x6d; 32];
 

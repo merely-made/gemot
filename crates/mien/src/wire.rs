@@ -19,7 +19,7 @@
 
 use identity::Ed25519Keypair;
 use insigne::DerivedKeyAttestation;
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -165,7 +165,7 @@ pub(super) fn authored_from_operation(
 ) -> Result<StandingAuthored, WireError> {
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
     let bytes = body.to_bytes();
-    match decode_cbor::<StandingAuthored, _>(bytes.as_slice()) {
+    match decode_cbor_strict::<StandingAuthored, _>(bytes.as_slice()) {
         Ok(record) => {
             if record.version != STANDING_AUTHORED_VERSION {
                 return Err(WireError::UnsupportedVersion(record.version));
@@ -173,7 +173,7 @@ pub(super) fn authored_from_operation(
             Ok(record)
         },
         Err(_) => {
-            let event = decode_cbor(bytes.as_slice()).map_err(|_| WireError::Malformed)?;
+            let event = decode_cbor_strict(bytes.as_slice()).map_err(|_| WireError::Malformed)?;
             Ok(StandingAuthored {
                 version: 0,
                 event,

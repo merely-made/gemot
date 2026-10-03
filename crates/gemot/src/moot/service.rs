@@ -14,7 +14,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use muniment::{Backend, MemoryBackend, RedbBackend};
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
@@ -1321,7 +1321,7 @@ impl<B: Backend + Clone> Moot<B> {
             if *subject != self.moot_id.0 || found.is_some() {
                 return Err(malformed());
             }
-            let evidence: T = decode_cbor(&bytes[..]).map_err(|_| malformed())?;
+            let evidence: T = decode_cbor_strict(&bytes[..]).map_err(|_| malformed())?;
             if version_of(&evidence) != version
                 || encode_cbor(&evidence).ok().as_deref() != Some(bytes.as_slice())
             {
@@ -1634,6 +1634,7 @@ mod tests {
     };
     use identity::{IdentityProvider, InMemoryProvider};
     use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
+    use p2panda_core::cbor::decode_cbor;
     use std::collections::BTreeMap;
     use std::io::Cursor;
     use stickleback::NativeDropError;

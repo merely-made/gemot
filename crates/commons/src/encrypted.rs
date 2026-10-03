@@ -27,7 +27,7 @@ use std::sync::Arc;
 use chartulary::{Container, GraphLog, Relation, WriterId};
 use insigne::DerivedKeyAttestation;
 use muniment::{Backend, WriteOp};
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
 use p2panda_net::{Endpoint, Gossip};
@@ -94,7 +94,7 @@ fn envelope(operation: &Operation<EncryptedCommonsExt>) -> Result<GroupCiphertex
             "encrypted commons operation has no body",
         )
     })?;
-    decode_cbor(body.to_bytes().as_slice())
+    decode_cbor_strict(body.to_bytes().as_slice())
         .map_err(|error| Reject::new("invalid-commons-ciphertext", error.to_string()))
 }
 
@@ -106,7 +106,7 @@ fn open_record(
     let plaintext = keys
         .open(&envelope(operation)?)
         .map_err(|error| Reject::new("unreadable-commons-record", error.to_string()))?;
-    let sealed: SealedRecord = decode_cbor(plaintext.as_slice())
+    let sealed: SealedRecord = decode_cbor_strict(plaintext.as_slice())
         .map_err(|error| Reject::new("invalid-commons-batch", error.to_string()))?;
     Ok(CommonsRecord {
         batch: sealed.batch,
@@ -505,6 +505,7 @@ mod tests {
     use crate::keys::test_group::{Group, keyring};
     use crate::tests::{cites, fingerprint};
     use crate::{AuthorityState, COMMONS_GRAPH_LANE, CommonsExt, Replica, from_operation};
+    use p2panda_core::cbor::decode_cbor;
 
     const CONTAINER: [u8; 32] = [0xc0; 32];
 

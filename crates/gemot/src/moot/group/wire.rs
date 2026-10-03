@@ -16,7 +16,7 @@ use insigne::CheckFault;
 use insigne::DerivedKeyAttestation;
 use p2panda_auth::group::{GroupAction, GroupMember};
 use p2panda_auth::{Access, AccessLevel};
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
@@ -96,7 +96,7 @@ pub fn from_operation(
         .body
         .as_ref()
         .ok_or(MootGroupWireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| MootGroupWireError::Malformed)
+    decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| MootGroupWireError::Malformed)
 }
 
 /// Translate a structurally verified wire operation into the p2panda-auth

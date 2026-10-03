@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ pub fn from_operation(
         .body
         .as_ref()
         .ok_or(MootholdWireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| MootholdWireError::Malformed)
+    decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| MootholdWireError::Malformed)
 }
 
 pub fn verify(operation: &Operation<MootholdExt>) -> bool {

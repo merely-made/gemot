@@ -38,7 +38,7 @@ use insigne::delegation::{
 use moot::coop;
 use muniment::RedbBackend;
 use p2panda_core::Topic;
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor, decode_cbor_strict, encode_cbor};
 use personae::{IdentityProvider, InMemoryProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -588,7 +588,7 @@ impl Peer {
         self.installed().await?;
         let bytes =
             hex::decode(encoded).map_err(|_| "operation_record_hex is not hex".to_string())?;
-        let record: DropRecord = decode_cbor(bytes.as_slice())
+        let record: DropRecord = decode_cbor_strict(bytes.as_slice())
             .map_err(|error| format!("operation record CBOR: {error}"))?;
         // Gemot delegation statements share this wire with Commons operations.
         if let Ok(Some(statement)) = decode_operation_record::<MootDelegationExt>(&record) {
@@ -1398,7 +1398,7 @@ async fn handle(peer: &mut Peer, request: Request) -> Result<(Value, bool), Stri
             }
             let bytes = hex::decode(invitation.authority_cbor_hex)
                 .map_err(|_| "authority_cbor_hex is not hex".to_string())?;
-            let envelope: AuthorityEnvelope = decode_cbor(bytes.as_slice())
+            let envelope: AuthorityEnvelope = decode_cbor_strict(bytes.as_slice())
                 .map_err(|error| format!("authority CBOR: {error}"))?;
             if peer.role == Role::Intruder {
                 validate_authority(&envelope, peer.container)?;

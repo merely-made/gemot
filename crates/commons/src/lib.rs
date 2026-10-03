@@ -46,7 +46,7 @@ use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, Wr
 use insigne::DerivedKeyAttestation;
 use muniment::Backend;
 use muniment::Journal;
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Extensions, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::topics::TopicStore;
@@ -219,7 +219,7 @@ pub fn commons_write_capability(container: [u8; 32]) -> Cap {
 /// Decode the record carried by an operation. Does not check the signature.
 pub fn from_operation(op: &Operation<CommonsExt>) -> Result<CommonsRecord, WireError> {
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)
+    decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)
 }
 
 fn record_connect_counters(record: &CommonsRecord, writer: WriterId) -> Result<Vec<u64>, Reject> {
