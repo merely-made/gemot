@@ -20,7 +20,7 @@ use std::path::Path;
 
 use identity::Ed25519Keypair;
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError};
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::topics::TopicStore;
@@ -350,7 +350,7 @@ pub fn to_operation_seed(
 
 pub fn from_operation(operation: &Operation<FloraExt>) -> Result<FloraEvent, FloraWireError> {
     let body = operation.body.as_ref().ok_or(FloraWireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| FloraWireError::Malformed)
+    decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| FloraWireError::Malformed)
 }
 
 pub fn verify(operation: &Operation<FloraExt>) -> bool {

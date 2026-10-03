@@ -21,7 +21,7 @@ use crate::pruning::{EpochNeed, EpochNeedReason, LaneEpochReport};
 use crate::{AllowAllAuthority, AuthorityOperation, AuthorityState, CommonsAuthority, GroupKeys};
 use insigne::DerivedKeyAttestation;
 use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
 use p2panda_net::{Endpoint, Gossip};
@@ -199,7 +199,7 @@ pub enum ChatAuthorBindingError {
 }
 
 fn decode_authored<T: DeserializeOwned>(bytes: &[u8]) -> Result<ChatAuthored<T>, ChatError> {
-    match decode_cbor::<ChatAuthored<T>, _>(bytes) {
+    match decode_cbor_strict::<ChatAuthored<T>, _>(bytes) {
         Ok(record) => {
             if record.version != CHAT_AUTHORED_VERSION {
                 return Err(ChatAuthorBindingError::UnsupportedVersion(record.version).into());
@@ -207,7 +207,8 @@ fn decode_authored<T: DeserializeOwned>(bytes: &[u8]) -> Result<ChatAuthored<T>,
             Ok(record)
         },
         Err(_) => {
-            let payload = decode_cbor(bytes).map_err(|error| ChatError::Wire(error.to_string()))?;
+            let payload =
+                decode_cbor_strict(bytes).map_err(|error| ChatError::Wire(error.to_string()))?;
             Ok(ChatAuthored {
                 version: 0,
                 payload,
@@ -491,7 +492,7 @@ fn chat_header<'a>(
             "chat operation requires an encrypted body",
         )
     })?;
-    let envelope = decode_cbor::<GroupCiphertext, _>(body.to_bytes().as_slice())
+    let envelope = decode_cbor_strict::<GroupCiphertext, _>(body.to_bytes().as_slice())
         .map_err(|error| Reject::new("invalid-chat-ciphertext", error.to_string()))?;
     let log = match operation.header.extensions.class {
         ChatClass::Channel
@@ -1944,7 +1945,8 @@ fn encrypted_body(operation: &Operation<ChatExt>) -> Result<GroupCiphertext, Cha
         .body
         .as_ref()
         .ok_or_else(|| ChatError::Wire("operation body is absent".into()))?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|error| ChatError::Wire(error.to_string()))
+    decode_cbor_strict(body.to_bytes().as_slice())
+        .map_err(|error| ChatError::Wire(error.to_string()))
 }
 
 fn decode_checkpoint_operation(
@@ -2012,6 +2014,7 @@ mod tests {
     };
 
     use super::*;
+    use p2panda_core::cbor::decode_cbor;
 
     const SPACE: [u8; 32] = [0x51; 32];
     const MOOT: [u8; 32] = [0x6d; 32];

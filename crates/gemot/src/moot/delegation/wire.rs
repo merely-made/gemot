@@ -7,7 +7,7 @@
 //! Signed p2panda wire form for independent delegation statements.
 
 use identity::Ed25519Keypair;
-use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,7 @@ pub fn from_operation(
         .body
         .as_ref()
         .ok_or(MootDelegationWireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| MootDelegationWireError::Malformed)
+    decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| MootDelegationWireError::Malformed)
 }
 
 /// Verify the p2panda header and body commitment.
