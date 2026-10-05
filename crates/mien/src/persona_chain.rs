@@ -19,7 +19,7 @@
 //! sits below any posting threshold anyway. This is the plan's "anonymity is the
 //! cost of starting over" made concrete.
 //!
-//! Phase 2 models the chain abstractly (an opaque [`PersonaId`] forest), like
+//! Phase 2 models the chain abstractly (an opaque [`PersonaKey`] forest), like
 //! Phase 1's [`ChainRoot`]; wiring it to the identity vault's persona chain
 //! (`master + persona_id`) is a thin adapter for the host layer.
 
@@ -32,14 +32,14 @@ use crate::ledger::Ledger;
 /// `master + persona_id`; Phase 2 treats it as an opaque key, like Phase 1's
 /// [`ChainRoot`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PersonaId(pub [u8; 32]);
+pub struct PersonaKey(pub [u8; 32]);
 
 /// The persona forest: each persona may link to a parent; a persona with no
 /// parent is a chain root.
 #[derive(Clone, Debug, Default)]
 pub struct PersonaChains {
     /// child -> parent. Absent means the persona is a root.
-    parent: HashMap<PersonaId, PersonaId>,
+    parent: HashMap<PersonaKey, PersonaKey>,
 }
 
 impl PersonaChains {
@@ -50,14 +50,14 @@ impl PersonaChains {
 
     /// Record that `child` is a fork of `parent` (same chain). Re-linking a child
     /// overwrites its parent (the latest fork link wins).
-    pub fn fork(&mut self, child: PersonaId, parent: PersonaId) {
+    pub fn fork(&mut self, child: PersonaKey, parent: PersonaKey) {
         self.parent.insert(child, parent);
     }
 
     /// Resolve a persona to its chain root and its depth (hops to the root; a
     /// root is depth 0). Cycle-safe: a malformed cyclic chain stops at the first
     /// repeat rather than looping forever.
-    pub fn root_and_depth(&self, persona: PersonaId) -> (ChainRoot, u32) {
+    pub fn root_and_depth(&self, persona: PersonaKey) -> (ChainRoot, u32) {
         let mut current = persona;
         let mut depth = 0u32;
         let mut visited = HashSet::new();
@@ -73,7 +73,7 @@ impl PersonaChains {
     }
 
     /// The chain root a persona accrues to.
-    pub fn root_of(&self, persona: PersonaId) -> ChainRoot {
+    pub fn root_of(&self, persona: PersonaKey) -> ChainRoot {
         self.root_and_depth(persona).0
     }
 
@@ -81,7 +81,7 @@ impl PersonaChains {
     /// `now_ms`: the chain root's score, with *positive* standing depreciated once
     /// per generation from the root (the `depreciation_bp` curve). Debt and zero
     /// pass through undepreciated, so forking cannot launder a bad reputation.
-    pub fn effective_score(&self, persona: PersonaId, ledger: &Ledger, now_ms: u64) -> i64 {
+    pub fn effective_score(&self, persona: PersonaKey, ledger: &Ledger, now_ms: u64) -> i64 {
         let (root, depth) = self.root_and_depth(persona);
         let base = ledger.score(&root, now_ms);
         if base <= 0 {
@@ -102,13 +102,13 @@ mod tests {
     use crate::event::{CommitmentId, Scope, StandingEvent};
     use crate::ledger::StandingConfig;
 
-    fn persona(n: u8) -> PersonaId {
-        PersonaId([n; 32])
+    fn persona(n: u8) -> PersonaKey {
+        PersonaKey([n; 32])
     }
 
     /// A ledger where chain root `root` has accrued `fulfilments * fulfil_reward`
     /// (default reward 10) by keeping that many commitments.
-    fn ledger_with_root_fulfilments(root: PersonaId, fulfilments: u8) -> Ledger {
+    fn ledger_with_root_fulfilments(root: PersonaKey, fulfilments: u8) -> Ledger {
         let root = ChainRoot(root.0);
         let mut events = Vec::new();
         for i in 0..fulfilments {

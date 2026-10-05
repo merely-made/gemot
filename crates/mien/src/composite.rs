@@ -36,7 +36,7 @@ use std::hash::Hash;
 
 use crate::event::BASIS_POINTS;
 use crate::ledger::Ledger;
-use crate::persona_chain::{PersonaChains, PersonaId};
+use crate::persona_chain::{PersonaChains, PersonaKey};
 use serde::{Deserialize, Serialize};
 
 /// How a viewer moot folds concorded moots' reputations into its own view.
@@ -99,7 +99,7 @@ impl<K: Hash + Eq> RepLens<K> {
     /// *depreciated* standing there. A moot absent from `ledgers` contributes 0.
     pub fn composite_score(
         &self,
-        persona: PersonaId,
+        persona: PersonaKey,
         ledgers: &HashMap<K, Ledger>,
         chains: &PersonaChains,
         now_ms: u64,
@@ -151,13 +151,13 @@ mod tests {
     fn moot(n: u8) -> u8 {
         n
     }
-    fn persona(n: u8) -> PersonaId {
-        PersonaId([n; 32])
+    fn persona(n: u8) -> PersonaKey {
+        PersonaKey([n; 32])
     }
 
     /// A ledger where chain root `root` has score `+10 * fulfilments` from kept
     /// commitments (default reward 10).
-    fn ledger_scoring(root: PersonaId, fulfilments: u8) -> Ledger {
+    fn ledger_scoring(root: PersonaKey, fulfilments: u8) -> Ledger {
         let root = ChainRoot(root.0);
         let mut events = Vec::new();
         for i in 0..fulfilments {
@@ -180,7 +180,7 @@ mod tests {
     }
 
     /// A ledger where `root` ghosted one commitment (score -20).
-    fn ledger_in_debt(root: PersonaId) -> Ledger {
+    fn ledger_in_debt(root: PersonaKey) -> Ledger {
         Ledger::from_events(
             StandingConfig::default(),
             &[StandingEvent::CommitmentMade {

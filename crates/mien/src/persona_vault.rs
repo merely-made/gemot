@@ -6,17 +6,17 @@
 
 //! Persona-vault adapter — standing's abstract persona ids resolved to real keys.
 //!
-//! Standing's [`PersonaId`] is opaque (Phase 2). In the running system a persona
+//! Standing's [`PersonaKey`] is opaque (Phase 2). In the running system a persona
 //! is a key the identity vault derives from `master + persona_id`
 //! (`derive_keypair(BLAKE3("persona" || persona_id))`, per the persona model).
 //! This adapter is the bridge: it derives a persona's signing keypair from the
-//! vault, maps it to the standing [`PersonaId`] (the derived public key), and
+//! vault, maps it to the standing [`PersonaKey`] (the derived public key), and
 //! builds a [`PersonaChains`] forest from the persona model's parent links — so
 //! standing operations are signed by the right persona ([`crate::wire`])
 //! and the depreciation chain resolves to real chain roots.
 //!
 //! `persona_id` here is a persona's *logical* id (e.g. a UUID's bytes), distinct
-//! from the standing [`PersonaId`] (its derived public key). The vault holds the
+//! from the standing [`PersonaKey`] (its derived public key). The vault holds the
 //! master secret; this module only consumes the public derivation. The parent
 //! links it folds into a chain come from the persona store (identity-side, still
 //! being built); the adapter is ready for them.
@@ -24,7 +24,7 @@
 use identity::{Ed25519Keypair, IdentityError, IdentityProvider};
 use p2panda_core::Hash;
 
-use crate::persona_chain::{PersonaChains, PersonaId};
+use crate::persona_chain::{PersonaChains, PersonaKey};
 
 /// The vault salt for a persona's keypair: `BLAKE3("persona" || persona_id)`,
 /// where `persona_id` is the persona's logical id.
@@ -41,12 +41,12 @@ pub fn persona_keypair(
     provider.derive_keypair(&persona_salt(persona_id))
 }
 
-/// A persona's standing [`PersonaId`] — the public key the vault derives for it.
-pub fn standing_persona_id(
+/// A persona's standing [`PersonaKey`] — the public key the vault derives for it.
+pub fn standing_persona_key(
     provider: &dyn IdentityProvider,
     persona_id: &[u8],
-) -> Result<PersonaId, IdentityError> {
-    Ok(PersonaId(
+) -> Result<PersonaKey, IdentityError> {
+    Ok(PersonaKey(
         persona_keypair(provider, persona_id)?
             .public_key()
             .to_bytes(),
@@ -63,8 +63,8 @@ pub fn build_chains<'a>(
     let mut chains = PersonaChains::new();
     for (child, parent) in links {
         if let Some(parent) = parent {
-            let child_id = standing_persona_id(provider, child)?;
-            let parent_id = standing_persona_id(provider, parent)?;
+            let child_id = standing_persona_key(provider, child)?;
+            let parent_id = standing_persona_key(provider, parent)?;
             chains.fork(child_id, parent_id);
         }
     }
@@ -84,9 +84,9 @@ mod tests {
     #[test]
     fn a_persona_id_is_stable_and_distinct() {
         let p = provider();
-        let work = standing_persona_id(&p, b"work").unwrap();
-        let work_again = standing_persona_id(&p, b"work").unwrap();
-        let throwaway = standing_persona_id(&p, b"throwaway").unwrap();
+        let work = standing_persona_key(&p, b"work").unwrap();
+        let work_again = standing_persona_key(&p, b"work").unwrap();
+        let throwaway = standing_persona_key(&p, b"throwaway").unwrap();
         assert_eq!(
             work, work_again,
             "same persona derives the same standing id"
@@ -97,12 +97,12 @@ mod tests {
     #[test]
     fn build_chains_resolves_a_fork_to_its_root() {
         let p = provider();
-        let work = standing_persona_id(&p, b"work").unwrap();
+        let work = standing_persona_key(&p, b"work").unwrap();
         // `throwaway` is a fork of `work` — same human, a fresh face.
         let links: Vec<(&[u8], Option<&[u8]>)> =
             vec![(b"work", None), (b"throwaway", Some(b"work"))];
         let chains = build_chains(&p, links).unwrap();
-        let throwaway = standing_persona_id(&p, b"throwaway").unwrap();
+        let throwaway = standing_persona_key(&p, b"throwaway").unwrap();
         let (root, depth) = chains.root_and_depth(throwaway);
         assert_eq!(
             root,

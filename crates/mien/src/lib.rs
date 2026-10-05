@@ -88,7 +88,7 @@ pub use crate::gate::{
     DenyReason, GateConfig, GateDecision, Policy, StandingFacts, authorize, may_act,
 };
 pub use crate::ledger::{Ledger, StandingConfig};
-pub use crate::persona_chain::{PersonaChains, PersonaId};
+pub use crate::persona_chain::{PersonaChains, PersonaKey};
 pub use crate::store::{StandingFileStore, StandingStore, StandingStoreError};
 pub use crate::wire::{
     StandingExt, WireError, from_operation, stable_author, standing_identity_salt, to_operation,
