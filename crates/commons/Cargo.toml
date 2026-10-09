@@ -41,7 +41,8 @@ thiserror = "1"
 hex = "0.4"
 moot = { package = "mere-moot", path = "../../../ports/moot" }
 murm = { path = "../../murm/murm" }
-transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum"] }
+# `test-identity`: tests bind throwaway identities (vault lock plan, ruling 96).
+transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum", "test-identity"] }
 proptest = "1"
 serde_json = "1"
 tempfile = "3"
