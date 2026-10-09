@@ -70,7 +70,9 @@ chartulary.workspace = true
 # `p2panda-net` is the protocol, `p2panda-sync` its event types, `tokio-stream`
 # reads the subscription; `macros` + `rt-multi-thread` run the async tests;
 # tempfile backs the persistent-store reopen test.
-transport.workspace = true
+# `test-identity`: tests and examples bind throwaway identities (vault lock
+# plan, ruling 96).
+transport = { workspace = true, features = ["test-identity"] }
 # Every p2panda-net feature except `sqlite`. The address book runs on
 # stickleback's muniment-backed store, so p2panda-store's bundled SQLite
 # backend (and sqlx with it) stays out of the graph entirely. Feature

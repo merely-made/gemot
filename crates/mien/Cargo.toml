@@ -32,4 +32,6 @@ p2panda-sync = "0.7.0"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
-transport.workspace = true
+# `test-identity`: tests and examples bind throwaway identities (vault lock
+# plan, ruling 96).
+transport = { workspace = true, features = ["test-identity"] }
