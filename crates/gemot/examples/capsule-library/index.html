@@ -1,0 +1,96 @@
+<!doctype html>
+<!-- Copyright 2026 Mark Alan Boykin
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
+SPDX-License-Identifier: MPL-2.0 -->
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Friends’ capsules — Moot composition proof</title>
+<style>
+  :root { color-scheme: light; font: 17px/1.55 system-ui,sans-serif; color:#243e35; background:#f4f4ec; }
+  * { box-sizing:border-box; }
+  body { max-width:1150px; margin:0 auto; padding:44px 28px; }
+  header { border-bottom:1px solid #cbd4c8; padding-bottom:24px; margin-bottom:26px; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.14em; font-size:.72rem; font-weight:700; color:#5f7967; }
+  h1 { font:500 clamp(2rem,5vw,3.4rem)/1.16 Georgia,serif; margin:.35em 0; letter-spacing:-.03em; }
+  h2 { font:500 1.4rem/1.3 Georgia,serif; margin:0 0 14px; }
+  p { margin:.5em 0; }
+  .muted { color:#5e7168; }
+  .status { display:inline-block; padding:5px 12px; background:#e2ebdd; border-radius:20px; font-size:.8rem; margin-top:10px; }
+  .layout { display:grid; grid-template-columns:330px 1fr; gap:24px; }
+  section, article { background:#fffef8; border:1px solid #ccd5c7; border-radius:13px; padding:25px; min-width:0; }
+  .review { margin-bottom:18px; }
+  label { display:block; margin:12px 0; }
+  input[type=checkbox] { accent-color:#32664c; width:17px; height:17px; vertical-align:middle; margin-right:8px; }
+  input[type=search] { width:100%; padding:11px; border:1px solid #9aaea0; border-radius:7px; font:inherit; background:#fff; }
+  button { border:1px solid #879c8b; border-radius:7px; padding:9px 14px; cursor:pointer; font:inherit; background:#fffef8; color:#254a37; }
+  button.primary { background:#2f6247; border-color:#2f6247; color:white; }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, input:focus-visible, summary:focus-visible { outline:3px solid #c48a2c; outline-offset:3px; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:15px; }
+  ul { list-style:none; padding:0; margin:18px 0 0; }
+  li { padding:15px 0; border-top:1px solid #dce2d6; }
+  li h3 { font-size:1.04rem; margin:0 0 4px; }
+  li small { display:block; color:#60746a; margin-bottom:9px; }
+  article { min-height:370px; }
+  pre { white-space:pre-wrap; overflow-wrap:anywhere; font:1.02rem/1.7 ui-monospace,monospace; margin:22px 0; }
+  #reader-info { overflow-wrap:anywhere; font-size:.8rem; color:#60746a; }
+  #notice { margin:18px 0; font-size:.9rem; min-height:28px; }
+  footer { margin-top:28px; color:#60746a; font-size:.83rem; }
+  details { margin-top:15px; }
+  #diagnostics { max-height:230px; overflow:auto; font-size:.76rem; }
+  @media(max-width:740px) { body { padding:25px 18px; } .layout { grid-template-columns:1fr; } }
+</style>
+<header>
+  <div class="eyebrow">A small shared library</div>
+  <h1>Friends’ capsules</h1>
+  <p class="muted">Two authors. Shared by a community. Kept by a friend.</p>
+  <span class="status" id="status">Verifying the shared library…</span>
+</header>
+<div class="layout">
+  <div>
+    <section class="review" aria-labelledby="review-title">
+      <h2 id="review-title">Run the library applet</h2>
+      <p class="muted" id="signature">Checking its author’s signature…</p>
+      <label><input id="grant-view" type="checkbox" checked> Show and search the catalogue</label>
+      <label><input id="grant-nav" type="checkbox" checked> Open shared capsule addresses</label>
+      <div class="actions">
+        <button id="start" class="primary" disabled>Run applet</button>
+        <button id="stop" disabled>Stop</button>
+      </div>
+    </section>
+    <section aria-labelledby="catalogue-title">
+      <h2 id="catalogue-title">Shared addresses</h2>
+      <label for="search" class="muted">Search names or authors</label>
+      <input id="search" type="search" placeholder="Try “garden”" disabled>
+      <p id="count" class="muted">The applet hasn’t started.</p>
+      <ul id="entries"></ul>
+      <button id="keep-addresses" disabled>Keep addresses only</button>
+    </section>
+  </div>
+  <article aria-labelledby="reader-title">
+    <h2 id="reader-title">A capsule can stay yours</h2>
+    <p id="reader-placeholder" class="muted">Open a shared address to read its verified revision. Choose what to keep on this device.</p>
+    <p id="reader-info"></p>
+    <pre id="body"></pre>
+    <div class="actions">
+      <button id="keep" disabled>Keep this revision</button>
+      <button id="retained" disabled>Read kept revision</button>
+    </div>
+    <p id="storage" class="muted">No capsule files saved on this device.</p>
+  </article>
+</div>
+<p id="notice" role="status" aria-live="polite"></p>
+<footer>
+  A bounded composition proof. This browser host is separate from Graphshell.
+  <details>
+    <summary>Inspect the proof</summary>
+    <p>Signed Mere packs, a Gemot collection, member retention after publisher exit, and one WIT component in native and browser hosts. Search covers catalogue names and author keys.</p>
+    <div class="actions"><button id="probe" disabled>Check action refusals</button><button id="spin" disabled>Check runaway interruption</button></div>
+    <pre id="diagnostics"></pre>
+  </details>
+</footer>
+<script type="module" src="browser.mjs"></script>
+</html>
