@@ -155,8 +155,9 @@ try {
   await page.waitForTimeout(200);
   await page.mouse.move(450, 700);
   await page.mouse.wheel(0, 500);
-  await page.waitForTimeout(200);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const narrowClose = await page.getByRole('button', { name: `Close reading ${bob}`, exact: true }).boundingBox();
+  receipt.narrow_control = { viewport: page.viewportSize(), close_reading: bob, bounds: narrowClose };
   assert.ok(narrowClose && narrowClose.x >= 0 && narrowClose.x + narrowClose.width <= 520
     && narrowClose.y >= 0 && narrowClose.y + narrowClose.height <= 1120, 'Narrow reading controls must remain reachable by scrolling');
   await click(page.getByRole('button', { name: `Select reading ${survivor}`, exact: true }));
