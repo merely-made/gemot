@@ -39,7 +39,6 @@ thiserror = "1"
 
 [dev-dependencies]
 hex = "0.4"
-moot = { package = "mere-moot", path = "../../../ports/moot" }
 murm = { path = "../../murm/murm" }
 # `test-identity`: tests bind throwaway identities (vault lock plan, ruling 96).
 transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum", "test-identity"] }
