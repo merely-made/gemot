@@ -92,3 +92,8 @@ gemini-protocol = { workspace = true, features = ["server"] }
 rcgen = "0.13"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde_json.workspace = true
+# Capsule-library composition proof: signed packs and the existing native WIT
+# host remain example dependencies, outside Gemot's governance library.
+eidetic = { workspace = true, default-features = false, features = ["pack-signing"] }
+app-host = { path = "../../script/app-host" }
+wasmtime = "45"
