@@ -36,8 +36,16 @@ await page.addInitScript(() => {
   }
 });
 const receipt = { host: 'graphshell-web retained tree', browser: browser.version(), checks: {}, captures: [] };
-const wait = predicate => page.waitForFunction(predicate, null, { timeout: 60000 });
+const wait = (predicate, arg = null) => page.waitForFunction(predicate, arg, { timeout: 60000 });
 const state = () => page.evaluate(() => window.graphshellApplet.receipt());
+const localKeys = () => page.evaluate(async () => {
+  const request = indexedDB.open('graphshell-capsule-applets-v1');
+  const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+  try {
+    const request = db.transaction('muniment').objectStore('muniment').getAllKeys();
+    return await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+  } finally { db.close(); }
+});
 const capture = async name => {
   // Allow the presenter to finish a frame after the retained tree changes.
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -89,20 +97,94 @@ try {
   await click(page.getByRole('button', { name: "Open Alice's garden", exact: true }));
   await wait(() => window.graphshellApplet.receipt().opened?.body.includes('pear tree'));
   assert.equal((await state()).kept, false);
-  const keys = await page.evaluate(async () => {
-    const request = indexedDB.open('graphshell-capsule-applets-v1');
-    const db = await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    try {
-      const request = db.transaction('muniment').objectStore('muniment').getAllKeys();
-      return await new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
-    } finally { db.close(); }
-  });
+  const keys = await localKeys();
   assert.deepEqual(keys, []);
   receipt.checks.read_without_retention = true;
   await capture('graphshell-reader.png');
-  await click(page.getByRole('button', { name: 'Keep this revision', exact: true }));
+  const firstReading = (await state()).selected_reading;
+  await page.evaluate(() => {
+    window.originalCapsulePut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function () { throw new DOMException('controlled storage refusal', 'QuotaExceededError'); };
+  });
+  await click(page.getByRole('button', { name: `Keep revision in reading ${firstReading}`, exact: true }));
+  await wait(() => window.graphshellApplet.receipt().refusals.some(refusal => refusal.tag === 'retention'));
+  assert.equal((await state()).running, true);
+  assert.equal((await state()).kept, false);
+  assert.deepEqual(await localKeys(), []);
+  await page.evaluate(() => { IDBObjectStore.prototype.put = window.originalCapsulePut; });
+  receipt.checks.retention_failure_preserves_execution_and_retry = true;
+  await click(page.getByRole('button', { name: `Keep revision in reading ${firstReading}`, exact: true }));
   await wait(() => window.graphshellApplet.receipt().kept);
   receipt.checks.muniment_retention = true;
+
+  await click(page.getByRole('button', { name: "Open another reading of Alice's garden", exact: true }));
+  await wait(() => window.graphshellApplet.receipt().readings?.length === 2);
+  const copies = (await state()).readings;
+  assert.notEqual(copies[0].id, copies[1].id);
+  assert.equal(copies[0].opened.entry.revision, copies[1].opened.entry.revision);
+  assert.equal(copies[0].opened.body, copies[1].opened.body);
+  assert.ok(copies.every(reading => reading.kept));
+  receipt.checks.independent_accesses_same_revision = true;
+  await click(page.getByRole('button', { name: 'Clear reading selection', exact: true }));
+  await wait(() => window.graphshellApplet.receipt().selected_reading == null);
+  assert.equal((await state()).readings.length, 2);
+  assert.ok((await state()).readings.every(reading => reading.kept));
+  await click(page.getByRole('button', { name: `Close reading ${firstReading}`, exact: true }));
+  await wait(() => window.graphshellApplet.receipt().readings?.length === 1);
+  const survivor = copies[1].id;
+  assert.equal((await state()).readings[0].id, survivor);
+  await assert.rejects(page.evaluate(id => window.graphshellWasm.applet_select_reading(id), firstReading));
+  await click(page.getByRole('button', { name: `Select reading ${survivor}`, exact: true }));
+  await wait(id => window.graphshellApplet.receipt().selected_reading === id, survivor);
+  receipt.checks.selection_and_close_preserve_other_reading = true;
+
+  await click(page.getByRole('textbox', { name: 'Search capsules' }));
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await click(page.getByRole('button', { name: 'Search', exact: true }));
+  await wait(() => window.graphshellApplet.receipt().projection?.length === 2);
+  assert.equal((await state()).readings[0].id, survivor);
+  await click(page.getByRole('button', { name: "Open Bob's listening room", exact: true }));
+  await wait(() => window.graphshellApplet.receipt().readings?.length === 2);
+  const bob = (await state()).selected_reading;
+  assert.equal((await state()).readings.find(reading => reading.id === survivor).kept, true);
+  assert.equal((await state()).readings.find(reading => reading.id === bob).kept, false);
+  receipt.checks.catalogue_filter_preserves_readings = true;
+  await capture('graphshell-readings.png');
+  await page.setViewportSize({ width: 520, height: 1120 });
+  await page.waitForTimeout(200);
+  await page.mouse.move(450, 700);
+  await page.mouse.wheel(0, 500);
+  await page.waitForTimeout(200);
+  const narrowClose = await page.getByRole('button', { name: `Close reading ${bob}`, exact: true }).boundingBox();
+  assert.ok(narrowClose && narrowClose.x >= 0 && narrowClose.x + narrowClose.width <= 520
+    && narrowClose.y >= 0 && narrowClose.y + narrowClose.height <= 1120, 'Narrow reading controls must remain reachable by scrolling');
+  await click(page.getByRole('button', { name: `Select reading ${survivor}`, exact: true }));
+  await wait(id => window.graphshellApplet.receipt().selected_reading === id, survivor);
+  receipt.checks.narrow_reading_controls_reachable = true;
+  await capture('graphshell-readings-narrow.png');
+  await page.setViewportSize({ width: 1280, height: 960 });
+  await page.waitForTimeout(200);
+  await click(page.getByRole('button', { name: `Close reading ${bob}`, exact: true }));
+  await wait(id => window.graphshellApplet.receipt().selected_reading === id, survivor);
+  assert.equal((await state()).kept, true);
+  await assert.rejects(page.evaluate(id => window.graphshellWasm.applet_close_reading(id), bob));
+  const stored = await localKeys();
+  assert.equal(stored.length, 1);
+  assert.ok(String(stored[0]).endsWith(copies[0].opened.entry.revision));
+  receipt.checks.per_revision_retention_survives_other_close = true;
+
+  const address = (await state()).opened.entry.url;
+  for (let i = 1; i < 8; ++i) await page.evaluate(url => window.graphshellApplet.turn('open', JSON.stringify({url})), address);
+  assert.equal((await state()).readings.length, 8);
+  await page.evaluate(url => window.graphshellApplet.turn('open', JSON.stringify({url})), address);
+  assert.equal((await state()).readings.length, 8);
+  assert.equal((await state()).running, true);
+  assert.equal((await state()).refusals.at(-1).tag, 'denied');
+  for (const reading of (await state()).readings) {
+    if (reading.id !== survivor) await page.evaluate(id => window.graphshellWasm.applet_close_reading(id), reading.id);
+  }
+  receipt.checks.reading_limit_preserves_active_host = true;
 
   await page.evaluate(() => window.graphshellApplet.turn('probe'));
   const refused = (await state()).refusals.map(r => r.tag);
