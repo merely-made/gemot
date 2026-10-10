@@ -14,7 +14,7 @@ publish = false
 insigne = { workspace = true, features = ["verify"] }
 chartulary = { path = "../../eidetic/chartulary" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
-personae = { path = "../../dramatis/personae" }
+personae.workspace = true
 proofs = { package = "mere-proofs", path = "../../system/proofs" }
 servitor = { path = "../../servitor" }
 stickleback = { path = "../../stickleback" }
