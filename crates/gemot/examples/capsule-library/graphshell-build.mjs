@@ -46,6 +46,9 @@ sources['host.mjs'] = digest(await readFile(join(root, 'ports/graphshell/web/app
 await cp(join(root, 'ports/graphshell/web/styles.css'), join(site, 'styles.css'));
 for (const path of [
   'ports/graphshell/src/capsule_applet.rs', 'ports/graphshell/src/web_tree.rs',
+  'ports/graphshell/src/capsule_applet/readings.rs',
+  'crates/cambium/cambium-genet-web-host/src/input.rs',
+  'crates/cambium/cambium-genet-web-host/src/lib.rs',
   'ports/graphshell/src/web_tree/applet.rs', 'ports/graphshell/Cargo.toml',
   'ports/graphshell/web/Cargo.toml', 'ports/graphshell/web/Cargo.lock',
 ]) sources[path] = digest(await readFile(join(root, path)));
