@@ -896,6 +896,11 @@ impl<B: Backend + Clone> ChatReplica<B> {
         self.stable_author
     }
 
+    /// The addressed space whose encrypted chat records this replica owns.
+    pub fn space_id(&self) -> [u8; 32] {
+        self.space_id
+    }
+
     /// Install the current Commons-governed checkpoint authority.
     pub fn set_checkpoint_authority(&mut self, authority: ChatCheckpointAuthority) {
         self.checkpoint_authority = Some(authority);
