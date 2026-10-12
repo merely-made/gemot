@@ -114,7 +114,17 @@ does not carry raw tensors or training corpus bytes. Adapter artifacts can leak
 training information; their audience, retention, and release policy remain an
 explicit community decision rather than an implicit public-default claim.
 
-Not built yet: tier transitions, hosting commitments with heartbeats, pin
+`moot::hosting` now supplies bounded hosting preparation, signing, retained reads
+and current serving checks. It derives `moot/hosting/<audience>` itself, intersects
+explicit community/device/request ceilings, binds the observed constitutional,
+membership and delegation cut, and carries the complete canonical record inside
+the existing signed Standing scope. The host supplies community settings for a
+named accepted constitution and serializes this command with authority ingestion.
+Content verification, custody and export permission stay with the content owner.
+Expiry, withdrawal, current grants, policy changes and local ceilings are checked
+again before serving. A signed promise is distinct from measured retrieval.
+
+Not built yet: tier transitions, automatic hosting heartbeats/completion, pin
 tracking, and the `mooting-*` foreign-protocol adapters. Milestones are listed
 in the
 [moot-tiers brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
