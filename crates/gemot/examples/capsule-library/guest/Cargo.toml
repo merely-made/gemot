@@ -1,6 +1,7 @@
 [workspace]
 
 [package]
+rust-version = "1.97.1"
 name = "capsule-library-guest"
 version = "0.0.1"
 edition = "2024"
@@ -18,3 +19,6 @@ serde_json = "1"
 [profile.release]
 opt-level = "s"
 strip = true
+
+[workspace.package]
+rust-version = "1.97.1"

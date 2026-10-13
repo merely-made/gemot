@@ -3,6 +3,7 @@
 # receipt; Turnstone is now its intended place consumer, so it belongs in the
 # Mere workspace without becoming a product or UI crate.
 [package]
+rust-version = "1.97.1"
 name = "commons-spine"
 version = "0.0.1"
 edition = "2024"
