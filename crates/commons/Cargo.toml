@@ -40,9 +40,9 @@ thiserror = "1"
 
 [dev-dependencies]
 hex = "0.4"
-murm = { path = "../../murm/murm" }
+murm.workspace = true
 # `test-identity`: tests bind throwaway identities (vault lock plan, ruling 96).
-transport = { package = "mere-transport", path = "../../murm/transport", features = ["reticulum", "test-identity"] }
+transport = { workspace = true, features = ["reticulum", "test-identity"] }
 proptest = "1"
 serde_json = "1"
 tempfile = "3"
