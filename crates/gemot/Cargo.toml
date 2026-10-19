@@ -2,101 +2,149 @@
 rust-version = "1.97.1"
 name = "gemot"
 version = "0.1.1"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+repository = "https://github.com/merely-made/gemot"
 description = "Community domain and assembly layer for Moot governance, replication, Standing, Tulpa, and FLORA."
 documentation = "https://docs.rs/gemot"
 readme = "README.md"
-keywords = ["federation", "community", "social", "p2p", "browser"]
-categories = ["network-programming"]
+keywords = [
+    "federation",
+    "community",
+    "social",
+    "p2p",
+    "browser",
+]
+categories = [
+    "network-programming",
+]
+
+[package.edition]
+workspace = true
+
+[package.license]
+workspace = true
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
-# The check conclusions and faults, named directly (insigne proofs plan, B).
-insigne = { workspace = true, features = ["verify"] }
-# Standing events are wire-ready (they become signed operation extensions on the
-# event-DAG, like Murm's `CabalExt`). serde sets the event types up for that
-# wire bridge; p2panda-core is the operation/signing substrate the bridge rides
-# (same as murm posts); identity supplies the Ed25519 signing keypair.
-serde = { version = "1", features = ["derive"] }
 p2panda-core = "0.7.0"
-p2panda-auth = { version = "0.7.0", default-features = false }
-p2panda-encryption = { version = "0.7.0", default-features = false, features = ["data_scheme"] }
-identity.workspace = true
-# The typed capability vocabulary (capability-model OQ3, ruled 2026-07-24):
-# the moot authorization seam parses request paths through the shared leaf
-# algebra and
-# answers them from delegation certificates through the same power/scope
-# encoding the participant tier writes — one capability question, two tiers.
-servitor.workspace = true
-stickleback = { workspace = true }
-proofs.workspace = true
-# The sync traits implemented by the shared muniment adapter. `macros` and
-# p2panda-store's own SQLite backend stay off.
-p2panda-store = { version = "0.7.0", default-features = false }
-# Recognition policy remains in mooting. The generic store moved to
-# stickleback.
-mooting = { workspace = true }
-mien.workspace = true
-muniment = { workspace = true, features = ["redb"] }
 redb = "2"
 thiserror = "1"
-# Sync is host-composed after the sibling-posture purity split: gemot does not
-# ASSEMBLE transport. It provides the stores + folds + `verify`; the host joins
-# the space (`stickleback::JoinedSpace`) and publishes authored ops. The
-# direct p2panda-net / p2panda-sync / tokio-stream / tokio entries below are
-# dev-only, for the in-crate two-peer convergence tests and the `moot-peer`
-# example, which play the host.
-#
-# Stated precisely, because an earlier version of this comment claimed "gemot
-# owns no p2panda-net" and `cargo tree -p gemot -e normal -i p2panda-net`
-# disproves it: p2panda-net IS in gemot's production graph, transitively
-# through stickleback, and has been since that became a normal dependency.
-# The posture that holds is about SOURCE, not the build graph — gemot's code
-# names no session type, and its constitution and delegation lanes import no
-# p2panda crate at all. See the murm/moot plan's 2026-07-25 JoinedSpace entry.
+
+[dependencies.insigne]
+workspace = true
+features = [
+    "verify",
+]
+
+[dependencies.serde]
+version = "1"
+features = [
+    "derive",
+]
+
+[dependencies.p2panda-auth]
+version = "0.7.0"
+default-features = false
+
+[dependencies.p2panda-encryption]
+version = "0.7.0"
+default-features = false
+features = [
+    "data_scheme",
+]
+
+[dependencies.identity]
+workspace = true
+
+[dependencies.servitor]
+workspace = true
+
+[dependencies.stickleback]
+workspace = true
+
+[dependencies.proofs]
+workspace = true
+
+[dependencies.p2panda-store]
+version = "0.7.0"
+default-features = false
+
+[dependencies.mooting]
+workspace = true
+
+[dependencies.mien]
+workspace = true
+
+[dependencies.muniment]
+workspace = true
+features = [
+    "redb",
+]
 
 [dev-dependencies]
-# The peer-petition receipt drives a REAL servitor::Gate over a chartulary
-# graph, proving one gate serves scripts, components, and moot peers alike.
-# Test-only: MootAuthority itself needs no graph substrate.
-chartulary.workspace = true
-# The two-peer convergence tests + the `moot-peer` example play the host: they
-# build the real p2panda-net peers and the `LogSync` + `SyncedSpace` pump.
-# `transport` supplies `P2pandaTransport` / `sync_overlay_topic`;
-# `stickleback` supplies `SyncedSpace` and the shared store;
-# `p2panda-net` is the protocol, `p2panda-sync` its event types, `tokio-stream`
-# reads the subscription; `macros` + `rt-multi-thread` run the async tests;
-# tempfile backs the persistent-store reopen test.
-# `test-identity`: tests and examples bind throwaway identities (vault lock
-# plan, ruling 96).
-transport = { workspace = true, features = ["test-identity"] }
-# Every p2panda-net feature except `sqlite`. The address book runs on
-# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
-# backend (and sqlx with it) stays out of the graph entirely. Feature
-# unification means EVERY consumer has to opt out, not just one.
-p2panda-net = { package = "mere-p2panda-net", version = "=0.7.5", default-features = false, features = [
-  "address_book",
-  "iroh_endpoint",
-  "iroh_mdns",
-  "discovery",
-  "gossip",
-  "sync",
-] }
 p2panda-sync = "0.7.0"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
 tempfile = "3"
-errand = { workspace = true, features = ["serve"] }
-gemini-protocol = { workspace = true, features = ["server"] }
 rcgen = "0.13"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-serde_json.workspace = true
-# Capsule-library composition proof: signed packs and the existing native WIT
-# host remain example dependencies, outside Gemot's governance library.
-eidetic = { workspace = true, default-features = false, features = ["pack-signing"] }
-app-host = { path = "../../script/app-host" }
-wasmtime = "45"
+
+[dev-dependencies.chartulary]
+workspace = true
+
+[dev-dependencies.transport]
+workspace = true
+features = [
+    "test-identity",
+]
+
+[dev-dependencies.p2panda-net]
+package = "mere-p2panda-net"
+version = "=0.7.5"
+default-features = false
+features = [
+    "address_book",
+    "iroh_endpoint",
+    "iroh_mdns",
+    "discovery",
+    "gossip",
+    "sync",
+]
+
+[dev-dependencies.tokio]
+version = "1"
+features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "time",
+]
+
+[dev-dependencies.errand]
+workspace = true
+features = [
+    "serve",
+]
+
+[dev-dependencies.gemini-protocol]
+workspace = true
+features = [
+    "server",
+]
+
+[dev-dependencies.rustls]
+version = "0.23"
+default-features = false
+features = [
+    "ring",
+    "std",
+]
+
+[dev-dependencies.serde_json]
+workspace = true
+
+[dev-dependencies.eidetic]
+workspace = true
+default-features = false
+features = [
+    "pack-signing",
+]

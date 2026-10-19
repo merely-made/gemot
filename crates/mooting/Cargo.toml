@@ -2,20 +2,35 @@
 rust-version = "1.97.1"
 name = "mooting"
 version = "0.1.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+repository = "https://github.com/merely-made/gemot"
 description = "Protocol core for community social-primitives selection — inner layer of gemot for the Mere browser."
 documentation = "https://docs.rs/mooting"
 readme = "README.md"
-keywords = ["protocol", "social", "community", "federation"]
-categories = ["network-programming"]
+keywords = [
+    "protocol",
+    "social",
+    "community",
+    "federation",
+]
+categories = [
+    "network-programming",
+]
+
+[package.edition]
+workspace = true
+
+[package.license]
+workspace = true
 
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
-# Recognition fingerprints use p2panda's native BLAKE3 hash and CBOR.
 p2panda-core = "0.7.0"
-serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+
+[dependencies.serde]
+version = "1"
+features = [
+    "derive",
+]

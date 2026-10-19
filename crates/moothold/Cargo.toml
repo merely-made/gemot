@@ -2,25 +2,61 @@
 rust-version = "1.97.1"
 name = "moothold"
 version = "0.1.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+repository = "https://github.com/merely-made/gemot"
 description = "Tier 3 federation of Gemot moots: concord and reciprocal resource sharing."
 documentation = "https://docs.rs/moothold"
 readme = "README.md"
-keywords = ["federation", "community", "reputation", "p2p"]
-categories = ["network-programming"]
+keywords = [
+    "federation",
+    "community",
+    "reputation",
+    "p2p",
+]
+categories = [
+    "network-programming",
+]
+
+[package.edition]
+workspace = true
+
+[package.license]
+workspace = true
 
 [dependencies]
-gemot.workspace = true
-mien.workspace = true
-muniment = { workspace = true, features = ["redb"] }
-stickleback.workspace = true
 p2panda-core = "0.7.0"
-p2panda-store = { version = "0.7.0", default-features = false }
-serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+
+[dependencies.gemot]
+workspace = true
+
+[dependencies.mien]
+workspace = true
+
+[dependencies.muniment]
+workspace = true
+features = [
+    "redb",
+]
+
+[dependencies.stickleback]
+workspace = true
+
+[dependencies.p2panda-store]
+version = "0.7.0"
+default-features = false
+
+[dependencies.serde]
+version = "1"
+features = [
+    "derive",
+]
 
 [dev-dependencies]
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies.tokio]
+version = "1"
+features = [
+    "macros",
+    "rt-multi-thread",
+]

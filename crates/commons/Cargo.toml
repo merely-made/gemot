@@ -1,52 +1,102 @@
-# The technical Commons profile: graph, encrypted chat, governed retained
-# facts, and the reusable sans-I/O call grammar. This was M3's consumer-pull
-# receipt; Turnstone is now its intended place consumer, so it belongs in the
-# Mere workspace without becoming a product or UI crate.
 [package]
 rust-version = "1.97.1"
 name = "commons-spine"
 version = "0.0.1"
 edition = "2024"
-license.workspace = true
 publish = false
+repository = "https://github.com/merely-made/gemot"
+
+[package.license]
+workspace = true
 
 [dependencies]
-# The check conclusions and faults, named directly (insigne proofs plan, B).
-insigne = { workspace = true, features = ["verify"] }
-chartulary = { path = "../../eidetic/chartulary" }
-muniment = { path = "../../eidetic/muniment", features = ["redb"] }
-personae.workspace = true
-proofs = { package = "mere-proofs", path = "../../system/proofs" }
-servitor = { path = "../../servitor" }
-stickleback = { path = "../../stickleback" }
-gemot = { workspace = true }
 p2panda-core = "0.7.0"
-p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
-# Every p2panda-net feature except `sqlite`. The address book runs on
-# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
-# backend (and sqlx with it) stays out of the graph entirely. Feature
-# unification means EVERY consumer has to opt out, not just one.
-p2panda-net = { package = "mere-p2panda-net", version = "=0.7.5", default-features = false, features = [
-  "address_book",
-  "iroh_endpoint",
-  "iroh_mdns",
-  "discovery",
-  "gossip",
-  "sync",
-] }
-p2panda-store = { version = "0.7.0", default-features = false }
-serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+
+[dependencies.insigne]
+workspace = true
+features = [
+    "verify",
+]
+
+[dependencies.chartulary]
+workspace = true
+
+[dependencies.muniment]
+workspace = true
+features = [
+    "redb",
+]
+
+[dependencies.personae]
+workspace = true
+
+[dependencies.proofs]
+workspace = true
+
+[dependencies.servitor]
+workspace = true
+
+[dependencies.stickleback]
+workspace = true
+
+[dependencies.gemot]
+workspace = true
+
+[dependencies.p2panda-encryption]
+version = "0.7.0"
+features = [
+    "data_scheme",
+    "message_scheme",
+]
+
+[dependencies.p2panda-net]
+package = "mere-p2panda-net"
+version = "=0.7.5"
+default-features = false
+features = [
+    "address_book",
+    "iroh_endpoint",
+    "iroh_mdns",
+    "discovery",
+    "gossip",
+    "sync",
+]
+
+[dependencies.p2panda-store]
+version = "0.7.0"
+default-features = false
+
+[dependencies.serde]
+version = "1"
+features = [
+    "derive",
+]
 
 [dev-dependencies]
 hex = "0.4"
-murm.workspace = true
-# `test-identity`: tests bind throwaway identities (vault lock plan, ruling 96).
-transport = { workspace = true, features = ["reticulum", "test-identity"] }
 proptest = "1"
 serde_json = "1"
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+
+[dev-dependencies.murm]
+workspace = true
+
+[dev-dependencies.transport]
+workspace = true
+features = [
+    "reticulum",
+    "test-identity",
+]
+
+[dev-dependencies.tokio]
+version = "1"
+features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "time",
+]
 
 [lib]
 path = "src/lib.rs"
