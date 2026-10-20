@@ -166,10 +166,6 @@ tag = "mere-p2panda-net-0.7.5-upstream-20261013"
 git = "https://github.com/mark-ik/p2panda.git"
 tag = "mere-p2panda-net-0.7.5-upstream-20261013"
 
-[patch.crates-io.p2panda-stream]
-git = "https://github.com/mark-ik/p2panda.git"
-tag = "mere-p2panda-net-0.7.5-upstream-20261013"
-
 [patch.crates-io.p2panda-sync]
 git = "https://github.com/mark-ik/p2panda.git"
 tag = "mere-p2panda-net-0.7.5-upstream-20261013"
@@ -182,15 +178,7 @@ rev = "738ef15956a29a125820b2d6c2280d39a6214f8e"
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
-[patch.crates-io.dict-protocol]
-git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
-
 [patch.crates-io.finger-protocol]
-git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
-
-[patch.crates-io.fsp-protocol]
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
@@ -206,19 +194,11 @@ rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
-[patch.crates-io.kepler-protocol]
-git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
-
 [patch.crates-io.misfin]
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
 [patch.crates-io.nex-protocol]
-git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
-
-[patch.crates-io.scorpion-protocol]
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
@@ -230,6 +210,3 @@ rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 git = "https://github.com/merely-made/errand.git"
 rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
 
-[patch.crates-io.text-protocol]
-git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
