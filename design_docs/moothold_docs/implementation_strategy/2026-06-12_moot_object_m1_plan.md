@@ -9,6 +9,22 @@ operations, and Stickleback for accepted-operation replication. Historical
 references to flora as the artifact catalog mean fauna; FLORA is the separate
 federated adaptation lane. Possession of a moot id does not replace current
 admission and delegation checks.
+
+**Native site profile binding (2026-10-21):** Mere's optional
+`mere-site/publication` composes existing authorized contributions and exact
+collection versions with Eidetic typed retention for Gemini, Scroll and Micron.
+A host explicitly selects a site contribution within a collection; a public
+reader need not become a Moot member. The adapter preserves native metadata
+and snapshot V1 bytes and rechecks current effective selection around local
+resolution. Qualification covers disk content reopen and an in-process signed
+replica, plus stale/private/corrupt/withdrawn content refusals. The canonical
+implementation and receipt are tracked at
+`mere/design_docs/mere_docs/implementation_strategy/2026-10-20_shared_site_model_plan.md`.
+This does not close the production signed publication-revision lineage,
+network/protected serving, host-runtime or two-machine gates. Gemot remains
+the collection/authority owner; the site binding introduces no second
+community identity or ancestry log.
+
 **What this is**: the moot tier's missing product object. The reputation
 lane is proven (`moothold::tessera`: signed per-moot ops, LogSync, two-peer
 convergence) but nothing yet *is* a moot — no declaration, no visible
