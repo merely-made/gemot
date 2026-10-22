@@ -17,11 +17,18 @@ A host explicitly selects a site contribution within a collection; a public
 reader need not become a Moot member. The adapter preserves native metadata
 and snapshot V1 bytes and rechecks current effective selection around local
 resolution. Qualification covers disk content reopen and an in-process signed
-replica, plus stale/private/corrupt/withdrawn content refusals. The canonical
+replica, plus stale/private/corrupt/withdrawn content refusals. A subsequent
+native Gemini gate uses Knot's saved-file publisher and an independent Djinn
+resident with real TLS, durable certificate/binding reopening, per-request current
+authority, replacement, membership revocation and withdrawal. Errand supplies
+protocol projection and Armillary joins resident connection tasks. Its explicit
+signed local handoff does not acquire peer content or author a hosting promise.
+The canonical native receipt is
+`mere/support/receipts/gemini-publication-runtime/native.json`. The canonical
 implementation and receipt are tracked at
 `mere/design_docs/mere_docs/implementation_strategy/2026-10-20_shared_site_model_plan.md`.
 This does not close the production signed publication-revision lineage,
-network/protected serving, host-runtime or two-machine gates. Gemot remains
+peer acquisition, protected serving, desktop host attachment or two-machine gates. Gemot remains
 the collection/authority owner; the site binding introduces no second
 community identity or ancestry log.
 
