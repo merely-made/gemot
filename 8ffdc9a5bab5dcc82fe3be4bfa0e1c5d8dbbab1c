@@ -1,0 +1,1 @@
+The lockfile also moves murm (mere-transport, by branch) from 7c2432ab to 9ea81db3: murm's native repin to eidetic aa94fe22 plus the I2P lane pushed the same day. The older transport required muniment ^0.1.2, which 0.2.0 does not meet. The workspace check passed with it.
