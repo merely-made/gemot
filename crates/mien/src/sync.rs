@@ -21,8 +21,8 @@ use std::sync::Arc;
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use p2panda_core::Operation;
-use p2panda_net::{Endpoint, Gossip};
 use stickleback::JoinedSpace;
+use stickleback::{Endpoint, Gossip};
 use transport::{P2pandaTransport, PeerID};
 
 use crate::event::{ChainRoot, CommitmentId, Scope, StandingEvent};

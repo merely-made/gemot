@@ -97,19 +97,6 @@ features = [
     "test-identity",
 ]
 
-[dev-dependencies.p2panda-net]
-package = "mere-p2panda-net"
-version = "=0.7.5"
-default-features = false
-features = [
-    "address_book",
-    "iroh_endpoint",
-    "iroh_mdns",
-    "discovery",
-    "gossip",
-    "sync",
-]
-
 [dev-dependencies.tokio]
 version = "1"
 features = [

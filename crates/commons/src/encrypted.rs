@@ -30,7 +30,6 @@ use muniment::{Backend, WriteOp};
 use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
-use p2panda_net::{Endpoint, Gossip};
 use personae::IdentityProvider;
 use serde::{Deserialize, Serialize};
 use stickleback::{
@@ -38,6 +37,7 @@ use stickleback::{
     JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
     StoreTarget, lane_id, validate_causal_metadata,
 };
+use stickleback::{Endpoint, Gossip};
 
 use crate::parking::{
     ParkedHeader, Parking, ParkingLimits, ParkingStatus, ReadmitReport, Readmitted,

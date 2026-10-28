@@ -696,7 +696,6 @@ dependencies = [
  "gemot",
  "hex",
  "insigne",
- "mere-p2panda-net",
  "mere-proofs",
  "mere-transport",
  "muniment",
@@ -1494,7 +1493,6 @@ dependencies = [
  "errand",
  "gemini-protocol",
  "insigne",
- "mere-p2panda-net",
  "mere-proofs",
  "mere-transport",
  "mien",
@@ -2919,7 +2917,6 @@ name = "mien"
 version = "0.0.1"
 dependencies = [
  "insigne",
- "mere-p2panda-net",
  "mere-transport",
  "muniment",
  "p2panda-core",

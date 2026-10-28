@@ -23,8 +23,8 @@ use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use p2panda_core::Operation;
-use p2panda_net::{Endpoint, Gossip};
 use stickleback::JoinedSpace;
+use stickleback::{Endpoint, Gossip};
 use transport::P2pandaTransport;
 
 use super::roster::MootRoster;

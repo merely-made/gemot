@@ -24,7 +24,6 @@ use muniment::{Backend, MemoryBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_encryption::data_scheme::GroupSecretId;
-use p2panda_net::{Endpoint, Gossip};
 use p2panda_store::topics::TopicStore;
 use personae::{IdentityError, IdentityProvider};
 use proofs::Digest;
@@ -39,6 +38,7 @@ use stickleback::{
     OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
     causal_projection, observed_frontier, propose_epoch_pruning, validate_causal_metadata,
 };
+use stickleback::{Endpoint, Gossip};
 
 /// This chat profile's sync-lane kind, combined with the space id through
 /// `stickleback::lane_id`. Both peers derive the same protocol id from it, and

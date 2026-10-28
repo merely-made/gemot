@@ -893,8 +893,8 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
     /// assembling p2panda sessions.
     pub async fn join(
         &self,
-        endpoint: p2panda_net::Endpoint,
-        gossip: p2panda_net::Gossip,
+        endpoint: stickleback::Endpoint,
+        gossip: stickleback::Gossip,
     ) -> Result<stickleback::JoinedSpace<CommonsExt>, stickleback::JoinError> {
         let accept_store = self.store.clone();
         let container = self.container;

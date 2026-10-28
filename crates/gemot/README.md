@@ -89,10 +89,11 @@ typed vocabulary; `servitor` for the participant-gate adapter. `mooting` for
 `RecognitionContext`, used by
 `MootRoster::recognition_context`. `proofs`, `serde`, `redb`, `thiserror`.
 
-`p2panda-net`, `p2panda-sync`, `transport`, `chartulary`, and `tokio` are
-dev-dependencies only, for the two-peer convergence tests and the `moot-peer`
-example, which play the host. `p2panda-net` is still in the normal build graph
-transitively through `stickleback`. The crate declares no cargo features.
+`p2panda-sync`, `transport`, `chartulary`, and `tokio` are dev-dependencies
+only, for the two-peer convergence tests and the `moot-peer` example, which play
+the host. The tests take the `Endpoint` and `Gossip` handles through
+`stickleback`'s re-export, so `p2panda-net` enters the build graph only through
+`stickleback` and `transport`. The crate declares no cargo features.
 
 ## Consumers
 
