@@ -1,6 +1,12 @@
 # Moot Object M1 — a moot you can declare, join, and share into
 
 **Date**: 2026-06-12
+**Superseded (2026-11-01)**: cut into
+`moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md`,
+which carries every open, deferred and follow-on item; this plan is archived
+whole. Paths: since the 2026-10-19 promotion, `crates/gemot/...` and
+`crates/commons/...` are Gemot's own; other bare `crates/...` and `ports/...`
+paths in this plan are Mere's (`mere/...`).
 **Status (2026-10-13)**: Historical M1 landed as recorded below. The active
 continuation is [Community collections and author-offline publishing](#community-collections-and-author-offline-publishing-2026-09-04). Its same-machine live-peer process proof passed with stable-Persona binding and current Gemot command authority. P3b (contribution withdrawal, `b99e532a`) and P3d (collection lineage, `6f1f73bf`) landed in Gemot on 2026-09-09. Turnstone has landed P3a's source capture (`b4e69ce`), the P3c collection consumer (`6b77e34`) and collection-scoped search (`aa515bd`) on 2026-09-09 and 2026-09-10; its page capture plan (`turnstone/design_docs/2026-08-28_page_capture_plan.md`) calls P3a in progress. Bounded copy retention and signed hosting commands are now qualified in the 2026-10-12 continuation below. Production publication lineage, network/protected serving, historical authority proof, the Persona-to-device adapter, and a two-machine receipt remain open.
 The original M1 body preserves its dated vocabulary and ownership. Current owners
@@ -26,7 +32,7 @@ signed local handoff does not acquire peer content or author a hosting promise.
 The canonical native receipt is
 `mere/support/receipts/gemini-publication-runtime/native.json`. The canonical
 implementation and receipt are tracked at
-`mere/design_docs/mere_docs/implementation_strategy/2026-10-20_shared_site_model_plan.md`.
+`mere/design_docs/archive_docs/2026-10-28/2026-10-20_shared_site_model_plan.md`.
 This does not close the production signed publication-revision lineage,
 peer acquisition, protected serving, desktop host attachment or two-machine gates. Gemot remains
 the collection/authority owner; the site binding introduces no second
@@ -193,7 +199,7 @@ product surface.
 
 **Findings (2026-10-09):** `crates/gemot/examples/author-offline-publication.rs`
 already proves same-machine scoped transfer, author exit and durable reopening.
-`crates/eidetic/eidetic-core/src/pack.rs` already signs `WasmComponent` and
+`eidetic/crates/eidetic-core/src/pack.rs` already signs `WasmComponent` and
 `Asset` inventories; signature verification alone grants no execution power.
 `crates/script/app-host/src/lib.rs` hosts the existing envelope WIT contract and
 accepts exact verified component bytes. The existing production collection
@@ -203,7 +209,7 @@ those owners and keeps its catalogue/event vocabulary inside the example.
 **Progress:** 2026-10-09 — isolated checkout started at current remote Mere
 `db24dbe96612a6bd47fcd79625668dbc713fa575`; no production runtime wiring changed.
 
-2026-10-09 — `crates/moot/gemot/examples/capsule-library.rs` composes two
+2026-10-09 — `mere/ports/moot/examples/capsule-library.rs` composes two
 independently signed gemtext capsule packs, a later Alice revision and a signed
 WIT applet pack. Existing Gemot grants authorize contribution, collection
 curation and a distinct Standing hosting commitment. The collection selects
@@ -345,7 +351,7 @@ capture after this adoption.
 ```sh
 # From ports/graphshell/web; its standalone lock is generated on first build.
 cargo build --target wasm32-unknown-unknown --no-default-features --features applets
-# Return to crates/moot/gemot/examples/capsule-library:
+# Return to mere/ports/moot/examples/capsule-library:
 node graphshell-build.mjs /absolute/path/to/proof-root/site /absolute/path/to/graphshell_web.wasm
 python3 -m http.server 8774 --bind 127.0.0.1 --directory /absolute/path/to/proof-root/site
 # In a second terminal; headed installed Chrome and Python with Pillow are required:
@@ -391,8 +397,9 @@ the successful fast-forward push.
 
 **Status (2026-10-10):** all twenty browser checks pass on the repaired Classic
 renderer, with five inspected captures. Source and bundle hashes match the
-qualified `6a10ad673` source. Main publication follows this completed receipt;
-the historical held and failed candidates below remain separate evidence.
+qualified `6a10ad673` source. It was published on Mere main as `848bf64a4`
+(readings) and `172245c5e` (the same patch as `6a10ad673`); the historical held
+and failed candidates below remain separate evidence.
 The continuation starts from published `3055ae5af`. The
 [design language §9.2–9.3](https://github.com/merely-made/mere/blob/main/design_docs/2026-08-23_projection_scenes_and_graph_native_platform.md#92-selection-foreground-and-ambient-context)
 separates attention, activity, presentation and keeping, and distinguishes two
@@ -400,7 +407,7 @@ accesses to the same resource. This capsule slice exercises that boundary with
 instance-local readings; it neither authors graph Surfaces nor introduces a
 general applet/tile ABI. The existing
 [app composition owners](https://github.com/merely-made/mere/blob/main/design_docs/cambium_docs/research/2026-10-06_app_composition_brief.md#11-current-consumers-and-design-direction-2026-10-09),
-[Tabard adoption](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-07-05_theme_modes_plan.md#application-adoption-2026-10-09)
+[Tabard adoption](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-10-28/2026-07-05_theme_modes_plan.md#application-adoption-2026-10-09)
 and resident graph work keep their current lanes.
 
 1. Give each open reading a distinct local identity while sharing one verified
@@ -578,11 +585,11 @@ cabal/channel identifiers. It composes the same portable draft/attention model
 without treating bilateral secret possession as Gemot authority. Its native
 owner/adapter receipt and view-address compatibility boundary are recorded once
 in the
-[Murm runtime plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md#2026-10-10-murms-application-read-and-exact-channel-addresses).
+[Murm runtime plan](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-10-28/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md#2026-10-10-murms-application-read-and-exact-channel-addresses).
 Graphshell presentation remains the next consumer step; these library checks
 do not establish a rendered community client.
 The upstream-aligned authoring and retention continuation is recorded in the
-[Murm runtime plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md#2026-10-11-observed-frontiers-and-authorized-retention-roots).
+[Murm runtime plan](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-10-28/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md#2026-10-11-observed-frontiers-and-authorized-retention-roots).
 It adds complete observed frontiers and owner-authorized per-author retention
 roots, with explicit late-bootstrap and policy-reinstall boundaries. Design
 language §9.16 distinguishes disclosed live entities, captures with lineage and
@@ -636,7 +643,7 @@ joined. Different readers and Moots require a fresh pane. A refresh or selection
 change invalidates local completion bindings without claiming cancellation of
 an already-dispatched domain command.
 
-The current S-PC [rule-editor and live binding](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-10-07_scenograph_editor_plan.md#exact-occurrence-previews-and-live-forme-guides-draft-2026-10-11)
+The current S-PC [rule-editor and live binding](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-10-28/2026-10-07_scenograph_editor_plan.md#exact-occurrence-previews-and-live-forme-guides-draft-2026-10-11)
 provide the presentation grammar. A future resource/activity occurrence adapter
 must disclose only available owner facts, keep unknown state distinct from false,
 and preserve per-view attention and prior matches. Summary-first inspection,
@@ -1004,12 +1011,12 @@ The earlier native captures remain bound to their original source checkpoints.
 ### Capsule peer and standalone-browser reproduction
 
 The following commands execute the earlier capsule-library proof. Start at the
-repository root; browser commands remain subject to the current GPU hold.
+Mere repository root; browser commands remain subject to the current GPU hold.
 
 ```sh
-cargo build --manifest-path crates/moot/gemot/examples/capsule-library/guest/Cargo.toml --locked --target wasm32-wasip2 --release
-cargo run -p gemot --example capsule-library --locked -- run crates/moot/gemot/examples/capsule-library/guest/target/wasm32-wasip2/release/capsule_library_guest.wasm /absolute/path/to/new-proof-root
-cd crates/moot/gemot/examples/capsule-library
+cargo build --manifest-path ports/moot/examples/capsule-library/guest/Cargo.toml --locked --target wasm32-wasip2 --release
+cargo run -p mere-moot --example capsule-library --locked -- run ports/moot/examples/capsule-library/guest/target/wasm32-wasip2/release/capsule_library_guest.wasm /absolute/path/to/new-proof-root
+cd ports/moot/examples/capsule-library
 pnpm install --frozen-lockfile
 node build.mjs /absolute/path/to/new-proof-root/site
 python3 -m http.server 8770 --bind 127.0.0.1 --directory /absolute/path/to/new-proof-root/site
@@ -1198,10 +1205,10 @@ management require their own subsequent consumer receipts.
 
 ### Findings (2026-09-04)
 
-- `crates/moot/commons/src/lib.rs` exposes `Replica::accept` and
+- `crates/commons/src/lib.rs` exposes `Replica::accept` and
   `projection_with_authority`; use the retained/effective split rather than adding
   an arrival-ordered shared graph.
-- `crates/eidetic/eidetic-core/src/manifest.rs` (`BlobManifest`) already separates
+- `eidetic/crates/eidetic-core/src/manifest.rs` (`BlobManifest`) already separates
   content hash, sources, privacy, provenance and trust. Source advertising and
   community admission still need the P1 consumer proof.
 - `crates/mesh/mesh/src/retention.rs` (`AvailabilityPolicy`) distinguishes a hosting
@@ -1235,7 +1242,7 @@ management require their own subsequent consumer receipts.
   proof-local policy rejected unauthorized publication and hosting candidates;
   an unpublished path returned Gemini `51`. The concurrent proof artifact is
   not yet committed; its target and exact ids are:
-  [author-offline community publication proof](../research/2026-09-05_author_offline_publication_proof.md)
+  [author-offline community publication proof](../../moothold_docs/research/2026-09-05_author_offline_publication_proof.md)
   P1 remains partial: candidate publication/hosting records and explicit fixture
   policy must become production authority. Current `Shared` and Standing folds
   also need attested outer-signer binding to stable Personae roots. The
@@ -1373,7 +1380,7 @@ management require their own subsequent consumer receipts.
   retaining those bodies. Incidental trail text is never capture evidence and is
   never eligible for Moot sharing.
 
-  **P3b: contribution withdrawal.** Gemot's records lane should add one signed
+  **P3b: contribution withdrawal** (landed 2026-09-09, below). Gemot's records lane should add one signed
   `Withdrawn { target_share, at_ms }` event, targeting the original `Shared`
   operation hash. Only that share's stable author may withdraw it. The roster
   retains the positive and withdrawal facts while `authorized_fauna` excludes an
@@ -1394,7 +1401,7 @@ management require their own subsequent consumer receipts.
   capability revocation removing the result after resync and cold reopen while
   retained facts remain inspectable. Index bytes and scores never replicate.
 
-  **P3d: collection lineage.** Extend Gemot's existing signed records lane rather
+  **P3d: collection lineage** (landed 2026-09-09, below). Extend Gemot's existing signed records lane rather
   than creating another journal or transport. A collection has a caller-minted
   stable id; changes name their exact observed collection-event heads; a derived
   version is the collection reference, sorted causal frontier and canonical
