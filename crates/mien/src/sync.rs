@@ -7,7 +7,7 @@
 //! Two-peer convergence for the standing lane.
 //!
 //! After the sibling-posture purity split, gemot no longer owns p2panda-net:
-//! the pump (the LogSync session + the [`stickleback::SyncedSpace`] drain) is
+//! the pump (the LogSync session + the [`murm_sync::SyncedSpace`] drain) is
 //! **host-composed**, and standing keeps only the store, wire-level admission,
 //! and ledger fold. The standing lane is receive-only (authoring is a direct
 //! `store.insert`, no live publish), so the host just builds the session, drives
@@ -21,8 +21,8 @@ use std::sync::Arc;
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
 use p2panda_core::Operation;
-use stickleback::JoinedSpace;
-use stickleback::{Endpoint, Gossip};
+use murm_sync::JoinedSpace;
+use murm_sync::{Endpoint, Gossip};
 use transport::{P2pandaTransport, PeerID};
 
 use crate::event::{ChainRoot, CommitmentId, Scope, StandingEvent};

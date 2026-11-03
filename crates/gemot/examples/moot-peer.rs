@@ -34,7 +34,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use gemot::moot::{MootEvent, MootExt, MootLogId, MootRoster, MootStoreFile, verify};
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use p2panda_core::{Hash, Operation};
-use stickleback::JoinedSpace;
+use murm_sync::JoinedSpace;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use transport::P2pandaTransport;
 

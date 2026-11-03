@@ -17,7 +17,7 @@ use insigne::delegation::{
     delegation_signing_salt,
 };
 use muniment::MemoryBackend;
-use stickleback::JoinedSpace;
+use murm_sync::JoinedSpace;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootDelegationExt, MootDelegationStore};

@@ -27,6 +27,7 @@ workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+murm-sync.workspace = true
 p2panda-core = "0.7.0"
 redb = "2"
 thiserror = "1"

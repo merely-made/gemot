@@ -10,6 +10,7 @@ repository = "https://github.com/merely-made/gemot"
 workspace = true
 
 [dependencies]
+murm-sync.workspace = true
 p2panda-core = "0.7.0"
 thiserror = "1"
 

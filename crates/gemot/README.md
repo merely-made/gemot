@@ -72,7 +72,7 @@ gemot/flora/v1           GEMOT_FLORA_LANE
 ```
 
 `Moot::join_lanes(endpoint, gossip)` joins all seven through
-`stickleback::JoinedSpace` and returns `MootLanes`, whose `sync_status()` and
+`murm_sync::JoinedSpace` and returns `MootLanes`, whose `sync_status()` and
 `status_handles()` report per-lane state. The host owns the endpoint and gossip
 handles and publishes authored operations; gemot's own code names no network
 session type.
@@ -81,8 +81,8 @@ session type.
 
 `p2panda-core`, `p2panda-auth`, `p2panda-store` (0.7), and `p2panda-encryption`
 (`data_scheme`) for signed operations, group materialization, and group-secret
-ids. `stickleback` for `MunimentStore`, `OperationProcessor`, `JoinedSpace`, and
-native drops. `muniment` (`redb`) for durable backing. `identity` (the
+ids. `stickleback` for `MunimentStore`, `OperationProcessor` and native drops;
+`murm-sync` for `JoinedSpace` and live network handles. `muniment` (`redb`) for durable backing. `identity` (the
 `personae` package, renamed by the workspace alias) for keypairs, derived-key
 attestations, and delegation certificates. `mere-capability` for the shared
 typed vocabulary; `servitor` for the participant-gate adapter. `mooting` for
@@ -92,8 +92,8 @@ typed vocabulary; `servitor` for the participant-gate adapter. `mooting` for
 `p2panda-sync`, `transport`, `chartulary`, and `tokio` are dev-dependencies
 only, for the two-peer convergence tests and the `moot-peer` example, which play
 the host. The tests take the `Endpoint` and `Gossip` handles through
-`stickleback`'s re-export, so `p2panda-net` enters the build graph only through
-`stickleback` and `transport`. The crate declares no cargo features.
+`murm-sync`, which owns live network sessions; `transport` owns endpoints.
+Stickleback remains the validated operation store and admission layer. The crate declares no cargo features.
 
 ## Consumers
 

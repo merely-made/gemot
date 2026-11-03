@@ -7,7 +7,7 @@
 //! Two-peer convergence for the moot-object lane.
 //!
 //! After the sibling-posture purity split, gemot no longer owns p2panda-net:
-//! the pump (the LogSync session + the [`stickleback::SyncedSpace`] drain) is
+//! the pump (the LogSync session + the [`murm_sync::SyncedSpace`] drain) is
 //! **host-composed**, and moot keeps only the store + fold + [`author`]
 //! (sign-and-store; the host publishes). These tests play the host — build the
 //! session over a [`MootStore`], drive it via `SyncedSpace`, and author via
@@ -23,8 +23,8 @@ use std::time::Duration;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use p2panda_core::Operation;
-use stickleback::JoinedSpace;
-use stickleback::{Endpoint, Gossip};
+use murm_sync::JoinedSpace;
+use murm_sync::{Endpoint, Gossip};
 use transport::P2pandaTransport;
 
 use super::roster::MootRoster;

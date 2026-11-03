@@ -21,7 +21,8 @@ use std::sync::{Arc, Mutex};
 
 use muniment::Backend;
 use p2panda_core::Operation;
-use stickleback::{Endpoint, Gossip, JoinError, JoinedSpace, SyncStatus, lane_id};
+use stickleback::{JoinError, lane_id};
+use murm_sync::{Endpoint, Gossip, JoinedSpace, SyncStatus};
 
 use super::MootGroupExt;
 use super::constitution::ConstitutionExt;

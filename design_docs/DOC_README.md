@@ -1,5 +1,10 @@
 # Gemot documentation
 
+Network-session ownership (2026-11-03): Gemot keeps its group ACL, membership
+and lane policy; its join helpers now use Murm's `murm-sync`. Stickleback in
+Eidetic retains validated operation storage and group-encryption mechanisms.
+Scope and qualification: `murm/design_docs/2026-10-28_transport_consolidation_plan.md`, T7.
+
 Preserve host-owned authority, existing formats and independent crate feature boundaries. Read [documentation policy](DOC_POLICY.md) before editing.
 
 Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026-10-19_family_promotion_plan.md` (archived 2026-10-28); open items continue in `mere/design_docs/mere_docs/implementation_strategy/2026-10-28_family_promotion_plan.md`.

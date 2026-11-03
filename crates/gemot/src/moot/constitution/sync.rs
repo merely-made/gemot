@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use identity::{IdentityProvider, InMemoryProvider};
 use muniment::MemoryBackend;
-use stickleback::{CheckpointAuthority, JoinedSpace};
+use stickleback::CheckpointAuthority;
+use murm_sync::JoinedSpace;
 use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
 use super::{Constitution, ConstitutionExt, ConstitutionRules, ConstitutionStore};

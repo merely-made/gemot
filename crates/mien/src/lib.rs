@@ -50,7 +50,7 @@
 //!   every member's log into one ledger). Sync is host-composed after the
 //!   sibling-posture purity split: this crate provides the store, wire-level
 //!   admission, and fold, and the host builds the `LogSync` +
-//!   `stickleback::SyncedSpace` pump (the test-only `sync` module plays
+//!   `murm_sync::SyncedSpace` pump (the test-only `sync` module plays
 //!   that host for the two-peer convergence tests).
 //! - [`persona_chain`] (Phase 2) — the persona forest over the root-keyed ledger:
 //!   resolves a leaf persona to its chain root + depth, and presents a

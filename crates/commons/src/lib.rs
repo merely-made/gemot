@@ -893,12 +893,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
     /// assembling p2panda sessions.
     pub async fn join(
         &self,
-        endpoint: stickleback::Endpoint,
-        gossip: stickleback::Gossip,
-    ) -> Result<stickleback::JoinedSpace<CommonsExt>, stickleback::JoinError> {
+        endpoint: murm_sync::Endpoint,
+        gossip: murm_sync::Gossip,
+    ) -> Result<murm_sync::JoinedSpace<CommonsExt>, stickleback::JoinError> {
         let accept_store = self.store.clone();
         let container = self.container;
-        stickleback::JoinedSpace::join::<_, u64, _, _>(
+        murm_sync::JoinedSpace::join::<_, u64, _, _>(
             stickleback::lane_id(COMMONS_GRAPH_LANE, container),
             self.sync_store(),
             endpoint,
@@ -999,7 +999,7 @@ mod tests {
     use serde_json::json;
     use std::sync::Arc;
     use std::time::Duration;
-    use stickleback::JoinedSpace;
+    use murm_sync::JoinedSpace;
     use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
     const CONTAINER: [u8; 32] = [0xc0; 32];

@@ -33,11 +33,11 @@ use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
 use personae::IdentityProvider;
 use serde::{Deserialize, Serialize};
 use stickleback::{
-    Admission, DataKeyring, GroupCiphertext, GroupCryptoError, GroupSecretId, JoinError,
-    JoinedSpace, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
+    Admission, DataKeyring, GroupCiphertext, GroupCryptoError, GroupSecretId, JoinError, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, Reject,
     StoreTarget, lane_id, validate_causal_metadata,
 };
-use stickleback::{Endpoint, Gossip};
+use murm_sync::JoinedSpace;
+use murm_sync::{Endpoint, Gossip};
 
 use crate::parking::{
     ParkedHeader, Parking, ParkingLimits, ParkingStatus, ReadmitReport, Readmitted,

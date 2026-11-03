@@ -34,11 +34,12 @@ use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, CheckpointAuthority, DataKeyring,
     EpochCheckpointBasis, EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts,
     EpochRetentionReason, GroupCiphertext, GroupCryptoError, GroupEncryptionMode,
-    GroupEncryptionProfile, JoinError, JoinedSpace, MunimentStore, OperationPolicy,
+    GroupEncryptionProfile, JoinError, MunimentStore, OperationPolicy,
     OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
     causal_projection, observed_frontier, propose_epoch_pruning, validate_causal_metadata,
 };
-use stickleback::{Endpoint, Gossip};
+use murm_sync::JoinedSpace;
+use murm_sync::{Endpoint, Gossip};
 
 /// This chat profile's sync-lane kind, combined with the space id through
 /// `stickleback::lane_id`. Both peers derive the same protocol id from it, and
