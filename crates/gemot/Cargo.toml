@@ -135,3 +135,6 @@ default-features = false
 features = [
     "pack-signing",
 ]
+
+[lints]
+workspace = true

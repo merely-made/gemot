@@ -70,3 +70,6 @@ workspace = true
 features = [
     "test-identity",
 ]
+
+[lints]
+workspace = true

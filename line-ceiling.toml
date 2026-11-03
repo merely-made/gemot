@@ -1,0 +1,54 @@
+# mere/design_docs/mere_docs/implementation_strategy/2026-10-30_house_style_plan.md (H2); all physical source lines count.
+ceiling = 600
+
+[[exception]]
+path = "crates/commons/src/call.rs"
+reason = "Reusable sans-I/O control grammar and deterministic fold for a two-person Commons call. Existing source-size debt; a responsibility split must preserve CallId, SpaceId, ParticipantId and existing module visibility."
+
+[[exception]]
+path = "crates/commons/src/chat.rs"
+reason = "Minimal encrypted Commons chat profile. Existing source-size debt; a responsibility split must preserve ChatClass, ChatExt, ChatCheckpointLink and existing module visibility."
+
+[[exception]]
+path = "crates/commons/src/encrypted.rs"
+reason = "Encrypted graph profile: the commons graph over group-sealed records. Existing source-size debt; a responsibility split must preserve GraphEncryption, EncryptedCommonsExt, SealedRecord and existing module visibility."
+
+[[exception]]
+path = "crates/commons/src/lib.rs"
+reason = "The commons spine: a chartulary container graph as a replicated domain. Existing source-size debt; a responsibility split must preserve CommonsExt, GraphHeader, CommonsBatch and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/examples/author-offline-publication.rs"
+reason = "Three-process proof that a moot member can retain and serve an author's exact public page after the author exits. Existing source-size debt; a responsibility split must preserve AnyError, PublicationRevisionV1, SignedPublicationRevisionV1 and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/flora.rs"
+reason = "FLORA: social receipts for federated LoRA rounds. Existing source-size debt; a responsibility split must preserve FloraRoundId, FloraParticipant, FloraWeight and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/records/collection.rs"
+reason = "Causal, contribution-preserving collection history inside one Moot. Existing source-size debt; a responsibility split must preserve CollectionId, CollectionRef, ContributionRef and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/records/roster.rs"
+reason = "The moot roster — a deterministic, order-independent fold of moot events. Existing source-size debt; a responsibility split must preserve Declaration, Member, FaunaEntry and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/records/store.rs"
+reason = "The Moot object store over the shared muniment replication processor. Existing source-size debt; a responsibility split must preserve MootStoreError, StoredCheckpoint, MootPolicy and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/service.rs"
+reason = "Aggregate domain service for one Moot. Existing source-size debt; a responsibility split must preserve MootDropSelector, ConstitutionEvidence, DelegationEvidence and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/tulpa.rs"
+reason = "Tulpa: a community-adopted, revisioned shared artifact. Existing source-size debt; a responsibility split must preserve TulpaId, TulpaVersion, TulpaProposalId and existing module visibility."
+
+[[exception]]
+path = "crates/gemot/src/moot/typed_authorization.rs"
+reason = "The moot authorization seam over the TYPED capability vocabulary — the capability-model round's OQ3 unification (ruled 2026-07-24: unify, on the trait, when the caller exists;. Existing source-size debt; a responsibility split must preserve TypedMootAuthorization, MootAuthority and existing module visibility."
+
+[[exception]]
+path = "crates/mien/src/ledger.rs"
+reason = "The standing projection — folds events into a per-chain-root score. Existing source-size debt; a responsibility split must preserve StandingConfig, Commitment, Ledger and existing module visibility."

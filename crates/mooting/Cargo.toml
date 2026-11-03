@@ -34,3 +34,6 @@ version = "1"
 features = [
     "derive",
 ]
+
+[lints]
+workspace = true

@@ -87,3 +87,6 @@ features = [
 
 [lib]
 path = "src/lib.rs"
+
+[lints]
+workspace = true
