@@ -1,4 +1,4 @@
-# Moot relay pools: P0/P1 receipts, 2026-11-03
+# Moot relay pools: P0-P2 receipts, 2026-11-03
 
 Canonical plan: [Moot relay pools](../../moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md).
 
@@ -144,3 +144,159 @@ equality, then removed with `git worktree remove`; its task branch was removed.
 That also removed the stopped hook's marker-identified generated target.
 No task-owned isolated target, Cargo home, worktree, endpoint or child process
 is retained. Stable shared Cargo targets remain under their repository owners.
+
+## P2 implementation and public trial, 2026-11-03
+
+P2 adds opt-in `mere-transport/i2p`, Murm `relay-i2p` and Gemot
+`relay-pool-i2p`. It reuses Truchman 0.1.1, the shared Noise/setup gate,
+Notochord admission and the native forwarding budget/pump. Retinue's identity
+defaults, p2panda-spaces adoption and group-key orchestration are unchanged.
+The accepting SAM adapter reports no carrier-authenticated Personae subject.
+The client verifies the pool signature and an independently trusted target ID
+and recipient key; pool signing authority cannot replace that recipient.
+
+### Recorded checks
+
+| Gate | Result | Qualification boundary |
+|---|---|---|
+| Gemot full opt-in library suite, local supplier overlay | 122 passed, 2 ignored | Includes all P1 controls and three scripted P2 tests; public gates are separate |
+| Gemot full opt-in library suite, published Murm pin | 122 passed, 2 ignored; 98.80 s | No path overlay; includes independent target/recipient pin checks |
+| Gemot final focused I2P controls, `--frozen` | 3 passed, 2 ignored; 5.72 s and 5.36 s | After refining the public lifecycle probe; no new supplier resolution |
+| Murm + murm-sync library suites with `murm/relay-i2p` | 75 + 13 passed | Native workspace's locked dependency graph |
+| mere-transport library suite with `i2p,noise,notochord,test-identity` | 99 passed, 1 ignored | Includes canonical locator/hop refusal, session poisoning and fresh-alias controls; ignored item is the existing killed-peer child helper |
+| Murm opt-in Clippy | Exit 0, warnings retained | Existing/general documentation/style warnings; not a warning-free claim |
+| Public two-worker pool, `p2-public-05.txt` | Passed, 153.99 s | Emissary 0.4.0 client/recipient router and distinct i2pd 3.0.0 worker router on this Windows host |
+| Public two-worker pool, final supplier pin, `p2-public-06.txt` | Passed, 129.94 s | Published Murm pin, independent recipient trust, same explicit provider/tunnel profile |
+| Public provider termination/restart, `p2-provider-lifecycle-03.txt` | Passed, 182.72 s | Real i2pd termination; local stream/session refusal, fresh alias and carrier byte exchange after restart; authenticated relay payloads are covered separately above |
+
+The public two-worker run creates four SAM sessions. Each selects two inbound
+and two outbound hops, zero variance and two tunnels per direction. Client
+LeaseSet publication is disabled; worker and recipient publication is enabled.
+Both router providers have transit and router-address publication disabled.
+The client and worker bridges are distinct, preventing a same-router shortcut
+between local Destinations on either relay leg. Physical machines/uplinks are
+not independent in this test.
+
+The passing public run checked byte-exact inner-Noise payloads through both
+workers, unrelated requester refusal, wrong worker and recipient keys, an
+established stream failing when its worker stops, a new connection through the
+other worker under the same pool, and observed withdrawal cancelling active
+work/refusing new work. Worker/recipient task owners await cancellation and
+check zero remaining reservations. Setup refusals expose only sanitized stage
+facts, never SAM messages, private keys or direct locators.
+
+Public offers use canonical I2P locators and contain no contributor ancestry,
+private topic, operator roster, native ticket, URL or direct-address fallback.
+The scripted controls additionally reject those foreign fields, a valid pool
+signer's recipient substitution, stale/altered signatures and cached offers
+whose receiver-local monotonic deadline has passed. A carrier-identity-required
+rule refuses SAM even after Noise succeeds.
+
+### Failed/superseded P2 attempts
+
+- `p2-public-01.txt` and `p2-public-03.txt` stopped at Cargo's shared cache lock;
+  neither is a network acceptance attempt or passing result.
+- `p2-public-02.txt`: failed creating the first Emissary session at a 60-second
+  endpoint-creation allowance, before relay traffic. The host creation bound
+  was raised to 300 seconds, leaving tunnel lengths/security unchanged.
+- `p2-public-04.txt`: all sessions and three route probes became ready, then
+  secure setup failed before payload transfer. The accept loop was cancelling
+  an in-flight SAM ACCEPT whenever another task completed. Keeping that command
+  pinned across task reaping made the subsequent public run pass.
+- The first scripted fixture reused native policy's carrier-identity
+  requirement. SAM correctly could not satisfy it. The I2P fixture explicitly
+  requires Noise/secure admission while leaving raw carrier authentication
+  absent; a separate negative control preserves the stricter refusal.
+- Immediate post-abort reservation checks raced child-task cancellation.
+  Explicit shutdown now waits for the owned JoinSet before asserting release.
+- The first provider lifecycle fixture failed route readiness before any
+  provider stop. Its replacement separates a fixed, idempotent carrier probe
+  from the other gate's authenticated relay/application payloads.
+- `p2-provider-lifecycle-02.txt`: local stream termination and old-session
+  refusal passed after stopping i2pd. Replacement-session creation then hit
+  its 180-second total bound while each individual attempt allowed only three
+  seconds. A direct TCP probe confirmed SAM was reachable; Windows' socket
+  inventory had misleadingly omitted its loopback listener. The next fixture
+  permits 60 seconds per creation attempt without extending the total bound.
+
+### Provider and source facts
+
+i2pd prints `3.0.0 (0.9.71)`, Boost 1.92.0 and OpenSSL 3.6.5. The reused binary
+SHA-256 is `6f501e1f4625ad5f3f1075e2fd4f4096aaf664386b04c526cee9b05a7301c2a2`.
+Its Windows GUI refuses a second instance even with a separate data directory;
+the [named source check](https://github.com/PurpleI2P/i2pd/blob/3.0.0/Win32/Win32App.cpp)
+checks for the existing application window. The unused second process was
+stopped. Emissary uses the existing `murm-i2p` provider, including its retained
+debug-assertion mitigation. Its SAM implementation consumes the requested
+nonzero hop/count settings; it does not establish a raw carrier Persona.
+
+Murm implementation is committed at
+`5b45742f87ecbd67ffbca814f8e1945e33cb55a0`. The receiving pin/lock and final
+qualification follow below. The temporary P2 Cargo overlay is retained as
+`Code/testing/gemot/moot-relay-pools/p2-local-suppliers.toml`; final delivered
+builds must not depend on it. The two source-owner workspace graphs differ:
+Murm's native lock selects iroh 1.4.1/Dramatis `6aa0daa4`, while Gemot retains
+its existing iroh 1.0.3/Dramatis `e26b434a` cohort. No broad repin is implied.
+
+The published-pin receiving command was `cargo test -p gemot --lib --features
+relay-pool-i2p -- --test-threads=1`, run at the Gemot root with
+`CARGO_TARGET_DIR=C:\t\cargo-targets\gemot`,
+`CARGO_BUILD_BUILD_DIR=C:\t\cargo-targets\gemot\build` and
+`CARGO_BUILD_JOBS=1`. All five Murm-family source entries in the receiving lock
+(transport, Murm, sync, Retinue and Truchman) resolve to `5b45742f87ecbd67ffbca814f8e1945e33cb55a0`.
+
+Gemot implementation and receiving lock are committed/pushed at
+`10658f6227e2b08ca9f4ec0cc6670039acba6c8b`. Its line-ceiling and configured
+`cargo clippy --locked --all-targets` commit checks passed. Murm's ownership
+crosslinks are committed/pushed at `9733d3e93dbe6aa08fba3d42b3acce6712aa55af`.
+The embedded `sam_provider.exe` SHA-256 is
+`130596c2040adada836a4bb4f2df211d613a8091020277f848d19544a1fd0491`.
+
+The public repeat ran the receiving test artifact directly, selecting
+`moot::relay::tests::i2p::live::public_i2p_two_workers_on_distinct_routers`
+with `--exact --ignored --nocapture --test-threads=1`. Environment variables
+`MURM_RELAY_I2P_CLIENT_SAM` and `MURM_RELAY_I2P_WORKER_SAM` name the explicit
+loopback bridges. The source equivalent is the receiving Cargo command above
+with that test filter and `-- --ignored --nocapture --test-threads=1`.
+
+The lifecycle gate selects
+`moot::relay::tests::i2p::live::public_provider_termination_closes_local_streams_and_restart_changes_alias`
+with the same runner flags and `MURM_RELAY_PROVIDER_RESTART=external-control`.
+Its owner stops only its named i2pd process at `MURM_POOL_PROVIDER_STOP_READY`,
+then starts the same binary/configuration/data directory at
+`MURM_POOL_PROVIDER_RESTART_READY`. The gate checked local stream failure,
+refused use of the old session, a different transient alias and byte-exact
+carrier traffic after reopening. Its fixed retry probe carries only the
+idempotent `lifecycle` diagnostic. The other public gate supplies the
+independently authenticated relay-payload proof. The refreshed Emissary helper
+reported stored bootstrap state and ended with `Exited` on its stop marker.
+
+### Privacy boundary
+
+This qualification is for the named I2P service path and providers. Public
+Moot membership/capability records can still identify authorized operator
+candidates; service offers do not include private contributor lineage.
+Pool identities, repeated service keys and Destinations remain linkable. Direct
+operator control links retain their existing metadata exposure. Independent
+machines/networks, global traffic correlation, public exit/proxy use and
+unattended product deployment remain outside these receipts.
+
+The plan allocates 20 MB to P2. At the pre-cleanup measurement, all task-local
+runtime/configuration/compact outputs together occupy 3,486,767 bytes. Private
+router identity/runtime files remain local, outside the source receipt; no
+SAM private-key response, raw packet capture or user payload is published.
+
+Final cleanup, 2026-11-03 21:08:44 -05:00: task-owned Emissary stopped through
+its control marker, and task-owned i2pd stopped. Process inventory found no
+remaining i2pd, `sam_provider` or public Gemot I2P test process. Fixture owners
+also checked zero active/pending relay reservations. Shared Cargo targets were
+reused; no isolated target, Cargo home or worktree was introduced. Concurrent
+Murm wire-lane changes remain untouched.
+
+The final task-local retained size is **4,632,367 bytes** across configuration,
+private runtime state and compact successful/failed outputs, within P2's 20 MB
+allocation and the plan's 100 MB total cap. Owner: `moot-relay-pools-p2`.
+Private router state under `Code/testing/gemot/moot-relay-pools/` remains local
+for reproducing this named-provider qualification; it is not published with
+the source receipt. P2 is qualified at this exact scope. P3 independent
+machines/networks and unattended product deployment remain open.

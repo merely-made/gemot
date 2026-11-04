@@ -11,12 +11,14 @@ Relay-pool working principle: membership never commits a device's resources.
 Contributions require bounded, revocable owner consent; public service offers
 and restricted operator coordination have distinct disclosure rules. Live sync
 uses Murm, and encrypted records alone do not establish host-location privacy.
+An I2P Destination supplies routing; Noise and Notochord supply channel identity
+and admission. Applications pin recipients independently of pool signing keys.
 
 Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026-10-19_family_promotion_plan.md` (archived 2026-10-28); open items continue in `mere/design_docs/mere_docs/implementation_strategy/2026-10-28_family_promotion_plan.md`.
 
 ## Community authority and publishing
 
-- [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0 comparison and opt-in P1 native relay pools, using current group encryption, private authorized sync and bounded Murm forwarding. [Qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) separates same-host native/process tests from the required P2 I2P privacy and P3 deployment gates; Spaces is not adopted.
+- [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0 reuse comparison and opt-in P1 native/P2 I2P-only relay pools, using existing group encryption, private authorized sync and bounded Murm forwarding. [Qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) names the passing native/process and public two-router I2P scopes, including restart. P3 independent machines/networks and deployment remain open; Spaces is not adopted.
 - [2026-11-01_moot_publication_plan](moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md): live plan. Production publication and hosting records with historical authority, updates and honest retention, the remaining collection gates, application co-op, addressed delivery, and host and consumer residue.
 - [2026-08-09_boundary_identity_and_grant_composition](moothold_docs/research/2026-08-09_boundary_identity_and_grant_composition.md): how the moot layer composes with a high-latency, multi-transport substrate.
 - [2026-08-12_radio_scopes_as_moots](moothold_docs/research/2026-08-12_radio_scopes_as_moots.md): civic-deployment radio scopes modelled as moots; ratified 2026-08-12.

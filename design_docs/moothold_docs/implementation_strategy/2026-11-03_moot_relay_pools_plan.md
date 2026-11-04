@@ -1,10 +1,11 @@
 # Moot relay pools
 
-**Status, 2026-11-03: P0 complete; P1 implemented and native fixtures pass.**
-Mark authorized P0 then P1. P2 remains required before claiming a pool hides
-its hosts from clients. Deployment and the Spaces migration remain separate.
+**Status, 2026-11-03: P0/P1 complete; P2 qualified for the named providers; P3 open.**
+P2's host-location privacy gate passes for Emissary 0.4.0 and i2pd 3.0.0 with
+explicit two-hop tunnels on this Windows host. Independent machines/networks,
+product deployment and the Spaces migration remain separate.
 Exact receiving pins and qualification are recorded in the
-[P0/P1 receipt](../../archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md).
+[P0-P2 receipt](../../archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md).
 
 ## Purpose and agreed direction
 
@@ -190,6 +191,10 @@ Protect discovery, diagnostics, errors, persisted tickets and key attestations
 as well as the successful data path. Revealing a service key's ancestry or
 publishing its direct address elsewhere can defeat the intended separation.
 
+Clients can recognize the sponsoring pool and link repeated use of a service
+key or Destination. Alias rotation belongs to the host's explicit identity
+policy; cross-session unlinkability remains outside P2.
+
 I2P hides the association between a service Destination and its hosting router;
 it does not make all participating routers invisible. Enabling Emissary
 transit is a separate contribution to the I2P network. I2P multihoming exists,
@@ -326,7 +331,7 @@ the Murm adapter. Murm's corresponding feature is `relay`, off by default.
    Replaying local history never renews the checkpoint; a host must obtain
    fresh authority evidence before replacing that policy.
 6. Intersect the result with the verified availability deadline using
-   `PoolAuthorization::native_grant`. Inject current grants and the registered
+   `PoolAuthorization::relay_grant`. Inject current grants and the registered
    route map into Murm `RelayService`; share the exact `DeviceBudget` across
    every pool on that device. The host owns accept loops and refreshes grant
    snapshots. Failure to refresh expires active work. Local ceilings may be
@@ -352,6 +357,54 @@ endpoints or public Moot membership/capability linkage. P2 must inspect those
 authority and publication paths before making a stronger operator-privacy claim.
 
 ### P2. Required I2P anonymous-access slice
+
+The implementation uses host-owned Truchman sessions and the existing Noise,
+Notochord and forwarding limits. The qualified public provider pair is
+external i2pd 3.0.0 and embedded Emissary 0.4.0, with two-hop inbound/outbound
+tunnels, zero variance and explicit LeaseSet publication. The Windows i2pd GUI
+refuses a second instance independently of its data directory, so the trial
+uses the existing embedded provider for the other router. Service aliases are
+independent of owner identities; Retinue identity defaults and Destination
+key-sharing behavior remain unchanged. The public-I2P gate must pass separately
+from scripted SAM. Reserve at most 20 MB of retained P2 receipts, using compact
+configuration/route/refusal summaries rather than packet or router logs.
+
+#### Implemented P2 interfaces and limits
+
+- `mere-transport/i2p`: `TunnelProfile` requires nonzero hops and explicit
+  publication. `I2pSession` wraps the existing SAM client, requires a trusted
+  loopback bridge, and accepts only canonical unblinded b32 service locators.
+  The host selects transient or persistent keys. Parent-session termination
+  poisons its streams; a restarted provider does not revive old sessions.
+- Murm `relay-i2p`: `I2pRelayChannel` requires Noise and secure Notochord
+  admission. SAM supplies no Personae authentication; carrier facts remain
+  honest `Other`/unauthenticated. A rule requiring carrier identity refuses it.
+  `I2pRelayService` accepts only I2P target routes and shares native forwarding's
+  admission framing, pool/device reservations, byte/rate pump and live rechecks.
+  It owns no provider, accept loop or group/key manager.
+- Gemot `relay-pool-i2p`: `I2pClientOffer` uses a separate signature domain,
+  contains the expected scoped worker and recipient keys, rejects native
+  locator/ancestry fields, and verifies a bounded monotonic remaining lease.
+  Verification requires an independently trusted application target ID/key;
+  a valid pool signature cannot substitute a recipient. The application must
+  establish its inner authenticated session before sending private payloads.
+  `VerifiedI2pOffer::open` enforces that deadline and the I2P-only channel.
+  Persisted offers require verification again. `relay_grant` is shared by the
+  native and I2P profiles and intersects authority with observed liveness.
+- The test-only scripted SAM provider makes no anonymity claim. The public
+  fixture requires distinct router bridges, authenticates inner payloads,
+  and has separate provider termination/restart controls. New connection
+  readiness probes may retry through I2P; application writes are not replayed.
+  Forwarding counters charge inner ciphertext, while outer channel/tunnel
+  overhead remains the provider's resource-accounting responsibility.
+
+An I2P-only service face does not conceal already public Moot membership or
+capability grants. Public contribution grants can identify authorized operator
+candidates. The offer contains no contributor-root proof or private roster,
+but broader operator-identity anonymity needs an explicit publication policy.
+Operator control links may remain authenticated direct links at the already
+stated exposure boundary. A scripted run, a valid locator or typed nonzero-hop
+configuration does not qualify host-location privacy on a public router.
 
 Connect existing Truchman STREAMs to the Murm service/session boundary using
 honest carrier facts and inner authenticated security. The raw SAM stream
@@ -438,11 +491,19 @@ does not authorize deleting existing evidence or another lane's output.
   identity-policy questions. Earlier receipts are not a pool acceptance run.
 - The stack audit's R25/R26 recommendations are comparisons, not adoption
   receipts. The pinned Spaces README was inspected; no dependency was changed.
+- P2 source/API reuse is implemented in Murm's `transport/src/i2p.rs` and
+  `murm/src/relay/{channel.rs,i2p.rs}` and Gemot's `relay/i2p_offer.rs`. No
+  p2panda-spaces adoption or new group/key orchestration is introduced.
+- P2 public qualification passes on distinct Emissary 0.4.0 and i2pd 3.0.0
+  routers, both on this Windows machine, with two-hop inbound/outbound tunnels
+  and zero variance. Provider termination invalidates local streams and old
+  sessions; restart requires a fresh session/alias. Public membership, service
+  linkability and direct operator control metadata retain their stated bounds.
 
 External protocol references: [I2P router/destination separation](https://i2p.net/en/docs/overview/intro/),
 [I2pd multihoming](https://docs.i2pd.website/en/latest/tutorials/glossary/),
 and [iroh 1.0.3 encryption/relay behavior](https://docs.rs/iroh/1.0.3/iroh/).
-These support protocol capabilities, not qualification of this proposed pool.
+These describe protocol capabilities; receiving qualification is in the receipt.
 
 ## Progress
 
@@ -456,3 +517,9 @@ These support protocol capabilities, not qualification of this proposed pool.
   worker processes and in-process encrypted control sync pass on this Windows
   host. Source/receiving identities, failed attempts and qualification limits
   belong to the receipt above. P2 I2P and P3 deployment gates remain open.
+- 2026-11-03: landed P2's I2P-only SAM adapter, shared admitted forwarding and
+  independently pinned client offers. The published-pin library suite,
+  public two-worker forwarding/failover/withdrawal and public provider
+  termination/fresh-session recovery pass for the named configuration. Exact
+  source identities, failed attempts, test counts and stopped-provider cleanup
+  are in the receipt. P3 independent deployment remains open.
