@@ -1,6 +1,6 @@
 # Moot relay pools
 
-**Status, 2026-11-03: P0/P1 complete; P2 qualified for the named providers; P3 open.**
+**Status, 2026-11-03: P0/P1 complete; P2 qualified; P3a specified, not implemented.**
 P2's host-location privacy gate passes for Emissary 0.4.0 and i2pd 3.0.0 with
 explicit two-hop tunnels on this Windows host. Independent machines/networks,
 product deployment and the Spaces migration remain separate.
@@ -429,20 +429,78 @@ Inspect configured routes and emitted traffic/locators, not just UI labels.
 Separate public-I2P trials from local fixtures and operator-only control links.
 No claim of global-observer anonymity follows from this gate.
 
-### P3. Wider operation and additional relay profiles
+### P3a. Two independently operated I2P workers
 
-Prove independent machines/networks and operator custody, ongoing availability,
-partition recovery and bounded unattended operation. Then consider public use,
-explicit Moothold reciprocity, discovery, browser/WebRTC doors, native iroh
-relay/TURN server pools, radio carriage and LXMF store-and-forward as separate
-profiles. Public proxy/exit service, persistent payload custody, live stream
-migration and bonding each need their own concrete scope.
+**First slice:** one pool, two worker machines on separate uplinks, two
+independent operators, one authorized requester and one registered recipient.
+Audience is the trial's named members. Keep P2's I2P-only profile on both legs.
 
-**Done per profile:** name its actual protocol, audience, privacy, admission,
-resource and failure semantics; preserve current carrier behavior; qualify
-real receiving consumers and exact network/device scopes. Moothold credit is
-policy/accounting, not proof that a remote byte was delivered or an anonymous
-path is independent.
+#### Topology and custody
+
+- Each operator supplies their own bounded contribution, scoped worker key,
+  durable state and local router. Record actual operator/machine/uplink
+  independence privately; different Moot IDs or processes do not prove it.
+- Requester and recipient use a third named router, distinct from both worker
+  routers. Keep their test host outside the injected failure boundary. Any
+  co-location must be recorded and limits the host/uplink-loss claims.
+- Pool signing authority stays in its existing custody; workers receive scoped
+  authority and signed offers. Provision each operator's existing group/session
+  access independently. Root seeds and shared Destination keys are not trial
+  provisioning mechanisms. Clients pin the recipient independently of the pool.
+
+#### Implementation order
+
+1. **Reusable host.** Add thin Gemot composition under `relay-pool-i2p`
+   and a small headless runner in its existing examples area. Move the
+   worker accept/stop pattern out of test-only helpers. Inject `PoolStore`,
+   current Moot authority, `PoolKeys`, custody, clock, Murm endpoint/session and
+   `DeviceBudget`; retain the existing Noise/Notochord gate and forwarding pump.
+   The runner owns process/configuration and task supervision; Gemot owns grant
+   refresh/coordination; Murm retains channel setup and stream forwarding.
+   Keep SAM ACCEPT pinned while reaping tasks; await cancellation on shutdown.
+2. **Durable participation.** Reopen consent through the existing backend and
+   join restricted coordination with `PoolStore::join`/Murm sync hooks. Derive
+   live grants from `PoolStore::authorize` and `relay_grant`; obtain fresh
+   authority evidence and availability probes before publishing usable offers.
+   The process fixture's parent-injected ALLOW/REVOKE commands are test controls,
+   not deployment authority. Reuse existing GroupSession/key rotation machinery.
+3. **Independent-host trial.** Run the same receiving source/dependency cohort
+   on both workers, with explicit provider versions and tunnel settings. Start
+   with the qualified P2 profile. Use synthetic inner-encrypted payloads and
+   observe actual cross-machine routes, refusal facts and resource counters.
+
+Operator configuration names custody references, storage, private control peers,
+I2P bridge/profile/publication, approved targets, clock/authority validity,
+availability leases, setup/queue/session/byte/rate/buffer limits, shutdown bounds
+and total trial duration. Offer no capacity until these bounds are valid. Keep
+relay ciphertext accounting and router/tunnel overhead accounting distinct.
+
+#### Done-conditions
+
+| Gate | Required result |
+|---|---|
+| Host code | Opt-in receiving build and lifecycle controls pass outside test-only helpers; ordinary feature boundaries still build |
+| Two workers | Byte-exact inner-encrypted traffic through each independently operated worker under the same pool identity; wrong requester/worker/recipient keys refused |
+| Failure and restart | Stop each worker/provider separately and interrupt each worker uplink while the test endpoints survive; old streams fail explicitly, new connections select the survivor, restarted workers require fresh sessions/probes |
+| Withdrawal and partition | Observed withdrawal/revocation cancels active work and refuses new work; isolated authority expires within configured validity/check bounds; replay/reopen cannot renew it; fresh verified catch-up restores eligible service |
+| Limits and unattended run | Exercise configured pending/active/byte/rate/buffer ceilings and a bounded run spanning offer expiry and authority refresh; record duration and renewals; shutdown returns reservations/tasks to zero |
+| Privacy | Client offers, persisted state and diagnostics retain P2's locator/ancestry boundary; I2P loss fails closed; operator control links and public membership remain explicitly exposed at their stated scope |
+
+Publish compact receipts for exact pins/platforms, labeled topology, custody
+checks, provider/tunnel settings, fault/refusal outcomes, configured bounds,
+observed counters and cleanup. Keep identifying network/custody details private.
+P3a retains at most **20 MB across all trial hosts**, within the plan's 100 MB
+cap, in the existing receipt ledger/testing location. Preserve failed attempts.
+Local rehearsals qualify only host behavior; the independent-host gate remains
+open until suitable machines, operators and uplinks actually pass these checks.
+
+### P3b. Later deployment and relay profiles
+
+Product UI/integration, public discovery/use, Moothold reciprocity, WebRTC,
+iroh relay/TURN pools, radio and LXMF need separate receiving-consumer slices.
+Exit/proxy service, persistent payload custody, migration and bonding also need
+their own protocol, audience, privacy, admission, resource and failure contracts.
+Moothold accounting does not prove delivery or independent anonymity paths.
 
 ## Required receipts and retained-byte budget
 
@@ -499,6 +557,10 @@ does not authorize deleting existing evidence or another lane's output.
   and zero variance. Provider termination invalidates local streams and old
   sessions; restart requires a fresh session/alias. Public membership, service
   linkability and direct operator control metadata retain their stated bounds.
+- P3a's missing seam is host composition: `relay/tests/i2p.rs` owns the current
+  worker loops, and `tests/native/processes.rs` injects authority through test
+  IPC. `relay/store.rs::join` and `view.rs::relay_grant` provide existing reuse
+  points; neither fixture establishes independently operated deployment.
 
 External protocol references: [I2P router/destination separation](https://i2p.net/en/docs/overview/intro/),
 [I2pd multihoming](https://docs.i2pd.website/en/latest/tutorials/glossary/),
@@ -523,3 +585,6 @@ These describe protocol capabilities; receiving qualification is in the receipt.
   termination/fresh-session recovery pass for the named configuration. Exact
   source identities, failed attempts, test counts and stopped-provider cleanup
   are in the receipt. P3 independent deployment remains open.
+- 2026-11-03: narrowed P3a to reusable host composition followed by a two-worker,
+  independent-uplink trial with separate custody, partition/limit/restart gates
+  and a 20 MB receipt cap. Planning only; no P3 implementation or trial claim.
