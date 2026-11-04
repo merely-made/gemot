@@ -131,9 +131,10 @@ deletion/retention plan.
 
 P3a to P3d landed (Status). Remaining: shared-corpus measurements (unique
 content/capture counts, extraction and replay bytes, index build/update cost,
-heap use, query latency); held-out relevance cases and browser validation before
-any search-engine replacement for Tantivy (the unchanged consumer seam stays the
-migration boundary); cross-Moot lineage verification; collection merge UI;
+heap use, query latency); held-out relevance cases and browser validation of the
+current Eidetic `DocumentIndex` consumer (the index is a derived projection;
+Tantivy is already retired from the inspected dependency graphs); cross-Moot
+lineage verification; collection merge UI;
 private collection encryption; hosted Weld DOM capture through a correlated
 source or serialized-DOM engine seam; WARC-grade full-response custody (Genet's
 `ResourceResponse` lacks requested URL, status, lossless headers and truncation
@@ -212,6 +213,38 @@ lands it with a receipt; record the landing here.
   which plan owns the unification?
 
 ## Findings
+
+- 2026-11-04: reviewed the older namespace/agreed-work proposal against current
+  source. Stable collection identities and causal versions exist in
+  `crates/gemot/src/moot/records/collection.rs`; authorized mutation is now in
+  `crates/gemot/src/moot/service/records.rs`. The general governed name-binding
+  and offer/agreement/submission/review domain is not implemented. Its eventual
+  records must participate in authority, folds, native drops and retention
+  checkpoints, rather than only surviving a local append.
+- The existing site binding already supports a pinned contribution or following
+  an effective collection (`mere/crates/domain/site/src/publication.rs`); that
+  host-selected binding is not a governed namespace directory. The shared site
+  generator is one producer of immutable deliverables. Community review,
+  publication selection, hosting consent and observed availability retain their
+  distinct authority and records; ordinary site generation remains usable
+  independently of Moot membership.
+- The proposed unpaid contribution/review, volunteer keeper and fresh-reader
+  search demonstration remains a useful candidate, not a qualified workflow.
+  Reuse `crates/mooting/src/recognition.rs` for frozen-electorate evaluation.
+  `crates/mien/src/ledger.rs` already rewards an open owned commitment only once;
+  acceptance-to-Standing integration still needs evidence and stable effect
+  identity. Bounded relay workers in `crates/gemot/src/moot/relay/host.rs` provide
+  a concrete host-lifecycle precedent, with separate live readiness.
+- Eidetic retention still writes owner/manifest-specific bodies
+  (`eidetic/crates/eidetic-core/src/retention.rs`); shared physical bytes and
+  independent retention claims, permission, quota and release/GC semantics remain
+  separate design work. Community search already exchanges admitted capture
+  records and rebuilds `DocumentIndex`; the captured collection adapter lives in
+  `mere/ports/moot/src/captured_web.rs`. These findings are source inspection,
+  without new builds or peer/restart acceptance. Older context is in
+  `mere/design_docs/mere_docs/research/2026-06-04_resource_coordination_brief.md`
+  and the retired, explicitly unbuilt
+  `mere/design_docs/archive_docs/2026-10-06_retired_plans/2026-06-30_bounty_verification_economy_plan.md`.
 
 - 2026-09-04: `crates/commons/src/lib.rs` exposes `Replica::accept` (line 955)
   and `projection_with_authority` (line 975); use the retained/effective split
