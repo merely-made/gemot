@@ -1,0 +1,176 @@
+{
+  "files": [
+    {
+      "donor_path": "crates/knot-site/Cargo.toml",
+      "receiving_path": "Cargo.toml",
+      "donor_blob": "2abb2cf6dfe3b3488597108f504e7f495d65c238",
+      "donor_sha256": "ad390120c2e684b54662b2e8240c0cab1daae9554eeda5911903a3f0068e24ee"
+    },
+    {
+      "donor_path": "crates/knot-site/examples/export_nomadnet.rs",
+      "receiving_path": "examples/export_nomadnet.rs",
+      "donor_blob": "b134b69365ab193212e148bca47d3abb409a7bb0",
+      "donor_sha256": "54fd905829655e4f7a6629e2925cf10958d545f4e7338e6df1fac1e0db86bd9b"
+    },
+    {
+      "donor_path": "crates/knot-site/examples/local.rs",
+      "receiving_path": "examples/local.rs",
+      "donor_blob": "916914615d6ed6664faa4aec8b5247af4e9c3163",
+      "donor_sha256": "80a757c8f570268ae4123aa7ad278f22bb702fc9ea8149a1d835df76c0936fb6"
+    },
+    {
+      "donor_path": "crates/knot-site/examples/submit.rs",
+      "receiving_path": "examples/submit.rs",
+      "donor_blob": "475a9ae057eebc23c9b4ca7244827ad41474e83d",
+      "donor_sha256": "b2e1dc72fec1668c6fda6a05ea572c0557c70f0957a09b94212d3f9e25440ac8"
+    },
+    {
+      "donor_path": "crates/knot-site/src/bin/knot_site_publish.rs",
+      "receiving_path": "src/bin/knot_site_publish.rs",
+      "donor_blob": "ec079a092692bc5e59113982985563c5ee720f49",
+      "donor_sha256": "1b391f632c4dce123e8c0f8587ee717460ee70505cfc84b419b34997fa47fd34"
+    },
+    {
+      "donor_path": "crates/knot-site/src/export.rs",
+      "receiving_path": "src/export.rs",
+      "donor_blob": "9f7144264c6ced70b71080e7faa9130ea48a1537",
+      "donor_sha256": "a089c899f1dc52336df94224fb3d660e92075f85dc3de43aab2f2c5951e0c98b"
+    },
+    {
+      "donor_path": "crates/knot-site/src/handoff.rs",
+      "receiving_path": "src/handoff.rs",
+      "donor_blob": "488dd3f55613f327a7a6e93ac2b82ad5f50bdf69",
+      "donor_sha256": "54d1dea4b1f5d0ae3baeb4c1661b61276196b08819433067b512d775705ef8fc"
+    },
+    {
+      "donor_path": "crates/knot-site/src/history.rs",
+      "receiving_path": "src/history.rs",
+      "donor_blob": "a1079949011d489070ed623e7cfac4d260ea9037",
+      "donor_sha256": "5a34788d2ca6425668d9a9a0f3245df7a79bd4165d06a50bbe1d49fff968e935"
+    },
+    {
+      "donor_path": "crates/knot-site/src/lib.rs",
+      "receiving_path": "src/lib.rs",
+      "donor_blob": "d79d701f1d2ea6ae4645070b1aa02f00d2a17419",
+      "donor_sha256": "f6c9fa531635059dcd768a0ee4ac22f6186be7b17f538bee21184f9a3e9fad2b"
+    },
+    {
+      "donor_path": "crates/knot-site/src/local.rs",
+      "receiving_path": "src/local.rs",
+      "donor_blob": "82ab59478758985f14bb236889eb3f8e0a787125",
+      "donor_sha256": "3af05a918560a5192f9de35e2edff5d09f80320daf5b2208e7279a3eae74c285"
+    },
+    {
+      "donor_path": "crates/knot-site/src/micron_submission.rs",
+      "receiving_path": "src/micron_submission.rs",
+      "donor_blob": "3784269b73d7566fa98196a5da431a5f612ba099",
+      "donor_sha256": "a245ff8dade325d20a126983616f794d8a3d5468aaddf2cbab4d50d585fa5a4b"
+    },
+    {
+      "donor_path": "crates/knot-site/src/micron_submission_stub.rs",
+      "receiving_path": "src/micron_submission_stub.rs",
+      "donor_blob": "4574238124127f5c4930dc045e3fde4f32e48ad7",
+      "donor_sha256": "f70688c32532bc242eebc2ca1270ac87e41be9f507b6d63dd47a4b0a4673c092"
+    },
+    {
+      "donor_path": "crates/knot-site/src/nomadnet.rs",
+      "receiving_path": "src/nomadnet.rs",
+      "donor_blob": "bcb4b19606b9cbe2ef43c6e55b1506c41f6e6fec",
+      "donor_sha256": "82d8ad74d95297142fbe35557bb92346560fca6ecc246878734c75f5e6f77d27"
+    },
+    {
+      "donor_path": "crates/knot-site/src/publication.rs",
+      "receiving_path": "src/publication.rs",
+      "donor_blob": "524293840e5a45bc0ee886dadcfedaa01c510ed2",
+      "donor_sha256": "9c1050d33c99ceaebfca55ebd80864191ed83fc606963f01eed88deebcfbfd9e"
+    },
+    {
+      "donor_path": "crates/knot-site/src/server.rs",
+      "receiving_path": "src/server.rs",
+      "donor_blob": "54e2cac10ae8f3a81e4b1c16fa7892a2aa9c8681",
+      "donor_sha256": "9f9ec0107f5a1d2e0ae50bf5d490ba21b7c73b55bcf69401ff981b251c073006"
+    },
+    {
+      "donor_path": "crates/knot-site/src/submission.rs",
+      "receiving_path": "src/submission.rs",
+      "donor_blob": "7b0a42506a1d1cf5298b68c5667793e3e4097ea9",
+      "donor_sha256": "fe65c5809203c86dae889322764d7dc4ccacaeec5e2a05cd7061c87f81663260"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/export.rs",
+      "receiving_path": "tests/export.rs",
+      "donor_blob": "154318a577b7ae8f7a6e4016267691c0dccdad4d",
+      "donor_sha256": "ed27c9354e89245b96b7fb009d4a77ff93c27afc00bfe3f021d7aa9223068b9b"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/history.rs",
+      "receiving_path": "tests/history.rs",
+      "donor_blob": "ffcec7d2c144fa1c24e9de0f2331474448a54416",
+      "donor_sha256": "283c139e2fa748f32c55ffd6a781f2a247fb2d7c5a9844afb638cd47fd41d6c4"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/local_lifecycle.rs",
+      "receiving_path": "tests/local_lifecycle.rs",
+      "donor_blob": "4a054fb2bd72ee37d657e5d3d5871db05c57207f",
+      "donor_sha256": "805dd4aaae377c843af621e1d423f845b634228318579906bfc48b8f7bb06cc4"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/micron_moot_site_runtime.rs",
+      "receiving_path": "tests/micron_moot_site_runtime.rs",
+      "donor_blob": "26f8259740da093d50f138901ff4f9b44d2e441d",
+      "donor_sha256": "53fb0ba88cf7cc7440791eff3db066f193df9b7915b3041ce33a476370db7a91"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/moot_site_runtime.rs",
+      "receiving_path": "tests/moot_site_runtime.rs",
+      "donor_blob": "689fdb771d2bd3e9d8219e9f57fdd4acbb1852ac",
+      "donor_sha256": "f3776992a13d3a545efdc8e6e661188a9e4bd6f64a162a04493b3cba329e9a9b"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/native.rs",
+      "receiving_path": "tests/native.rs",
+      "donor_blob": "1d3e6b9177f089fc2075e5d6dbadfa6690d0af24",
+      "donor_sha256": "8b4e35bc77bff5918e754b1f2f8aabd9e5adac06c4edd06df5f125e72ac8749f"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/nomadnet.rs",
+      "receiving_path": "tests/nomadnet.rs",
+      "donor_blob": "b01796e6783f8ba8c9c16b686ea49a84d386c5eb",
+      "donor_sha256": "b9203603f1d681eed6bfb4ddcf603672df7c8f41bedcc6d76d72e2986c92d406"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/scroll_moot_site_runtime.rs",
+      "receiving_path": "tests/scroll_moot_site_runtime.rs",
+      "donor_blob": "847c47b7d9ef0f326c284d26df5e07f46760484a",
+      "donor_sha256": "eb8b58fe95889533696c7c72edae3c5ae545a092735009de1707ad405f96bf3d"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/scroll_wire.rs",
+      "receiving_path": "tests/scroll_wire.rs",
+      "donor_blob": "714002bc733f3b9ee160bd0ce23a0148aa19e039",
+      "donor_sha256": "2d702ec604dd7739b4ead0298dc6b0aa4d0f86841e625d12797b98bc84b1352e"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/site.rs",
+      "receiving_path": "tests/site.rs",
+      "donor_blob": "0c37a0f555f28806d955533487c0d5b34e302d05",
+      "donor_sha256": "4114699b91cef2886408d705fd7a70a303a31710b3fc2119e8ad8c371e2ab1da"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/snapshot.rs",
+      "receiving_path": "tests/snapshot.rs",
+      "donor_blob": "96c2e077ee7411478b2a703e69f2d2a0bb1f88cb",
+      "donor_sha256": "a71e92f360407468f8b5b6f534df56e29d42b06095c3ba9019f2726992063076"
+    },
+    {
+      "donor_path": "crates/knot-site/tests/submission.rs",
+      "receiving_path": "tests/submission.rs",
+      "donor_blob": "93d60b05d34336be27a483284e6d2e2c8f2ebfd9",
+      "donor_sha256": "129ef1d6ba58014ff4d053e3aa969401d51063d593a77a0ad089078ce4405d15"
+    }
+  ],
+  "donor_revision": "7e66a1dfd644e74fea775d5782a4436ebc09ff95",
+  "donor_repository": "knot-editor",
+  "rust_files_compared_with_only_import_rename": 27,
+  "exact_native_fixture_files": 0
+}

@@ -20,6 +20,10 @@ Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026
 
 ## Site generation and serving
 
+- [Shared site extraction](2026-11-04_site_extraction_plan.md): native model and
+  host libraries from Mere/Knot, actual receiving gates, later format writers,
+  and the optional namespace/agreed-work workflow kept in scope.
+
 Accepted direction, 2026-11-04: Gemot will house the shared static-site generator
 and serving libraries generalized from Mere and Knot, spanning Gemtext, Scroll,
 Markdown and HTML. Formats and protocols are separate choices; ordinary sites

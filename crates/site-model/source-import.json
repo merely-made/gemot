@@ -1,0 +1,134 @@
+{
+  "files": [
+    {
+      "donor_path": "crates/domain/site/Cargo.toml",
+      "receiving_path": "Cargo.toml",
+      "donor_blob": "60740197b62de790909016e10c8f7d85a0953c65",
+      "donor_sha256": "5350c851aeb29fb6b09c9c1b2363c5ac24fff550b2c7e995ccbdee2d78b8e21d"
+    },
+    {
+      "donor_path": "crates/domain/site/README.md",
+      "receiving_path": "README.md",
+      "donor_blob": "f913927f646a5c2ccf66c3dfb7b7137bad21d303",
+      "donor_sha256": "233932f72ba56ce1d222b30034e8e52a5e974fedd8b93d97f0f1d524174ecf17"
+    },
+    {
+      "donor_path": "crates/domain/site/src/history.rs",
+      "receiving_path": "src/history.rs",
+      "donor_blob": "8783b723a6211e8d181d795465f59911178a0c08",
+      "donor_sha256": "fdfdaef924ca5b701bd306e3be6bb94003a8ccf1cb65ddf4c91811743c452a55"
+    },
+    {
+      "donor_path": "crates/domain/site/src/lib.rs",
+      "receiving_path": "src/lib.rs",
+      "donor_blob": "6419938e71614f08e5f90a1fbb56fa36baa80493",
+      "donor_sha256": "baf671090c1f42f3bba2d36d169776c4887fbe1eb79cf95a134edd7d89c1e9a6"
+    },
+    {
+      "donor_path": "crates/domain/site/src/publication.rs",
+      "receiving_path": "src/publication.rs",
+      "donor_blob": "08e35448058bb813d7631489ef192400d0163408",
+      "donor_sha256": "37eb3fa1a6ee90ade0626f3d8dcf66ac3112795e697d6355cb9c8aaf99d56eba"
+    },
+    {
+      "donor_path": "crates/domain/site/src/publication/reader.rs",
+      "receiving_path": "src/publication/reader.rs",
+      "donor_blob": "6e8e7f689170a63a3bd0c3001088c00a017b994b",
+      "donor_sha256": "f7905dd04af3a88ceac3107ca8c1a5a2b21532d763bfddeef787a13d050b1a80"
+    },
+    {
+      "donor_path": "crates/domain/site/src/publication/reader/history.rs",
+      "receiving_path": "src/publication/reader/history.rs",
+      "donor_blob": "9b11409f1bb4993cbf7c30882c8c4b028c0062b8",
+      "donor_sha256": "c5e924b151655a68d33563002acb8e0fccf6302c569a70ef0c8fc021a0871c3c"
+    },
+    {
+      "donor_path": "crates/domain/site/src/snapshot-schema.json",
+      "receiving_path": "src/snapshot-schema.json",
+      "donor_blob": "54a389497705bd77a979e2a9f3891eb6a4d9bbbf",
+      "donor_sha256": "ad6d38f9b40ba15297364924a9a8bc9f00302bf6e6c403ab6dfc8c6338c0db4d"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/compatibility.rs",
+      "receiving_path": "tests/compatibility.rs",
+      "donor_blob": "0cb518d5c4a557a4b317dc7211e78ff53151f8d3",
+      "donor_sha256": "47f5c69ae47b6cebff4fa636232c224173650de66a2ee8641526c285b8da7324"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/gemini-v1.blake3",
+      "receiving_path": "tests/fixtures/gemini-v1.blake3",
+      "donor_blob": "dfb4e231ef836df538a8ed5bec43833d4fe4d3c0",
+      "donor_sha256": "ae362b71704b773ab8210cbe323d95087206bf4d9df09934b96d369c37fd6362"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/gemini-v1.json",
+      "receiving_path": "tests/fixtures/gemini-v1.json",
+      "donor_blob": "80216b909a0d114e60bc2e96334aad05294d2f5c",
+      "donor_sha256": "40a48b0899231a22478edd33a0015adb30a46d0833aee23b07d2d0687c813145"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/micron-v1.blake3",
+      "receiving_path": "tests/fixtures/micron-v1.blake3",
+      "donor_blob": "12c4c84549a6f08806b09a9cae3b275f4c39f1e9",
+      "donor_sha256": "9a65e6afd0e508172b1ff224b8d1146501187f1caeed10f48b9be481f650efda"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/micron-v1.json",
+      "receiving_path": "tests/fixtures/micron-v1.json",
+      "donor_blob": "0e3cd5c47bd3ca91462ca12e7966dfadd4a8c635",
+      "donor_sha256": "a71c835665e51b8c02de03db1d3fd8f23799b0ca91a20099cd0bb85277d9ead6"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/scroll-v1.blake3",
+      "receiving_path": "tests/fixtures/scroll-v1.blake3",
+      "donor_blob": "5f13787f8614c9c6ce82d839da0cfc95aacb114c",
+      "donor_sha256": "ae3566fed87484dac9c6ee9197ed43e96d35bf15e9b438a33f3113762ad56e02"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/scroll-v1.json",
+      "receiving_path": "tests/fixtures/scroll-v1.json",
+      "donor_blob": "ac8c21abeb958ec0c1bd876a1e61f3755e813064",
+      "donor_sha256": "4e3df8d0cb8c75f9098f5d2ecebf30b0727311044e14401f5c76b55236f78440"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/spartan-v1.blake3",
+      "receiving_path": "tests/fixtures/spartan-v1.blake3",
+      "donor_blob": "1409b2c7831c2ceab16d5934d74e83890d2f0a72",
+      "donor_sha256": "990261b56511d9237ba63ce11ef7c4baaf1a48ff60644c4f5ce51ecad351bdf8"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/fixtures/spartan-v1.json",
+      "receiving_path": "tests/fixtures/spartan-v1.json",
+      "donor_blob": "3dc809ee4740839308f0b8e4c883153ba8842a67",
+      "donor_sha256": "8c94f50ae416015b504f393e23bcb2ab78da84446af069b2fdf6a4506cf707a3"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/history.rs",
+      "receiving_path": "tests/history.rs",
+      "donor_blob": "833faf2193ed684444bbf26b375ce55c5b72f489",
+      "donor_sha256": "b8bc87a299b37875f48d5ea697123c82a337d8f26fd8b5accb52b5bc4f1466a7"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/publication.rs",
+      "receiving_path": "tests/publication.rs",
+      "donor_blob": "08e92fd309d3c633ceb4d1ebf32dfa438dbca7ab",
+      "donor_sha256": "c94d88c155f8b8d67ec6fa301e51b5a788d037a271db591b303290c1d9f47778"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/reader.rs",
+      "receiving_path": "tests/reader.rs",
+      "donor_blob": "1d3892c53127ca1636fe762ea76fd97d58a97106",
+      "donor_sha256": "cfb19d4da349aba6f2d3c347cee256d74a039e7d5f3a37ea65cf151063e28bfc"
+    },
+    {
+      "donor_path": "crates/domain/site/tests/reader/remembered.rs",
+      "receiving_path": "tests/reader/remembered.rs",
+      "donor_blob": "27bfd32ba24a9e13478f06fdf918dc0d7fc3b0c3",
+      "donor_sha256": "18cd9b730e3ea7965e03acfdb9095d54290dd0580bbf74decf030b45b2609844"
+    }
+  ],
+  "donor_revision": "a9fa5c85c505ad035912911efd4fc0af80b67ab0",
+  "donor_repository": "mere",
+  "rust_files_compared_with_only_import_rename": 10,
+  "exact_native_fixture_files": 8
+}

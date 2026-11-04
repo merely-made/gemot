@@ -1,2 +1,10 @@
 # mere/design_docs/mere_docs/implementation_strategy/2026-10-30_house_style_plan.md (H2); all physical source lines count.
 ceiling = 600
+
+[[exception]]
+path = "crates/site-host/tests/scroll_moot_site_runtime.rs"
+reason = "Native Scroll/TLS through independent publisher and resident processes. Existing source-size debt; a responsibility split must preserve Process, Resident and existing module visibility."
+
+[[exception]]
+path = "crates/site-model/tests/publication.rs"
+reason = "Publication. Existing source-size debt; a responsibility split must preserve Fixture and existing module visibility."
