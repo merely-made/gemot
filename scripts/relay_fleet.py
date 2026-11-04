@@ -37,6 +37,9 @@ REHEARSAL = "public_i2p_three_router_fleet_rehearsal"
 def validate(data):
     if data.get("version") != 1 or data.get("operator_count") != 1:
         raise ValueError("version 1, single-operator manifest required")
+    budget = data.get("retained_byte_cap_all_hosts", 20_000_000)
+    if type(budget) is not int or not 1_000_000 <= budget <= 100_000_000:
+        raise ValueError("retained budget must fit the plan's 100 MB cap")
     cargo = data.get("cargo_environment", {})
     if any(not isinstance(cargo.get(key), str) or not Path(cargo[key]).is_absolute()
            for key in ["CARGO_TARGET_DIR", "CARGO_BUILD_BUILD_DIR"]):
@@ -149,7 +152,8 @@ def main():
     args = parser.parse_args()
     if not args.report.is_absolute() or args.report.exists() or not args.report.parent.is_dir():
         raise ValueError("new absolute report path under an existing private directory required")
-    hosts = validate(json.loads(args.manifest.read_text(encoding="utf-8-sig")))
+    data = json.loads(args.manifest.read_text(encoding="utf-8-sig"))
+    hosts = validate(data)
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lambda host: probe(host, args.stage_routers), hosts))
     tokens = {r["machine_token"] for r in results if r.get("ok")}
@@ -160,10 +164,10 @@ def main():
         "application_hosts": 1, "router_hosts_observed_distinct": distinct,
         "independent_operator_qualified": False, "independent_uplink_qualified": False,
         "custody_qualified": False, "traffic_qualified": False,
-        "provider_started": False, "retained_byte_cap_all_hosts": 20_000_000,
+        "provider_started": False, "retained_byte_cap_all_hosts": data.get("retained_byte_cap_all_hosts", 20_000_000),
         "manifest_sha256": hashlib.sha256(args.manifest.read_bytes()).hexdigest(),
         "probe_sha256": hashlib.sha256((HERE / "relay_fleet_probe.py").read_bytes()).hexdigest(),
-        "manifest": json.loads(args.manifest.read_text(encoding="utf-8-sig")),
+        "manifest": data,
         "hosts": results, "manual_run": instructions(hosts),
     }
     report["manual_run"]["provider_launch"] = provider_instructions(results)
@@ -173,7 +177,7 @@ def main():
         "Verify each provider is the named owned process using the staged private config.",
         "Keep SAM and both SSH forward listeners on loopback.",
         "Stop only owned children/forwards after the test; preserve all prior receipts.",
-        "Bound all retained rehearsal state across hosts to the shared 20 MB P3a cap.",
+        "Bound all retained rehearsal state across hosts to the manifest's recorded P3a cap.",
         "Do not count this fixture as distributed custody, worker-process or independent-uplink qualification.",
     ]
     with args.report.open("x", encoding="utf-8", newline="\n") as stream:

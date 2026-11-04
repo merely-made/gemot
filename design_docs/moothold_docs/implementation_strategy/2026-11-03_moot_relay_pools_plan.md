@@ -2,8 +2,7 @@
 
 **Status, 2026-11-04: P0/P1 complete; P2 qualified; P3a software implemented, deployment gates open.**
 P2's host-location privacy gate passes for Emissary 0.4.0 and i2pd 3.0.0 with
-explicit two-hop tunnels on this Windows host. Independent machines/networks,
-product deployment and the Spaces migration remain separate.
+explicit two-hop tunnels on this Windows host. Independent operators/uplinks, product deployment and any Spaces adoption remain separate.
 Exact receiving pins and qualification are recorded in the
 [P0-P2 receipt](../../archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md).
 
@@ -484,10 +483,10 @@ availability leases, setup/queue/session/byte/rate/buffer limits, shutdown bound
 and total trial duration. Offer no capacity until these bounds are valid. Keep
 relay ciphertext accounting and router/tunnel overhead accounting distinct.
 
-Single-operator preparation uses `scripts/relay_fleet.py` and the existing
-fixture's `public_i2p_three_router_fleet_rehearsal`. O-PC holds all synthetic
-application roles; T-PC/S-PC hold separate routers. This does not qualify live
-custody, distributed application workers or independent uplinks; setup stays private.
+Single-operator preparation/execution uses `scripts/relay_fleet{,_run}.py` and
+`public_i2p_three_router_fleet_rehearsal`. O-PC holds synthetic application roles;
+T-PC/S-PC hold separate routers with heartbeat/deadline/disk guards. Live custody,
+distributed application workers and independent uplinks remain separate gates.
 
 #### Done-conditions
 
@@ -503,8 +502,8 @@ custody, distributed application workers or independent uplinks; setup stays pri
 Publish compact receipts for exact pins/platforms, labeled topology, custody
 checks, provider/tunnel settings, fault/refusal outcomes, configured bounds,
 observed counters and cleanup. Keep identifying network/custody details private.
-P3a retains at most **20 MB across all trial hosts**, within the plan's 100 MB
-cap, in the existing receipt ledger/testing location. Preserve failed attempts.
+P3a retains at most **40 MB across all trial hosts**, within the plan's 100 MB
+cap; native fleet artifacts required raising the original 20 MB sub-budget. Preserve failed attempts.
 Local rehearsals qualify only host behavior; the independent-host gate remains
 open until suitable machines, operators and uplinks actually pass these checks.
 
@@ -575,6 +574,7 @@ does not authorize deleting existing evidence or another lane's output.
   it. `relay/control.rs` binds private control endpoints through existing
   Personae attestations. Local/public same-host tests establish software
   behavior, while operator custody receiving and independent deployment remain open.
+- Fresh i2pd data roots need the reviewed public certificate bundle; `scripts/relay_fleet_run.py` pins it and retains verified reseeding. A passing `--version` is not router readiness.
 
 External protocol references: [I2P router/destination separation](https://i2p.net/en/docs/overview/intro/),
 [I2pd multihoming](https://docs.i2pd.website/en/latest/tutorials/glossary/),
@@ -595,5 +595,5 @@ These describe protocol capabilities; receiving qualification is in the receipt.
   checks, plus operator receiving instructions. Live custody and independent hosts stay open.
 - 2026-11-04: Dramatis's corrected O-PC receiver passed native unlock and fleet
   SSH with a fixed weekly limit. Operator/group state and independent uplinks stay open.
-- 2026-11-04: prepared single-operator router staging and an opt-in three-router
-  fixture; live custody, application-worker placement and public traffic remain separate gates.
+- 2026-11-04: executed the single-operator public three-router fixture with two-hop
+  encryption/refusal/failover/withdrawal controls; live custody and distributed application workers stay open.

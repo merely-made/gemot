@@ -63,7 +63,9 @@
 //! The three-router fixture uses existing synthetic authority and keeps every
 //! application worker on the controller; it is not a distributed-worker or
 //! live-custody receipt. Confirm private provider ownership/configuration and
-//! the aggregate 20 MB P3a budget before running its public-I2P command.
+//! the manifest's aggregate P3a budget before running its public-I2P command.
+//! `scripts/relay_fleet_run.py` executes the prepared router fixture with
+//! heartbeat/deadline/disk guards and stops only its owned providers/forwards.
 
 #[path = "relay-pool/config.rs"]
 mod config;

@@ -31,7 +31,8 @@ class PrivacyBoundaries(unittest.TestCase):
         for change in [lambda d: d["hosts"][0].update(bind="0.0.0.0"),
                        lambda d: d["hosts"][1].update(forward_port=38000),
                        lambda d: d["hosts"][1].update(host="controller"),
-                       lambda d: d["hosts"][1].update(host="-oProxyCommand=bad")]:
+                       lambda d: d["hosts"][1].update(host="-oProxyCommand=bad"),
+                       lambda d: d.update(retained_byte_cap_all_hosts=100_000_001)]:
             data = copy.deepcopy(manifest())
             change(data)
             with self.assertRaises(ValueError):
