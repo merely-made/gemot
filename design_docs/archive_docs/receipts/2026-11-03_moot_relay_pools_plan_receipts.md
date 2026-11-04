@@ -485,3 +485,28 @@ was launched and no isolated Cargo target, Cargo home or worktree was created.
 The existing private P3a runtime stays at **1,646,637 bytes**, owned by
 `moot-relay-pools-p3a`; all plan-local testing files stay at **6,279,004 bytes**.
 Existing evidence and unrelated source-split work are preserved.
+
+## 2026-11-04: custody deployment dependency checkpoint
+
+Dramatis source/receiving commits `f83c641` and `e004e8a` recover Windows
+receiving parity, qualify the corrected installed O-PC custodian, and record
+native unlock plus existing-key SSH to all seven remote fleet hosts. O-PC's
+fixed 604800-second maximum is installed; all eight selected idle settings
+are saved/read back as 10080 minutes. Older remote residents do not thereby
+gain the absolute deadline or new remote root-approval implementation.
+
+This restores fleet access for P3a preparation. It does not provision the
+runner's owner-approved declaration/grants, founded Moot, encrypted pool
+state, or sealed operator-bound GroupSession. Existing private P3a JSON files
+are provider-supervisor metadata from the prior I2P rehearsal, not live
+relay-pool configurations. No root seeds or shared Destination keys were
+invented to fill these gaps. A two-machine rehearsal with one operator must
+be labelled accordingly; it cannot satisfy independent-operator qualification.
+
+No provider, custody-check, group provisioning or public I2P trial was run in
+this dependency pass. The runner and its pins are unchanged, so existing
+software/public-I2P results keep their original scope. The I2P-only ingress,
+fail-closed behavior, offer/locator boundary and recipient identity disclosure
+remain P2/P3a gates. Native cross-network root-persona approval remains a
+separate Dramatis integration/deployment gate. All prior receipts are retained;
+no new isolated target, Cargo home or worktree was created by this lane.

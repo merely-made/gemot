@@ -593,3 +593,6 @@ These describe protocol capabilities; receiving qualification is in the receipt.
   Qualification and failed probes are in the receipt; P3a deployment gates stay open.
 - 2026-11-04: added shared custody preflight, group/operator and key-scope
   checks, plus operator receiving instructions. Live custody and independent hosts stay open.
+- 2026-11-04: Dramatis's corrected O-PC receiver passed native unlock and fleet
+  SSH with a fixed weekly limit. P3a still needs provisioned operator/group
+  state; this dependency check does not qualify relay traffic or independent uplinks.
