@@ -510,3 +510,70 @@ fail-closed behavior, offer/locator boundary and recipient identity disclosure
 remain P2/P3a gates. Native cross-network root-persona approval remains a
 separate Dramatis integration/deployment gate. All prior receipts are retained;
 no new isolated target, Cargo home or worktree was created by this lane.
+
+## 2026-11-04: single-operator fleet rehearsal preparation
+
+Mark selected "Prepare a single-operator fleet rehearsal." Prepared T-PC and
+S-PC as worker-router hosts, with O-PC as controller/requester/recipient router.
+Three hashed machine identities are distinct. All application worker tasks and
+synthetic authority remain in the controller's existing encrypted relay fixture;
+this is neither physical worker-process placement nor personal custody receiving.
+No new group/key mechanism, personal identity, grant or enrollment was introduced.
+
+`scripts/relay_fleet.py` validates the private manifest, uses strict existing
+SSH aliases and loopback-only SAM/forwarding, stages owner-marked create-new
+configs, and retains immutable compact reports. Foreign roots and altered
+configs refuse replacement; direct SSH diagnostic addresses are omitted.
+Reports contain exact provider/forward/test argv and stable Cargo environment.
+The separate probe confirms native version execution, machine separation,
+runtime bytes and SAM status without starting providers or opening custody.
+
+Private configs disable transit, router-info publication, UPnP, proxies and
+HTTP, retain verified reseeding, and bind SAM to loopback. The reused Rust
+fixture requests two-hop tunnels on both legs and retains recipient pinning,
+wrong-key refusal, failover/withdrawal and I2P-only failure behavior. Its new
+ignored three-router variant uses a separate bridge for each worker; the prior
+two-router and scripted cases remain available with their original scopes.
+
+Native i2pd 3.0.0 was staged from the [official release](https://github.com/PurpleI2P/i2pd/releases/tag/3.0.0),
+without a system install or package scripts. All three `--version` checks pass:
+
+| Host | Artifact | Native binary SHA256 |
+|---|---|---|
+| O-PC | existing win64 mingw | `6f501e1f4625ad5f3f1075e2fd4f4096aaf664386b04c526cee9b05a7301c2a2` |
+| T-PC | `i2pd-3.0.0-1.fc45.x86_64.rpm` | `a442dd9ec838e085ba3f8de90f15cb29a571c2b77ec9734da13d037907d006ca` |
+| S-PC | `i2pd_3.0.0-1resolute1_amd64.deb` | `2c77b7af098d385a14e0f19b47dde7f97c046ea8c712ac8521650eafe4cf8dc7` |
+
+Release asset hashes were checked against GitHub's recorded digests. Missing
+runtime libraries were extracted privately: T-PC's Fedora RPM signatures pass;
+S-PC's Ubuntu archive hashes match cached apt metadata. Version checks use only
+that process's private library path. System packages, services and custody stay
+unchanged. Initial missing-library failures remain in `provider-stage.json`.
+Private dependency records retain exact assets/library hashes. S-PC had one
+SSH banner timeout, followed by successful preparation/readiness checks.
+
+`fleet-rehearsal/prepare-01.json` retains the initial mistaken Windows binary
+path; 02 corrects it and records missing Linux binaries. Final 03 records three
+staged, runnable binaries and zero active SAM bridges. No provider, forward or
+public-I2P test was launched. Existing P3a supervisor state is not a provisioned
+operator GroupSession or live runner config. Distributed custody/worker faults,
+independent operators/uplinks and the full P3a privacy gate remain open.
+
+Five Python privacy/ownership controls pass. Scoped Rust I2P tests pass 3/3;
+three public tests are ignored, including the newly compiled rehearsal. Relevant
+feature-enabled Clippy exits zero with existing library warnings. Commands:
+
+```text
+python -B -m unittest discover -s scripts -p test_relay_fleet.py -v
+python -B scripts/relay_fleet.py <private-manifest> --report <new-private-report> --stage-routers
+cargo test -p gemot --lib --features relay-pool-i2p --frozen moot::relay::tests::i2p -- --test-threads=1
+cargo clippy -p gemot --lib --tests --features relay-pool-i2p --frozen --no-deps
+```
+
+Retained P3a state across hosts is **17,292,985 bytes**, including prior P3a
+1,646,637 bytes, new controller files 17,896 bytes, T-PC 6,892,769 bytes and
+S-PC 8,735,683 bytes. Remaining headroom to 20 MB is 2,707,015 bytes; public-run
+runtime growth must fit that budget, preserving prior evidence. New private
+runtime roots live under each host's `Code/testing/gemot/moot-relay-pools/fleet-rehearsal`,
+owned by `moot-relay-pools-single-operator`. The normal Gemot Cargo target/build
+directories were reused. No isolated target, Cargo home or worktree was created.

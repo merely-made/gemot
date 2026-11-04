@@ -16,6 +16,15 @@ pub(super) async fn session(bridge: Bridge, publish: bool) -> I2pSession {
 }
 
 pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u64) {
+    run_on_routers(client_bridge, worker_bridge, worker_bridge, seconds).await;
+}
+
+pub(super) async fn run_on_routers(
+    client_bridge: Bridge,
+    worker_bridge: Bridge,
+    second_bridge: Bridge,
+    seconds: u64,
+) {
     // Distinct providers are required by the live caller. The scripted caller
     // intentionally uses one fixture and makes no public-I2P claim.
     let client = session(client_bridge, false).await;
@@ -24,7 +33,7 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
     println!("MURM_POOL_SESSION_READY recipient");
     let first = session(worker_bridge, true).await;
     println!("MURM_POOL_SESSION_READY worker-a");
-    let second = session(worker_bridge, true).await;
+    let second = session(second_bridge, true).await;
     println!("MURM_POOL_SESSION_READY worker-b");
     let pool = pool().await;
     let started = Instant::now();
@@ -60,7 +69,7 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
     );
     let target_host = recipient(target_session.clone(), seconds);
     tokio::time::sleep(Duration::from_millis(20)).await;
-    if client_bridge.addr() != worker_bridge.addr() {
+    if client_bridge.addr() != worker_bridge.addr() || client_bridge.addr() != second_bridge.addr() {
         // Publication/build readiness is distinct from application admission.
         // These probes send no application payload and retry only through I2P.
         warmup(&client, &first_route, "ingress-a").await;
@@ -70,6 +79,9 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
             service_key: root(8),
         };
         warmup(&first, &target, "target").await;
+        if second_bridge.addr() != worker_bridge.addr() {
+            warmup(&second, &target, "target-b").await;
+        }
     }
     let signed_a = offer(&pool.config, DEVICE_A, &first_route, now());
     let signed_b = offer(&pool.config, DEVICE_B, &second_route, now());

@@ -51,6 +51,19 @@
 //! Custody-check prints only stage results, without roots, locators or secrets.
 //! Independent operators/machines/uplinks, a third requester/recipient router
 //! and public I2P fault/refusal checks remain deployment qualification gates.
+//!
+//! Single-operator router preparation is separate from that custody receiving:
+//! `python -B scripts/relay_fleet.py <private-manifest.json> --report <new-report.json>
+//! --stage-routers` stages owner-marked configs through strict SSH aliases.
+//! Omit `--stage-routers` for a read-only check. The manifest names one local
+//! endpoint host and two remote router hosts, distinct loopback forwarding
+//! ports, private runtime/binary paths and stable Cargo target/build paths.
+//! Reports include the exact provider, forward and ignored-test commands.
+//! Preparation never starts a router, changes custody or provisions group keys.
+//! The three-router fixture uses existing synthetic authority and keeps every
+//! application worker on the controller; it is not a distributed-worker or
+//! live-custody receipt. Confirm private provider ownership/configuration and
+//! the aggregate 20 MB P3a budget before running its public-I2P command.
 
 #[path = "relay-pool/config.rs"]
 mod config;

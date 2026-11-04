@@ -30,6 +30,26 @@ async fn public_i2p_two_workers_on_distinct_routers() {
         .unwrap();
 }
 
+/// A single-operator router rehearsal. Application workers and synthetic
+/// authority still run in this test process, not on the router machines.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "public I2P: three owned routers; synthetic authority, no live custody or independent-operator claim"]
+async fn public_i2p_three_router_fleet_rehearsal() {
+    let client = bridge("MURM_RELAY_I2P_CLIENT_SAM");
+    let first = bridge("MURM_RELAY_I2P_WORKER_SAM");
+    let second = bridge("MURM_RELAY_I2P_WORKER_B_SAM");
+    assert_ne!(client.addr(), first.addr());
+    assert_ne!(client.addr(), second.addr());
+    assert_ne!(first.addr(), second.addr());
+    println!("MURM_POOL_REHEARSAL_SCOPE single-operator synthetic-authority application-hosts=1 router-bridges=3 uplink-independence=unqualified");
+    timeout(
+        Duration::from_secs(1800),
+        scenario::run_on_routers(client, first, second, 90),
+    )
+    .await
+    .unwrap();
+}
+
 // A carrier-lifecycle control, separate from the other test's authenticated
 // relay payloads. Its repeated fixed probe is an idempotent diagnostic only.
 async fn carrier_pair(

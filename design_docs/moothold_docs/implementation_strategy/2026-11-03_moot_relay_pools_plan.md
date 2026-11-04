@@ -484,6 +484,11 @@ availability leases, setup/queue/session/byte/rate/buffer limits, shutdown bound
 and total trial duration. Offer no capacity until these bounds are valid. Keep
 relay ciphertext accounting and router/tunnel overhead accounting distinct.
 
+Single-operator preparation uses `scripts/relay_fleet.py` and the existing
+fixture's `public_i2p_three_router_fleet_rehearsal`. O-PC holds all synthetic
+application roles; T-PC/S-PC hold separate routers. This does not qualify live
+custody, distributed application workers or independent uplinks; setup stays private.
+
 #### Done-conditions
 
 | Gate | Required result |
@@ -580,19 +585,15 @@ These describe protocol capabilities; receiving qualification is in the receipt.
 
 - 2026-11-03: recorded the founding direction, source/reuse findings and privacy gates.
 - 2026-11-03: completed P0/P1, retaining existing group/key ownership and adding
-  private records, authorized sync, fresh offers and bounded native forwarding.
-  Windows native/process scope and exact receiving evidence are in the receipt.
+  private records, authorized sync, fresh offers and bounded native forwarding; see receipt.
 - 2026-11-03: landed P2's I2P-only adapter and independently pinned offers;
-  named-provider forwarding/failover/withdrawal and restart controls pass.
-  Exact source/test identities and privacy limits are in the receipt.
-- 2026-11-03: narrowed P3a to reusable host composition followed by a two-worker,
-  independent-uplink trial with separate custody, partition/limit/restart gates
-  and a 20 MB receipt cap. Planning only; no P3 implementation or trial claim.
+  named-provider forwarding/failover/withdrawal and restart controls pass; see receipt.
+- 2026-11-03: scoped P3a's host, independent-uplink, custody and fault gates at a 20 MB cap.
 - 2026-11-04: implemented host composition, separate private control keys and
-  the bounded headless runner. Reused current group/custody/sync mechanisms.
-  Qualification and failed probes are in the receipt; P3a deployment gates stay open.
+  the bounded runner using current group/custody/sync owners; deployment gates stay open.
 - 2026-11-04: added shared custody preflight, group/operator and key-scope
   checks, plus operator receiving instructions. Live custody and independent hosts stay open.
 - 2026-11-04: Dramatis's corrected O-PC receiver passed native unlock and fleet
-  SSH with a fixed weekly limit. P3a still needs provisioned operator/group
-  state; this dependency check does not qualify relay traffic or independent uplinks.
+  SSH with a fixed weekly limit. Operator/group state and independent uplinks stay open.
+- 2026-11-04: prepared single-operator router staging and an opt-in three-router
+  fixture; live custody, application-worker placement and public traffic remain separate gates.
