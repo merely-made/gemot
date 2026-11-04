@@ -43,7 +43,7 @@ struct Target {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     if args.len() != 2 {
-        return Err("usage: knot-site-publish SITE_DIR TARGET_JSON < IDENTITY_SEED".into());
+        return Err("usage: site-publish SITE_DIR TARGET_JSON < IDENTITY_SEED".into());
     }
     let mut config = Vec::new();
     std::fs::File::open(&args[1])?
