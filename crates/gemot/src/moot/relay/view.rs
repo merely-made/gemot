@@ -44,7 +44,7 @@ pub struct PoolAuthorization {
 impl PoolAuthorization {
     /// Intersect a freshly read authority snapshot with this receiver's verified
     /// liveness deadline. Refreshing authority never extends a live observation.
-    pub fn native_grant(
+    pub fn relay_grant(
         &self,
         now_ms: u64,
         availability_deadline: tokio::time::Instant,

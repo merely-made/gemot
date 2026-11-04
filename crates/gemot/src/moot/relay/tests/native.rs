@@ -26,9 +26,18 @@ fn protocol(bytes: &[u8]) -> Alpn {
     Alpn::from_bytes(bytes.to_vec())
 }
 fn local_policy() -> LocalNetworkPolicy {
+    local_policy_for("murm.relay.native", true)
+}
+fn credentials(provider: &InMemoryProvider) -> Credentials<'_, InMemoryProvider> {
+    credentials_for(provider, "murm.relay.native")
+}
+pub(super) fn local_policy_for(
+    profile: &str,
+    require_transport_identity: bool,
+) -> LocalNetworkPolicy {
     let mut policy = LocalNetworkPolicy::closed(NetworkId(POOL));
     policy.accepted_profiles = vec![ProfileRef {
-        id: "murm.relay.native".into(),
+        id: profile.into(),
         revision: 1,
     }];
     // The transport entry verifies the channel-bound subject. The actual pool
@@ -39,18 +48,21 @@ fn local_policy() -> LocalNetworkPolicy {
             ServiceAccess::Public,
             "mere.network",
             ["connect"],
-            true,
+            require_transport_identity,
             Some(16),
         ),
     )]);
     policy
 }
-fn credentials(provider: &InMemoryProvider) -> Credentials<'_, InMemoryProvider> {
+pub(super) fn credentials_for<'a>(
+    provider: &'a InMemoryProvider,
+    profile: &str,
+) -> Credentials<'a, InMemoryProvider> {
     Credentials {
         identity: provider,
         network: NetworkId(POOL),
         profile: ProfileRef {
-            id: "murm.relay.native".into(),
+            id: profile.into(),
             revision: 1,
         },
         action: RequestedAction {
@@ -63,7 +75,10 @@ fn credentials(provider: &InMemoryProvider) -> Credentials<'_, InMemoryProvider>
         delegations: vec![],
     }
 }
-fn admission<'a>(policy: &'a LocalNetworkPolicy, ledger: &'a RevocationLedger) -> Admission<'a> {
+pub(super) fn admission<'a>(
+    policy: &'a LocalNetworkPolicy,
+    ledger: &'a RevocationLedger,
+) -> Admission<'a> {
     Admission {
         policy,
         ledger,
@@ -86,7 +101,7 @@ async fn pair(a: &P2pandaTransport, b: &P2pandaTransport) {
     a.add_peer_ticket(&b.ticket().await.unwrap()).await.unwrap();
     b.add_peer_ticket(&a.ticket().await.unwrap()).await.unwrap();
 }
-fn budget() -> DeviceBudget {
+pub(super) fn budget() -> DeviceBudget {
     DeviceBudget::new(DeviceLimits {
         max_pending: 8,
         max_sessions: 2,
@@ -99,7 +114,7 @@ fn budget() -> DeviceBudget {
 type Live = Arc<RwLock<Option<RelayGrant>>>;
 fn permission(grant: PoolAuthorization) -> RelayGrant {
     grant
-        .native_grant(10, Instant::now() + Duration::from_secs(10))
+        .relay_grant(10, Instant::now() + Duration::from_secs(10))
         .unwrap()
 }
 

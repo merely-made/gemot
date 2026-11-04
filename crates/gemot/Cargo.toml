@@ -31,6 +31,7 @@ default = []
 # Typed private coordination over existing group encryption and sync sessions.
 relay-pool = ["dep:tokio"]
 relay-pool-native = ["relay-pool", "dep:murm", "dep:notochord"]
+relay-pool-i2p = ["relay-pool-native", "murm/relay-i2p"]
 
 [dependencies]
 murm-sync.workspace = true

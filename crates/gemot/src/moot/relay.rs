@@ -7,6 +7,8 @@
 //! no group/key manager and forwards no payloads. Native relay operation is a
 //! Murm service; I2P host-location privacy remains a separate acceptance gate.
 
+#[cfg(feature = "relay-pool-i2p")]
+mod i2p_offer;
 mod offers;
 mod store;
 #[cfg(test)]
@@ -20,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use stickleback::DataKeyring;
 
+#[cfg(feature = "relay-pool-i2p")]
+pub use i2p_offer::{I2pClientOffer, VerifiedI2pOffer};
 pub use offers::{ClientOffer, LiveOffer, OfferBook, OfferProbe};
 pub use store::{PoolExt, PoolStore};
 pub use view::{PoolAuthorization, PoolView};

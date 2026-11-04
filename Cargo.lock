@@ -2904,7 +2904,7 @@ dependencies = [
 [[package]]
 name = "mere-transport"
 version = "0.0.2"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5710d5e11ffde49af3952bc6d1c180286b2f0e1b#5710d5e11ffde49af3952bc6d1c180286b2f0e1b"
+source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
 dependencies = [
  "bytes",
  "hkdf 0.13.0",
@@ -2924,6 +2924,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "truchman",
  "zeroize",
 ]
 
@@ -3041,7 +3042,7 @@ dependencies = [
 [[package]]
 name = "murm"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5710d5e11ffde49af3952bc6d1c180286b2f0e1b#5710d5e11ffde49af3952bc6d1c180286b2f0e1b"
+source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3067,7 +3068,7 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5710d5e11ffde49af3952bc6d1c180286b2f0e1b#5710d5e11ffde49af3952bc6d1c180286b2f0e1b"
+source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
 dependencies = [
  "mere-p2panda-net",
  "muniment",
@@ -4539,7 +4540,7 @@ dependencies = [
 [[package]]
 name = "retinue"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5710d5e11ffde49af3952bc6d1c180286b2f0e1b#5710d5e11ffde49af3952bc6d1c180286b2f0e1b"
+source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
 dependencies = [
  "aes 0.9.3",
  "bzip2",
@@ -5647,6 +5648,15 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "truchman"
+version = "0.1.1"
+source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+dependencies = [
+ "sha2 0.11.1",
+ "tokio",
 ]
 
 [[package]]

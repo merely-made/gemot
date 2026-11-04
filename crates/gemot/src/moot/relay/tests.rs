@@ -12,6 +12,8 @@ use muniment::MemoryBackend;
 use std::sync::{Arc, RwLock};
 use stickleback::{DataKeyring, GroupSession, GroupSessionId};
 mod authority;
+#[cfg(feature = "relay-pool-i2p")]
+mod i2p;
 #[cfg(feature = "relay-pool-native")]
 mod native;
 
@@ -40,6 +42,9 @@ pub(super) fn retention() -> MootRetentionSettings {
 }
 
 async fn initialize<B: muniment::Backend + Clone>(moot: &Moot<B>) {
+    initialize_for(moot, 100_000).await;
+}
+async fn initialize_for<B: muniment::Backend + Clone>(moot: &Moot<B>, expiry: u64) {
     let mut rules = ConstitutionRules::founder_only(root(1));
     rules.admission = mien::Policy::MembersOnly {
         rate_limit: 1000,
@@ -59,7 +64,7 @@ async fn initialize<B: muniment::Backend + Clone>(moot: &Moot<B>) {
             subject,
             path_prefix: servitor::cap_path(&relay_cap(POOL, action).unwrap()),
             not_before_ms: 0,
-            expires_at_ms: Some(100_000),
+            expires_at_ms: Some(expiry),
             delegation_depth: 0,
         });
     }

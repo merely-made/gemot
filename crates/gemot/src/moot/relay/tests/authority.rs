@@ -116,7 +116,7 @@ async fn altered_ciphertext_and_client_offer_are_refused() {
 
 #[cfg(feature = "relay-pool-native")]
 #[tokio::test]
-async fn native_grant_cannot_outlive_authority_or_availability() {
+async fn relay_grant_cannot_outlive_authority_or_availability() {
     let (pool, _) = fixture().await;
     target(&pool).await;
     pool.author(&identity(2), contribution(2, DEVICE_A), 2)
@@ -124,17 +124,17 @@ async fn native_grant_cannot_outlive_authority_or_availability() {
         .unwrap();
     let authorization = pool.authorize(root(4), DEVICE_A, TARGET, 10).await.unwrap();
     let short = tokio::time::Instant::now() + std::time::Duration::from_millis(20);
-    let grant = authorization.native_grant(10, short).unwrap();
+    let grant = authorization.relay_grant(10, short).unwrap();
     assert_eq!(grant.expires, short);
     assert_eq!(grant.max_sessions, 2);
     assert!(
         authorization
-            .native_grant(authorization.expires_at_ms, short)
+            .relay_grant(authorization.expires_at_ms, short)
             .is_err()
     );
     assert!(
         authorization
-            .native_grant(10, tokio::time::Instant::now())
+            .relay_grant(10, tokio::time::Instant::now())
             .is_err()
     );
 }
