@@ -24,13 +24,12 @@ Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026
   host libraries from Mere/Knot, actual receiving gates, later format writers,
   and the optional namespace/agreed-work workflow kept in scope.
 
-Accepted direction, 2026-11-04: Gemot will house the shared static-site generator
-and serving libraries generalized from Mere and Knot, spanning Gemtext, Scroll,
-Markdown and HTML. Formats and protocols are separate choices; ordinary sites
-keep an optional Moot adapter. CSS/assets and JavaScript/Lua extensions remain
-separately scoped. Current extraction plan:
-`mere/design_docs/mere_docs/implementation_strategy/2026-10-28_site_publication_plan.md`,
-P12. That canonical plan follows the source here when the extraction lands.
+Native site libraries landed, 2026-11-04: `gemot-site` and `gemot-site-host`
+are consumed directly by Knot and Mere. The [site extraction plan](2026-11-04_site_extraction_plan.md)
+records native qualification and the later Gemtext/Scroll/Markdown/HTML writer
+scope. Formats and protocols are separate choices; ordinary sites keep an
+optional Moot adapter. CSS/assets and JavaScript/Lua extensions remain separately
+scoped. Mere's site-publication plan retains resident and browser integration.
 
 ## Community authority and publishing
 

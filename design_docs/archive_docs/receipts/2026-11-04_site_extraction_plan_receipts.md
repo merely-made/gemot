@@ -24,3 +24,25 @@ in `gates.jsonl` and its logs. The initial missing donor-relative patch and
 lockfile-normalization failures are not acceptance receipts. New Markdown/HTML
 writers, scripting, the general agreed-work workflow, physical peers and headed
 acceptance are outside this receiving source gate.
+
+## 2026-11-04: actual consumers and integrated native processes
+
+Knot `1c752bcf034c1f03fc6c76d0088836c9df5e7010` consumes the shared host
+library and removes its donor. Mere `f9e8cea6491aa3151c06c31d8ec280a9ff2e92b2`
+removes its model donor, with 86 remaining members. Locked workspace/all-target
+checks pass for both, as does Knot's explicit site-handoff client check. Mere's
+hooks pass; the cut rebases cleanly over newer main without graph-input or
+resident-source changes, and the combined locked check passes again.
+
+The integrated resident binary is SHA-256
+`e703241a662e71460bf528693cde11b5853ac31ff9c589b64eb67b34c4a03bb5`.
+All three explicitly invoked publisher/resident process fixtures pass: Gemini
+and Scroll over local TLS, and Micron over local Retinue. They exercise native
+metadata, exact bodies, restart and current authority. The 75 standard cases
+and three explicit process cases pass. These are synthetic local processes,
+without headed, hardware, remote-machine or personal-wallet qualification.
+
+Renderer, storage, identity and transport source identities in both consumers
+remain unchanged. Primary Mere foreign files/index entries and concurrent Gemot
+relay work are preserved. Two pre-existing generated-cache deletion blocks are
+not retried; the reused Mere worktree remains available for the following cuts.

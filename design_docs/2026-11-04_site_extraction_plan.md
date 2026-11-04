@@ -1,6 +1,6 @@
 # Shared site generation and serving
 
-**Status, 2026-11-04: in progress.** Gemot receives the portable model from
+**Status, 2026-11-04: native extraction landed (S1/S2); S3/S4 open.** Gemot receives the portable model from
 Mere and the filesystem/publication/listener library from Knot. This plan owns
 the shared libraries; Mere's site-publication plan retains resident/browser
 integration. Existing listener receipts keep their original machine, protocol
@@ -119,3 +119,9 @@ The plan's receipt record is
   their Rust 1.97.1 default library checks. Default normal/build graphs have 47
   and 102 packages, with no editor, renderer or community runtime. Donor removal
   waits for published receiving source and actual consumer qualification.
+
+- 2026-11-04: S1/S2 source cut and actual receiving landed: Gemot `4492351`,
+  Knot `1c752bc`, Mere `f9e8cea64`. The integrated 86-member Mere workspace
+  compiles locked; its resident executable passes independent Gemini/TLS,
+  Scroll/TLS and Micron/Retinue loopback publisher/resident cases. These are
+  synthetic local process receipts, separate from remote/physical acceptance.

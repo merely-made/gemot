@@ -222,7 +222,7 @@ lands it with a receipt; record the landing here.
   records must participate in authority, folds, native drops and retention
   checkpoints, rather than only surviving a local append.
 - The existing site binding already supports a pinned contribution or following
-  an effective collection (`mere/crates/domain/site/src/publication.rs`); that
+  an effective collection (`crates/site-model/src/publication.rs`); that
   host-selected binding is not a governed namespace directory. The shared site
   generator is one producer of immutable deliverables. Community review,
   publication selection, hosting consent and observed availability retain their
