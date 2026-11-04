@@ -86,3 +86,5 @@ pub use tulpa::{
     TulpaProposal, TulpaProposalId, TulpaStore, TulpaStoreError, TulpaVersion,
 };
 pub use typed_authorization::{MootAuthority, TypedMootAuthorization};
+#[cfg(feature = "relay-pool")]
+pub mod relay;
