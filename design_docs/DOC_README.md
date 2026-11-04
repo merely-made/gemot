@@ -13,12 +13,14 @@ and restricted operator coordination have distinct disclosure rules. Live sync
 uses Murm, and encrypted records alone do not establish host-location privacy.
 An I2P Destination supplies routing; Noise and Notochord supply channel identity
 and admission. Applications pin recipients independently of pool signing keys.
+Direct operator endpoints use separate attested control keys; their bootstrap
+bindings stay private. Recipient admission still discloses the worker's application identity.
 
 Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026-10-19_family_promotion_plan.md` (archived 2026-10-28); open items continue in `mere/design_docs/mere_docs/implementation_strategy/2026-10-28_family_promotion_plan.md`.
 
 ## Community authority and publishing
 
-- [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0 reuse comparison and opt-in P1 native/P2 I2P-only relay pools; [qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) names their passing scopes. Next is P3a: reusable host composition and two independently operated workers on separate uplinks, with explicit custody/privacy/partition/limit gates. P3a is specified, not implemented; wider profiles/product integration remain P3b. Spaces is not adopted.
+- [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0/P1 native and P2 I2P relay pools; [qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) names exact scopes. P3a host composition, private control-key bindings and a bounded custody-client runner are implemented. Actual operator custody receiving and independent machines/uplinks remain open gates; wider profiles/product integration remain P3b. Spaces is not adopted.
 - [2026-11-01_moot_publication_plan](moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md): live plan. Production publication and hosting records with historical authority, updates and honest retention, the remaining collection gates, application co-op, addressed delivery, and host and consumer residue.
 - [2026-08-09_boundary_identity_and_grant_composition](moothold_docs/research/2026-08-09_boundary_identity_and_grant_composition.md): how the moot layer composes with a high-latency, multi-transport substrate.
 - [2026-08-12_radio_scopes_as_moots](moothold_docs/research/2026-08-12_radio_scopes_as_moots.md): civic-deployment radio scopes modelled as moots; ratified 2026-08-12.

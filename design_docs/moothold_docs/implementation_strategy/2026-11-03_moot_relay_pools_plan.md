@@ -1,6 +1,6 @@
 # Moot relay pools
 
-**Status, 2026-11-03: P0/P1 complete; P2 qualified; P3a specified, not implemented.**
+**Status, 2026-11-04: P0/P1 complete; P2 qualified; P3a software implemented, deployment gates open.**
 P2's host-location privacy gate passes for Emissary 0.4.0 and i2pd 3.0.0 with
 explicit two-hop tunnels on this Windows host. Independent machines/networks,
 product deployment and the Spaces migration remain separate.
@@ -160,6 +160,7 @@ limits in every acceptance result.
 | Unauthorized client | Cannot use restricted targets, join coordination, enumerate the operator roster or obtain its private records |
 | Authorized ordinary member/client | Sees the service offer and permitted target identifiers; operator/device disclosure follows explicit policy rather than general membership |
 | Relay worker/operator | Can observe forwarding metadata and the next route, but receives no sender-to-recipient payload key |
+| Registered recipient | Receives the worker's admitted application subject and delegation proof on the outer leg; anonymity of operator identity from that recipient is unqualified |
 | Pool administrator | Can administer policy; that role alone grants neither payload decryption nor root-key export |
 | Immediate carrier peer / network observer | May observe IP/RF participation, timing and volume; a direct connection exposes its network address |
 | Observer correlating both ends | Outside the anonymous-access acceptance claim; encryption and I2P do not establish protection against all traffic correlation |
@@ -180,8 +181,9 @@ A community-branded service deliberately identifies its sponsoring Moot.
 Existing public membership can narrow the possible operator set even when
 device-to-service mappings remain private. A less linkable service face needs
 its own explicit publication policy. Public service verification must stop at
-the pool key; contributor-root attestations and private delegation ancestry
-stay inside the authorized coordination boundary.
+the pool key; client offers carry no contributor-root attestations or private
+delegation ancestry. The recipient's admission exchange has the distinct
+identity disclosure described above.
 
 For the hidden profile, client-facing locators are I2P service destinations;
 all advertised client and target legs must satisfy the selected privacy
@@ -448,23 +450,26 @@ Audience is the trial's named members. Keep P2's I2P-only profile on both legs.
   access independently. Root seeds and shared Destination keys are not trial
   provisioning mechanisms. Clients pin the recipient independently of the pool.
 
-#### Implementation order
+#### Implementation and remaining order
 
-1. **Reusable host.** Add thin Gemot composition under `relay-pool-i2p`
-   and a small headless runner in its existing examples area. Move the
-   worker accept/stop pattern out of test-only helpers. Inject `PoolStore`,
-   current Moot authority, `PoolKeys`, custody, clock, Murm endpoint/session and
-   `DeviceBudget`; retain the existing Noise/Notochord gate and forwarding pump.
-   The runner owns process/configuration and task supervision; Gemot owns grant
-   refresh/coordination; Murm retains channel setup and stream forwarding.
-   Keep SAM ACCEPT pinned while reaping tasks; await cancellation on shutdown.
-2. **Durable participation.** Reopen consent through the existing backend and
-   join restricted coordination with `PoolStore::join`/Murm sync hooks. Derive
-   live grants from `PoolStore::authorize` and `relay_grant`; obtain fresh
-   authority evidence and availability probes before publishing usable offers.
-   The process fixture's parent-injected ALLOW/REVOKE commands are test controls,
-   not deployment authority. Reuse existing GroupSession/key rotation machinery.
-3. **Independent-host trial.** Run the same receiving source/dependency cohort
+1. **Reusable host implemented.** `relay/host.rs::WorkerAuthority` derives
+   grants from real pool records, custody, clock and disposable readiness;
+   refresh cannot extend the checkpoint's monotonic deadline. `host/worker.rs`
+   composes Murm forwarding, pins SAM ACCEPT, bounds tasks and awaits shutdown.
+   The I2P fixture now uses it, including actual withdrawal rather than a grant setter.
+2. **Runner implemented; operator custody receiving run open.** The opt-in
+   `relay-pool` example uses `relay-pool-runner` and existing Castellan client
+   releases, founded Moot/Redb records and an existing sealed GroupSession.
+   `PoolStore::join_with_control_peers` authenticates separately scoped,
+   attested operator keys, avoiding direct reuse of the public worker key.
+   Existing group ownership supplies rotations; the runner reloads its record.
+   Its create-new bootstrap is operator-private and denotes local readiness;
+   a directory issuer still needs a remote probe before signing client offers.
+   `check <config>` is inert; `run <config>` owns process/sync/session lifetime and
+   requires explicit resource/time bounds. Root secrets remain with custody.
+   Fresh checkpoint evidence requires a newly verified host binding; local
+   reads and restart never create that evidence. The old ALLOW/REVOKE IPC remains test-only.
+3. **Independent-host trial open.** Run the same receiving source/dependency cohort
    on both workers, with explicit provider versions and tunnel settings. Start
    with the qualified P2 profile. Use synthetic inner-encrypted payloads and
    observe actual cross-machine routes, refusal facts and resource counters.
@@ -519,12 +524,12 @@ cited receipts are never overwritten. Reuse stable approved Cargo targets;
 introduce no isolated Cargo home or worktree without an actual need. The cap
 does not authorize deleting existing evidence or another lane's output.
 
-## Findings, 2026-11-03
+## Findings, 2026-11-03 to 2026-11-04
 
-- Reviewed primary checkouts: Gemot `3766de4`, Murm `ba9aa84e844`, Eidetic
+- Initial P0 comparison: Gemot `3766de4`, Murm `ba9aa84e844`, Eidetic
   `7a3453a`. Gemot's workspace pins murm-sync `ce53cebb...`; Murm's native
   workspace pins Stickleback 0.2.0 at `6f1256aa...`. These differ from local
-  checkout heads, so an exact receiving build remains an implementation gate.
+  checkout heads; subsequent receiving qualification is recorded in the receipt.
   `Cargo.toml` and `native/Cargo.toml` establish those edges.
 - Gemot `crates/gemot/src/moot/{group.rs,delegation.rs,lanes.rs}` already owns
   membership/delegation and uses `murm_sync::JoinedSpace`; its seven lanes are
@@ -537,11 +542,11 @@ does not authorize deleting existing evidence or another lane's output.
   Spaces trial must measure an actual reduction against these mechanisms.
 - Murm `native/crates/sync/src/lib.rs` owns live sessions and address books;
   `native/crates/transport/src/security.rs` supplies configurable setup bounds
-  and explicit security profiles. It does not supply a pool-wide forwarding
-  budget or a pool coordinator.
+  and explicit security profiles. Murm's `relay/budget.rs` now supplies shared
+  forwarding limits; Gemot supplies pool authority and host composition.
 - Dramatis `crates/notochord/src/lib.rs` keeps session admission, membership
   authority and anonymous transit policy separate. Its current first action
-  is a Murm connection; relay-specific grants remain proposed work.
+  is a Murm connection; Gemot's `relay_cap` supplies the relay-specific grants.
 - Murm `crates/truchman/README.md` documents STREAM support and the absence of
   datagram sessions; `crates/retinue/src/endpoint/i2p.rs` and
   `native/crates/murm-i2p/src/lib.rs` provide existing integration/provider
@@ -557,10 +562,10 @@ does not authorize deleting existing evidence or another lane's output.
   and zero variance. Provider termination invalidates local streams and old
   sessions; restart requires a fresh session/alias. Public membership, service
   linkability and direct operator control metadata retain their stated bounds.
-- P3a's missing seam is host composition: `relay/tests/i2p.rs` owns the current
-  worker loops, and `tests/native/processes.rs` injects authority through test
-  IPC. `relay/store.rs::join` and `view.rs::relay_grant` provide existing reuse
-  points; neither fixture establishes independently operated deployment.
+- P3a host composition now lives under `relay/host`; the worker fixture reuses
+  it. `relay/control.rs` binds private control endpoints through existing
+  Personae attestations. Local/public same-host tests establish software
+  behavior, while operator custody receiving and independent deployment remain open.
 
 External protocol references: [I2P router/destination separation](https://i2p.net/en/docs/overview/intro/),
 [I2pd multihoming](https://docs.i2pd.website/en/latest/tutorials/glossary/),
@@ -569,22 +574,16 @@ These describe protocol capabilities; receiving qualification is in the receipt.
 
 ## Progress
 
-- 2026-11-03: recorded the founding direction, current owner/API findings,
-  stack-reuse comparison, privacy boundaries and P1-P3 done-conditions.
-  Documentation only; no implementation or new network acceptance run.
-- 2026-11-03: completed P0's pinned Spaces comparison; retained existing group
-  and key ownership. Implemented private typed records, upstream sync read
-  hooks, fresh offers and native bounded forwarding. The opt-in Gemot library
-  suite passes 119 tests; Murm and murm-sync pass 75 and 13. Separate native
-  worker processes and in-process encrypted control sync pass on this Windows
-  host. Source/receiving identities, failed attempts and qualification limits
-  belong to the receipt above. P2 I2P and P3 deployment gates remain open.
-- 2026-11-03: landed P2's I2P-only SAM adapter, shared admitted forwarding and
-  independently pinned client offers. The published-pin library suite,
-  public two-worker forwarding/failover/withdrawal and public provider
-  termination/fresh-session recovery pass for the named configuration. Exact
-  source identities, failed attempts, test counts and stopped-provider cleanup
-  are in the receipt. P3 independent deployment remains open.
+- 2026-11-03: recorded the founding direction, source/reuse findings and privacy gates.
+- 2026-11-03: completed P0/P1, retaining existing group/key ownership and adding
+  private records, authorized sync, fresh offers and bounded native forwarding.
+  Windows native/process scope and exact receiving evidence are in the receipt.
+- 2026-11-03: landed P2's I2P-only adapter and independently pinned offers;
+  named-provider forwarding/failover/withdrawal and restart controls pass.
+  Exact source/test identities and privacy limits are in the receipt.
 - 2026-11-03: narrowed P3a to reusable host composition followed by a two-worker,
   independent-uplink trial with separate custody, partition/limit/restart gates
   and a 20 MB receipt cap. Planning only; no P3 implementation or trial claim.
+- 2026-11-04: implemented host composition, separate private control keys and
+  the bounded headless runner. Reused current group/custody/sync mechanisms.
+  Qualification and failed probes are in the receipt; P3a deployment gates stay open.

@@ -1,4 +1,4 @@
-# Moot relay pools: P0-P2 receipts, 2026-11-03
+# Moot relay pools: qualification receipts
 
 Canonical plan: [Moot relay pools](../../moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md).
 
@@ -300,3 +300,125 @@ Private router state under `Code/testing/gemot/moot-relay-pools/` remains local
 for reproducing this named-provider qualification; it is not published with
 the source receipt. P2 is qualified at this exact scope. P3 independent
 machines/networks and unattended product deployment remain open.
+
+## P3a host software, 2026-11-04
+
+**Status:** software slice implemented and checked; actual operator custody
+receiving and independently operated machines/uplinks remain open gates.
+
+Code and receiving lock are committed/pushed at
+`26de06234858dd83ec1fe0e1c4674c8f84085e3d`. The new composition is in
+`crates/gemot/src/moot/relay/host{.rs,/worker.rs}`; strict private control-key
+bindings use `relay/control.rs` and `PoolStore::join_with_control_peers`.
+The I2P fixture now runs the reusable worker and derives grants from actual
+pool records, including withdrawal, instead of a manually updated grant cell.
+The runner is `crates/gemot/examples/relay-pool.rs`, with its explicit private
+configuration schema under `examples/relay-pool/config.rs`.
+
+### Checks and scope
+
+| Check | Result | Boundary |
+|---|---|---|
+| Final opt-in library suite | 130 passed, 2 ignored; 111.09 s | Includes eight host controls; public I2P gates remain separately invoked |
+| Focused host controls | 8 passed; final 19.58 s | Actual encrypted sync with scoped operator endpoints, durable reopen, fresh readiness, recipient/authority refusal, custody generations, clock faults and draining a stalled setup |
+| Runner configuration tests | 3 passed; final 0.10 s | Inert checks, disabled contribution before custody/state access, seed/direct-route/path refusal and pre-dial ticket binding |
+| Normal runner build and usage smoke | Passed | Built native example; empty arguments produced the expected usage refusal without contacting custody |
+| Opt-in Clippy | Exit 0 | Existing warnings remain; new runner has a function-length warning, not a warning-free claim |
+| Configured commit checks | Passed | Line ceiling and root `cargo clippy --locked --all-targets` |
+| `p3a/public-host-01.txt` | Passed; 375.37 s | First public host extraction trial; before final owner-clock advance guard |
+| `p3a/public-host-02.txt` | Passed; 186.36 s | Final host implementation, including owner/monotonic expiry checks; same-host public two-router path |
+
+The public runs used Emissary 0.4.0 for requester/recipient sessions and i2pd
+3.0.0 for two worker sessions, with the P2 two-hop, zero-variance, two-tunnel
+profile and explicit publication controls. Transit/router publication stayed
+off. Router bridges differ on both relay legs, but these providers and the
+logical operator roles still ran on one Windows machine. The repeat checked
+inner encrypted payloads, wrong requester/worker/recipient refusal, worker
+loss, a fresh connection through the survivor and real-record withdrawal
+cancelling/refusing work. A warm-up probe retries readiness, never user writes.
+This is a public path recheck, not the independent-host P3a trial.
+
+### Reproduction and dependencies
+
+At the Gemot root, use the existing stable settings:
+`CARGO_TARGET_DIR=C:\t\cargo-targets\gemot`,
+`CARGO_BUILD_BUILD_DIR=C:\t\cargo-targets\gemot\build`, `CARGO_BUILD_JOBS=1`.
+Recorded commands:
+
+```text
+cargo test -p gemot --lib --features relay-pool-runner --frozen -- --test-threads=1
+cargo test -p gemot --lib --features relay-pool-runner --frozen relay::tests::host -- --test-threads=1
+cargo test -p gemot --example relay-pool --features relay-pool-runner --frozen -- --test-threads=1
+cargo build -p gemot --example relay-pool --features relay-pool-runner --frozen
+cargo clippy -p gemot --all-targets --features relay-pool-runner --frozen --no-deps
+```
+
+The built `C:\t\cargo-targets\gemot\debug\examples\relay-pool.exe` usage
+smoke expected exit 1 for empty arguments. `check <private-config.json>` is a
+structural check; `run <private-config.json>` requires existing owned stores,
+an accepted authority/clock window, a sealed GroupSession application record,
+a declared/admitted custody route and explicitly permitted scoped releases.
+The runner neither creates a persona nor opens the identity vault. Its only
+bootstrap export is create-new and operator-private; it signs no client offer.
+Readiness in that file denotes its local session, not a measured public route.
+
+For the public gate, run the library artifact with the exact filter
+`moot::relay::tests::i2p::live::public_i2p_two_workers_on_distinct_routers`
+and `--exact --ignored --nocapture --test-threads=1`, setting
+`MURM_RELAY_I2P_CLIENT_SAM` and `MURM_RELAY_I2P_WORKER_SAM` to the two explicitly
+owned loopback bridges. The Cargo equivalent uses the same filter/features
+and `-- --ignored --nocapture --test-threads=1`. Actual compiler:
+`rustc 1.99.1 (58cf8f9c3 2026-10-13)`, Windows MSVC host.
+
+Murm stays at `5b45742f87ecbd67ffbca814f8e1945e33cb55a0`, Dramatis at the
+existing locked `e26b434a` and Eidetic at `7a3453a0`. The optional runner adds
+seven packages: Castellan client, Chatelaine, Dramatis, Gaz, Ostiary and the
+registry Eidetic/Chartulary pair. Existing Git pins are unchanged; the SDK
+does not bring the custodian implementation into this process. No Spaces,
+SQLite or second group/key manager is introduced.
+
+**Correction to P2's dependency paragraph:** Gemot's `10658f6` receiving lock
+already selected iroh **1.4.1**, and this slice retains it. The earlier 1.0.3
+description read the declared lower version bound rather than the lock. Its
+recorded tests remain valid at their actual locked cohort; the Dramatis
+cohort distinction from Murm's native workspace remains as recorded.
+
+### Failed probes and limits
+
+- The first extraction used the public worker key on its outgoing Noise leg.
+  The recipient's strict identity policy correctly refused it. The worker now
+  requests the existing Notochord session-signer salt selected by its owner;
+  no root secret is released and no weaker admission policy was substituted.
+- A five-millisecond fixture refresh cadence repeatedly rebuilt verified
+  authority and exhausted its bounded scenario allowance. The fixture now
+  selects one-second refreshes; forwarding rechecks remain independently
+  bounded. Operator settings remain explicit; there is no unattended timing claim.
+- Assembly checks caught a missing test trait import and JSON fixture macro
+  syntax before the passing runs. These were compile failures, not receiving
+  qualification attempts. Compact summaries are retained here instead of raw
+  compiler captures.
+
+The admitted worker application subject, and any attached delegations, reach
+the registered recipient inside its private Noise session. Thus this slice
+does **not** qualify anonymity of operator identity from that recipient.
+Public offers still omit contributor ancestry. Direct control uses a
+different attested key; its root binding/ticket stay in operator bootstrap.
+Public membership, service linkability and global correlation retain P2's
+stated boundaries. Actual resident approval/lock delivery, independently
+controlled machines/uplinks and unattended operation remain unqualified.
+
+### Cleanup and retained evidence
+
+Both task-owned providers stopped after the final run; Emissary reported
+`Exited`. Process inventory found no remaining i2pd, SAM helper or public
+Gemot I2P test. Worker shutdown controls returned active/pending reservations
+to zero. No isolated Cargo target, Cargo home or worktree was introduced.
+Normal targets were reused, and unrelated workspace changes were preserved.
+
+At 2026-11-04 01:04:49 -05:00, P3a's private runtime/configuration and compact
+outputs under `Code/testing/gemot/moot-relay-pools/p3a/` total **1,646,637 bytes**,
+within its 20 MB cap. All plan-local testing data total **6,279,004 bytes**,
+within the plan's 100 MB cap. Owner: `moot-relay-pools-p3a`; retained for
+reproducing the named-provider qualification. Provider identities/group
+custody material are not published with these receipts. Existing P2 outputs
+were preserved; only public netDB contacts were copied into the P3a provider.
