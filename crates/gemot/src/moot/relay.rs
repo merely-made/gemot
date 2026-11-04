@@ -9,7 +9,10 @@
 
 #[cfg(feature = "relay-pool-i2p")]
 mod i2p_offer;
+#[cfg(feature = "relay-pool-i2p")]
+pub mod host;
 mod offers;
+mod control;
 mod store;
 #[cfg(test)]
 mod tests;
@@ -25,6 +28,7 @@ use stickleback::DataKeyring;
 #[cfg(feature = "relay-pool-i2p")]
 pub use i2p_offer::{I2pClientOffer, VerifiedI2pOffer};
 pub use offers::{ClientOffer, LiveOffer, OfferBook, OfferProbe};
+pub use control::{ControlPeer, control_salt};
 pub use store::{PoolExt, PoolStore};
 pub use view::{PoolAuthorization, PoolView};
 
@@ -34,7 +38,8 @@ pub const RELAY_POOL_LANE: &str = "gemot/relay/private/v1";
 pub type PoolKeys = Arc<dyn Fn() -> Arc<DataKeyring> + Send + Sync>;
 
 /// An accepted pool definition. Its authority revision is checked at every use.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PoolPolicy {
     /// Community that governs the service.
     pub moot: MootId,

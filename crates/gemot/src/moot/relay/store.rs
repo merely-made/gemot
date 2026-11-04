@@ -335,10 +335,33 @@ impl<B: Backend + Clone + Send + Sync + 'static> PoolStore<B> {
         gossip: Gossip,
         clock: Arc<dyn Fn() -> u64 + Send + Sync>,
     ) -> Result<JoinedSpace<PoolExt>, PoolError> {
+        self.join_inner(endpoint, gossip, clock, None).await
+    }
+
+    /// Join with explicitly attested, operator-private control keys. This strict
+    /// profile accepts neither public worker keys nor raw root endpoints.
+    pub async fn join_with_control_peers(
+        &self,
+        endpoint: Endpoint,
+        gossip: Gossip,
+        clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+        peers: Vec<super::ControlPeer>,
+    ) -> Result<JoinedSpace<PoolExt>, PoolError> {
+        let peers = control_bindings(self.config.pool, peers)?;
+        self.join_inner(endpoint, gossip, clock, Some(peers)).await
+    }
+    async fn join_inner(
+        &self,
+        endpoint: Endpoint,
+        gossip: Gossip,
+        clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+        control: Option<BTreeMap<[u8; 32], [u8; 32]>>,
+    ) -> Result<JoinedSpace<PoolExt>, PoolError> {
         let intake = self.clone();
         let hooks = PoolSyncGate {
             store: self.clone(),
             clock: clock.clone(),
+            control,
         };
         JoinedSpace::join_with_hooks::<_, u64, _, _, _>(
             stickleback::lane_id(RELAY_POOL_LANE, self.config.coordination),
@@ -358,10 +381,28 @@ impl<B: Backend + Clone + Send + Sync + 'static> PoolStore<B> {
     }
 }
 
+pub(super) fn control_bindings(
+    pool: [u8; 32],
+    peers: Vec<super::ControlPeer>,
+) -> Result<BTreeMap<[u8; 32], [u8; 32]>, PoolError> {
+    if peers.len() > 256 {
+        return Err(PoolError::Capacity);
+    }
+    let mut result = BTreeMap::new();
+    for peer in peers {
+        let (key, owner) = peer.binding(pool)?;
+        if result.insert(key, owner).is_some() {
+            return Err(PoolError::Invalid);
+        }
+    }
+    Ok(result)
+}
+
 #[derive(Clone)]
 pub(super) struct PoolSyncGate<B: Backend + Clone> {
     pub(super) store: PoolStore<B>,
     pub(super) clock: Arc<dyn Fn() -> u64 + Send + Sync>,
+    pub(super) control: Option<BTreeMap<[u8; 32], [u8; 32]>>,
 }
 impl<B: Backend + Clone> std::fmt::Debug for PoolSyncGate<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -378,6 +419,22 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncHooks for PoolSyncGate<B> {
         let now = (self.clock)();
         if topic != &Topic::from(self.store.config.coordination) {
             return AfterHandshakeOutcome::Reject;
+        }
+        if let Some(control) = &self.control {
+            let Some(owner) = control.get(remote.as_bytes()) else {
+                return AfterHandshakeOutcome::Reject;
+            };
+            return if self
+                .store
+                .permitted(*owner, "contribute", now)
+                .await
+                .is_ok()
+                || self.store.permitted(*owner, "manage", now).await.is_ok()
+            {
+                AfterHandshakeOutcome::Accept
+            } else {
+                AfterHandshakeOutcome::Reject
+            };
         }
         let root_allowed = self
             .store

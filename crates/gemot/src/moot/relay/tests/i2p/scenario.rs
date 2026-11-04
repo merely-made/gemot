@@ -42,13 +42,12 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
         address: second.address().unwrap(),
         service_key: view.contribution(DEVICE_B).unwrap().service_key,
     };
-    let first_live = Arc::new(RwLock::new(None));
-    let second_live = Arc::new(RwLock::new(None));
+    let first_live = worker_authority(&pool, DEVICE_A, started);
+    let second_live = worker_authority(&pool, DEVICE_B, started);
     let first_host = worker(
         first.clone(),
         target_route.clone(),
         2,
-        DEVICE_A,
         first_live.clone(),
         seconds,
     );
@@ -56,7 +55,6 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
         second.clone(),
         target_route,
         3,
-        DEVICE_B,
         second_live.clone(),
         seconds,
     );
@@ -100,27 +98,8 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
             .confirm(&view, &probe, key.sign(&probe.signing_bytes()).to_bytes())
             .unwrap();
     }
-    let refresh = |live: &Live, authorization: PoolAuthorization, at: u64| {
-        *live.write().unwrap() = Some(
-            authorization
-                .relay_grant(at, Instant::now() + Duration::from_secs(seconds))
-                .unwrap(),
-        );
-    };
-    refresh(
-        &first_live,
-        pool.authorize(root(4), DEVICE_A, TARGET, now())
-            .await
-            .unwrap(),
-        now(),
-    );
-    refresh(
-        &second_live,
-        pool.authorize(root(4), DEVICE_B, TARGET, now())
-            .await
-            .unwrap(),
-        now(),
-    );
+    refresh_worker(&first_live, DEVICE_A).await;
+    refresh_worker(&second_live, DEVICE_B).await;
     let mut a = open(&client, &verify(&signed_a), seconds, false)
         .await
         .unwrap();
@@ -171,13 +150,7 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
         timeout(Duration::from_secs(seconds), a.read_u8()).await,
         Ok(Err(_))
     ));
-    refresh(
-        &second_live,
-        pool.authorize(root(4), DEVICE_B, TARGET, now())
-            .await
-            .unwrap(),
-        now(),
-    );
+    refresh_worker(&second_live, DEVICE_B).await;
     let mut b = open(&client, &verify(&signed_b), seconds, false)
         .await
         .unwrap();
@@ -199,7 +172,7 @@ pub(super) async fn run(client_bridge: Bridge, worker_bridge: Bridge, seconds: u
             .await
             .is_err()
     );
-    *second_live.write().unwrap() = None;
+    assert_eq!(second_live.refresh().await.unwrap(), 0);
     assert!(matches!(
         timeout(Duration::from_secs(seconds), b.read_u8()).await,
         Ok(Err(_))

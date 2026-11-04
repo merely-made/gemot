@@ -14,6 +14,8 @@ use stickleback::{DataKeyring, GroupSession, GroupSessionId};
 mod authority;
 #[cfg(feature = "relay-pool-i2p")]
 mod i2p;
+#[cfg(feature = "relay-pool-i2p")]
+mod host;
 #[cfg(feature = "relay-pool-native")]
 mod native;
 
@@ -539,6 +541,7 @@ async fn sync_reader_hook_requires_operator_authority_even_when_namespace_is_kno
     let hook = super::store::PoolSyncGate {
         store: pool.clone(),
         clock: Arc::new(|| 10),
+        control: None,
     };
     let topic = p2panda_core::Topic::from(pool.config.coordination);
     for seed in [2, 3] {

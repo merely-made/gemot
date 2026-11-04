@@ -507,6 +507,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "castellan-client"
+version = "0.0.2"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e26b434a1011b2ff509d0d6a1553cbbb03902669"
+dependencies = [
+ "base64 0.22.1",
+ "chatelaine",
+ "dramatis",
+ "eidetic 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "insigne",
+ "ostiary",
+ "personae",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "cbc"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -614,6 +635,21 @@ dependencies = [
 [[package]]
 name = "chartulary"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27f828805fc4b79fbe172931f3f1a711c9c936ca8ae822d3943f5ceab22fcc67"
+dependencies = [
+ "muniment",
+ "petgraph",
+ "rkyv",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "uuid",
+]
+
+[[package]]
+name = "chartulary"
+version = "0.3.0"
 source = "git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160#7a3453a02bc7dea391ef18814c1bfa1a46e67160"
 dependencies = [
  "muniment",
@@ -623,6 +659,16 @@ dependencies = [
  "serde_json",
  "slotmap",
  "uuid",
+]
+
+[[package]]
+name = "chatelaine"
+version = "0.0.3"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e26b434a1011b2ff509d0d6a1553cbbb03902669"
+dependencies = [
+ "serde",
+ "uuid",
+ "zeroize",
 ]
 
 [[package]]
@@ -701,7 +747,7 @@ dependencies = [
 name = "commons-spine"
 version = "0.0.1"
 dependencies = [
- "chartulary",
+ "chartulary 0.3.0 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
  "gemot",
  "hex",
  "insigne",
@@ -1138,6 +1184,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dramatis"
+version = "0.0.5"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e26b434a1011b2ff509d0d6a1553cbbb03902669"
+dependencies = [
+ "gaz",
+ "personae",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "ed25519"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,11 +1225,27 @@ dependencies = [
 [[package]]
 name = "eidetic"
 version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d1b90d0802fccbefc74f010710d56432aeb011cc1f95453828c815d96babf47"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "chartulary 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "muniment",
+ "serde",
+ "serde_json",
+ "url",
+ "zeroize",
+]
+
+[[package]]
+name = "eidetic"
+version = "0.0.3"
 source = "git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160#7a3453a02bc7dea391ef18814c1bfa1a46e67160"
 dependencies = [
  "async-trait",
  "blake3",
- "chartulary",
+ "chartulary 0.3.0 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
  "muniment",
  "personae",
  "serde",
@@ -1262,7 +1336,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1482,6 +1556,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaz"
+version = "0.0.3"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e26b434a1011b2ff509d0d6a1553cbbb03902669"
+dependencies = [
+ "insigne",
+ "serde",
+ "uuid",
+]
+
+[[package]]
 name = "gemini-protocol"
 version = "0.1.7"
 source = "git+https://github.com/merely-made/errand.git?rev=dce1f08546b8475e42a5a01ca1ea18794c6e9b97#dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
@@ -1498,8 +1582,9 @@ dependencies = [
 name = "gemot"
 version = "0.1.1"
 dependencies = [
- "chartulary",
- "eidetic",
+ "castellan-client",
+ "chartulary 0.3.0 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
+ "eidetic 0.0.3 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
  "errand",
  "gemini-protocol",
  "insigne",
@@ -3632,6 +3717,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "ostiary"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d4f152dbe3e258f08ac72a78adf8f9277dd3bef4d410d842413a2e89c5496ce"
+dependencies = [
+ "base64 0.22.1",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4634,7 +4734,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4692,7 +4792,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4904,7 +5004,7 @@ name = "servitor"
 version = "0.0.3"
 source = "git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160#7a3453a02bc7dea391ef18814c1bfa1a46e67160"
 dependencies = [
- "chartulary",
+ "chartulary 0.3.0 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
  "insigne",
  "personae",
 ]
@@ -5301,7 +5401,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5943,7 +6043,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

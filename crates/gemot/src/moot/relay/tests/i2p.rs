@@ -1,13 +1,14 @@
 // Copyright 2026 Mark Alan Boykin
 // SPDX-License-Identifier: MPL-2.0
 
+use super::super::host::{I2pWorker, WorkerAccess, WorkerAdmission, WorkerAuthority, WorkerLimits};
 use super::native::{admission, budget, credentials_for, local_policy_for};
 use super::*;
 use murm::relay::i2p::{
-    I2P_RECIPIENT_PROTOCOL, I2P_RELAY_PROTOCOL, I2pRelayChannel, I2pRelayService, I2pRelayStream,
-    I2pRoute, I2pSession, TunnelProfile,
+    I2P_RECIPIENT_PROTOCOL, I2P_RELAY_PROTOCOL, I2pRelayChannel, I2pRelayStream, I2pRoute,
+    I2pSession, TunnelProfile,
 };
-use murm::relay::{FlowLimits, RECIPIENT_PROTOCOL, RelayGrant};
+use murm::relay::{FlowLimits, RECIPIENT_PROTOCOL};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::{JoinHandle, JoinSet};
@@ -25,8 +26,6 @@ fn setup(seconds: u64) -> SetupLimits {
         ..SetupLimits::default()
     }
 }
-type Live = Arc<RwLock<Option<RelayGrant>>>;
-
 struct Host {
     stop: Option<tokio::sync::oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
@@ -56,65 +55,98 @@ fn worker(
     session: I2pSession,
     target: I2pRoute,
     seed: u8,
-    device_id: [u8; 32],
-    live: Live,
+    authority: WorkerAuthority<MemoryBackend>,
     seconds: u64,
 ) -> Host {
     let device = budget();
     let allowance = device.clone();
-    let (stop, mut stopped) = tokio::sync::oneshot::channel();
+    let (stop, stopped) = tokio::sync::oneshot::channel();
     let task = tokio::spawn(async move {
-        let service = Arc::new(
-            I2pRelayService::new(
-                POOL,
-                session.clone(),
-                vec![(TARGET, target)],
-                allowance,
-                FlowLimits {
-                    max_sessions: 2,
-                    max_bytes: 65_536,
-                    bytes_per_second: 65_536,
-                    buffer_bytes: 1024,
-                    lifetime: Duration::from_secs(seconds),
-                    authority_interval: Duration::from_millis(5),
+        let owner = Arc::new(identity(seed));
+        let credentials = credentials_for(owner.as_ref(), PROFILE);
+        let worker = I2pWorker::new(
+            authority,
+            session,
+            vec![(TARGET, target)],
+            allowance,
+            FlowLimits {
+                max_sessions: 2,
+                max_bytes: 65_536,
+                bytes_per_second: 65_536,
+                buffer_bytes: 1024,
+                lifetime: Duration::from_secs(seconds),
+                authority_interval: Duration::from_millis(5),
+            },
+            setup(seconds),
+            owner.clone(),
+            WorkerAdmission {
+                policy: Arc::new(local_policy_for(PROFILE, false)),
+                ledger: Arc::new(notochord::RevocationLedger::default()),
+                identity: notochord::SecureIdentityPolicy::MatchCarrierWhenPresent,
+                profile: credentials.profile,
+                action: credentials.action,
+                class: credentials.class,
+                outbound_key_salt: b"mere/network-policy/session-signer/v1".to_vec(),
+            },
+        )
+        .unwrap();
+        let report = worker
+            .run(
+                WorkerLimits {
+                    max_tasks: 8,
+                    refresh_interval: Duration::from_secs(1),
+                    refresh_timeout: Duration::from_secs(2),
+                    shutdown_timeout: Duration::from_secs(3),
                 },
-                setup(seconds),
+                async {
+                    let _ = stopped.await;
+                },
             )
-            .unwrap(),
-        );
-        let policy = Arc::new(local_policy_for(PROFILE, false));
-        let mut tasks = JoinSet::new();
-        // SAM ACCEPT is an in-flight command, not a cancellation-safe TCP listener.
-        let mut next_accept = Box::pin(session.accept());
-        loop {
-            tokio::select! {
-                _ = &mut stopped => break,
-                incoming = &mut next_accept, if tasks.len() < 8 => {
-                    let Ok(stream) = incoming else { break };
-                    next_accept = Box::pin(session.accept());
-                    let (service, policy, live) = (service.clone(), policy.clone(), live.clone());
-                    tasks.spawn(async move {
-                        let owner = identity(seed);
-                        let service_key = owner.derive_keypair(&device_salt(POOL,device_id)).unwrap();
-                        let ledger = notochord::RevocationLedger::default();
-                        let result = service.serve(stream, &service_key, admission(&policy,&ledger), owner.master_keypair(),
-                            credentials_for(&owner,PROFILE), |principal,request| {
-                                if principal.subject != root(4) || request.target != TARGET { return None; }
-                                *live.read().unwrap()
-                            }).await;
-                        if let Err(error) = result { eprintln!("MURM_POOL_WORKER_REFUSAL {error}"); }
-                    });
-                },
-                _ = tasks.join_next(), if !tasks.is_empty() => {},
-            }
-        }
-        tasks.shutdown().await;
+            .await
+            .unwrap();
+        assert!(report.drained);
     });
     Host {
         stop: Some(stop),
         task: Some(task),
         device,
     }
+}
+
+fn worker_authority(
+    pool: &PoolStore<MemoryBackend>,
+    device: [u8; 32],
+    started: Instant,
+) -> WorkerAuthority<MemoryBackend> {
+    let seed = if device == DEVICE_A { 2 } else { 3 };
+    let key = identity(seed)
+        .derive_keypair(&device_salt(POOL, device))
+        .unwrap();
+    WorkerAuthority::new(
+        pool.clone(),
+        device,
+        key.public_key().to_bytes(),
+        vec![WorkerAccess {
+            requester: root(4),
+            target: recipient_pin(),
+        }],
+        Arc::new(move || Some(10 + started.elapsed().as_millis() as u64)),
+        Arc::new(|| Some(1)),
+        Duration::from_secs(120),
+    )
+    .unwrap()
+}
+async fn refresh_worker(authority: &WorkerAuthority<MemoryBackend>, device: [u8; 32]) {
+    let seed = if device == DEVICE_A { 2 } else { 3 };
+    let probe = authority.probe(Duration::from_secs(120)).await.unwrap();
+    let key = identity(seed)
+        .derive_keypair(&device_salt(POOL, device))
+        .unwrap();
+    authority
+        .confirm(&probe, key.sign(&probe.signing_bytes()).to_bytes())
+        .await
+        .unwrap();
+    assert_eq!(authority.refresh().await.unwrap(), 1);
 }
 
 fn recipient(session: I2pSession, seconds: u64) -> Host {
