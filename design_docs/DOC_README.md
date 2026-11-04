@@ -18,6 +18,16 @@ bindings stay private. Recipient admission still discloses the worker's applicat
 
 Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026-10-19_family_promotion_plan.md` (archived 2026-10-28); open items continue in `mere/design_docs/mere_docs/implementation_strategy/2026-10-28_family_promotion_plan.md`.
 
+## Site generation and serving
+
+Accepted direction, 2026-11-04: Gemot will house the shared static-site generator
+and serving libraries generalized from Mere and Knot, spanning Gemtext, Scroll,
+Markdown and HTML. Formats and protocols are separate choices; ordinary sites
+keep an optional Moot adapter. CSS/assets and JavaScript/Lua extensions remain
+separately scoped. Current extraction plan:
+`mere/design_docs/mere_docs/implementation_strategy/2026-10-28_site_publication_plan.md`,
+P12. That canonical plan follows the source here when the extraction lands.
+
 ## Community authority and publishing
 
 - [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0/P1 native and P2 I2P relay pools; [qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) names exact scopes. P3a host composition, private control-key bindings, a bounded custody-client runner and shared custody preflight are implemented. Actual operator custody receiving and independent machines/uplinks remain open gates; wider profiles/product integration remain P3b. Spaces is not adopted.
