@@ -465,8 +465,12 @@ Audience is the trial's named members. Keep P2's I2P-only profile on both legs.
    Existing group ownership supplies rotations; the runner reloads its record.
    Its create-new bootstrap is operator-private and denotes local readiness;
    a directory issuer still needs a remote probe before signing client offers.
-   `check <config>` is inert; `run <config>` owns process/sync/session lifetime and
-   requires explicit resource/time bounds. Root secrets remain with custody.
+   `check <config>` is inert. `custody-check <config>` shares startup's scoped
+   releases and sealed-group read, with a fresh status/authoritative epoch
+   fence; it opens no relay transports. The record must belong to the custody
+   persona and configured group. Four key scopes must be distinct. Receiving
+   instructions live with the example; actual owner grants/lock delivery stay open.
+   `run <config>` owns process/sync/session lifetime and explicit resource/time bounds.
    Fresh checkpoint evidence requires a newly verified host binding; local
    reads and restart never create that evidence. The old ALLOW/REVOKE IPC remains test-only.
 3. **Independent-host trial open.** Run the same receiving source/dependency cohort
@@ -587,3 +591,5 @@ These describe protocol capabilities; receiving qualification is in the receipt.
 - 2026-11-04: implemented host composition, separate private control keys and
   the bounded headless runner. Reused current group/custody/sync mechanisms.
   Qualification and failed probes are in the receipt; P3a deployment gates stay open.
+- 2026-11-04: added shared custody preflight, group/operator and key-scope
+  checks, plus operator receiving instructions. Live custody and independent hosts stay open.

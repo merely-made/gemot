@@ -77,9 +77,82 @@ fn disabled_contribution_never_opens_missing_custody_or_state() {
     let mut disabled = value(dir.path());
     disabled["device_limits"]["sessions"] = json!(0);
     let config = load(dir.path(), &disabled).unwrap();
+    assert_eq!(
+        super::custody::check(&config),
+        Err("device contribution disabled")
+    );
     assert_eq!(super::run::run(config), Err("device contribution disabled"));
     assert!(!dir.path().join("moot").exists());
     assert!(!dir.path().join("bootstrap.json").exists());
+}
+
+#[test]
+fn key_scope_collisions_are_refused_before_custody() {
+    let dir = tempfile::tempdir().unwrap();
+    let original = value(dir.path());
+    let control = gemot::moot::relay::control_salt([41; 32], [51; 32]);
+    let device = gemot::moot::relay::device_salt([41; 32], [51; 32]);
+    for field in ["outbound_key_salt", "group_sealing_salt"] {
+        for collision in [&control, &device] {
+            let mut bad = original.clone();
+            bad[field] = json!(collision);
+            assert!(load(dir.path(), &bad).is_err());
+        }
+    }
+    let mut bad = original;
+    bad["group_sealing_salt"] = bad["outbound_key_salt"].clone();
+    assert!(load(dir.path(), &bad).is_err());
+}
+
+#[test]
+fn receiving_group_read_requires_the_operator_and_group_and_sealing_key() {
+    use identity::sealed_record_storage::SealedRecordStorage;
+    use identity::{IdentityProvider, InMemoryProvider};
+    use stickleback::{GroupSession, GroupSessionId};
+    let dir = tempfile::tempdir().unwrap();
+    let operator = InMemoryProvider::from_seed([83; 32]);
+    let root = operator.master_public_key().to_bytes();
+    let (mut session, _) = GroupSession::new(GroupSessionId([71; 32]), &operator).unwrap();
+    session.create(&[]).unwrap();
+    let storage = SealedRecordStorage::open_with_key(dir.path(), [84; 32]);
+    let record = std::path::Path::new("group.json");
+    storage
+        .save_record(record, &session.to_bytes().unwrap())
+        .unwrap();
+    let keys = super::custody::group_keys(&storage, dir.path(), record, [71; 32], root).unwrap();
+    let sealed = session.seal_random(b"receiving group binding").unwrap();
+    assert_eq!(keys.open(&sealed).unwrap(), b"receiving group binding");
+    assert!(super::custody::group_keys(&storage, dir.path(), record, [72; 32], root).is_err());
+    assert!(super::custody::group_keys(&storage, dir.path(), record, [71; 32], [85; 32]).is_err());
+    let wrong = SealedRecordStorage::open_with_key(dir.path(), [86; 32]);
+    assert!(super::custody::group_keys(&wrong, dir.path(), record, [71; 32], root).is_err());
+}
+
+#[cfg(windows)]
+#[test]
+fn absent_custody_is_bounded_and_creates_no_relay_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut input = value(dir.path());
+    input["custody_endpoint"] = json!(format!(
+        r"\\.\pipe\gemot-absent-custody-{}",
+        dir.path().file_name().unwrap().to_string_lossy()
+    ));
+    input["custody_timeout_ms"] = json!(200);
+    std::fs::write(
+        dir.path().join("declaration.json"),
+        br#"{"routes":[{"exact":"custody"}],"custody":{"operations":["status","watch_lock"]}}"#,
+    )
+    .unwrap();
+    let config = load(dir.path(), &input).unwrap();
+    let start = std::time::Instant::now();
+    assert_eq!(
+        super::custody::check(&config),
+        Err("custody unavailable or refused")
+    );
+    assert!(start.elapsed() < std::time::Duration::from_secs(3));
+    for absent in ["moot", "pool.redb", "sealed", "bootstrap.json", "stop"] {
+        assert!(!dir.path().join(absent).exists());
+    }
 }
 
 #[test]

@@ -1,26 +1,23 @@
 // Copyright 2026 Mark Alan Boykin
 // SPDX-License-Identifier: MPL-2.0
 
-use super::config::{Config, ms, read};
-use castellan_client::custody_identity::CustodyIdentity;
+use super::config::{Config, ms};
+use super::custody::{Receiving, group_keys};
 use gemot::moot::Moot;
 use gemot::moot::relay::{
-    ControlPeer, PoolStore, control_salt, device_salt,
+    ControlPeer, PoolStore,
     host::{I2pWorker, OwnerClock, WorkerAdmission, WorkerAuthority, WorkerStop},
 };
-use identity::sealed_record_storage::SealedRecordStorage;
-use identity::{IdentityProvider, RetainedKeys};
+use identity::IdentityProvider;
 use murm::relay::DeviceBudget;
 use murm::relay::i2p::{I2pRoute, I2pSession};
 use notochord::{RevocationLedger, SecureIdentityPolicy};
 use serde::Serialize;
 use std::{
     fs::OpenOptions,
-    path::Path,
     sync::{Arc, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
-use stickleback::{DataKeyring, GroupSession, GroupSessionId};
 use tokio::time::Instant;
 use transport::i2p::{Bridge, I2pAddress, Key};
 use transport::{P2pandaTransport, PeerID};
@@ -47,40 +44,6 @@ fn clock(config: &Config) -> Result<OwnerClock, &'static str> {
         (now < end && now.abs_diff(expected) <= tolerance).then_some(now)
     }))
 }
-fn group_keys(
-    storage: &SealedRecordStorage,
-    root: &Path,
-    record: &Path,
-    expected: [u8; 32],
-) -> Result<Arc<DataKeyring>, &'static str> {
-    // The existing owner chooses/guards this record path. Bound the sealed file
-    // before delegating its authenticated format to Personae.
-    if std::fs::metadata(root.join(record))
-        .map_err(|_| "group state unavailable")?
-        .len()
-        > 1_048_576
-    {
-        return Err("sealed group state exceeds bound");
-    }
-    let bytes: Vec<u8> = storage
-        .load_record(record)
-        .map_err(|_| "sealed group record refused")?
-        .ok_or("sealed group record absent")?;
-    if bytes.len() > 1_048_576 {
-        return Err("group state exceeds bound");
-    }
-    let session = GroupSession::from_bytes(&bytes).map_err(|_| "group state refused")?;
-    if session.group() != GroupSessionId(expected) {
-        return Err("group binding refused");
-    }
-    let keys = DataKeyring::from_bytes(
-        &session
-            .data_keyring_state()
-            .map_err(|_| "group keys unavailable")?,
-    )
-    .map_err(|_| "group keys refused")?;
-    Ok(Arc::new(keys))
-}
 #[derive(Serialize)]
 struct Bootstrap {
     audience: &'static str,
@@ -91,13 +54,7 @@ struct Bootstrap {
     readiness: &'static str,
 }
 pub fn run(config: Config) -> Result<(), &'static str> {
-    if config.device_limits.pending == 0
-        || config.device_limits.sessions == 0
-        || config.device_limits.bytes == 0
-        || config.device_limits.bytes_per_second == 0
-    {
-        return Err("device contribution disabled");
-    }
+    config.contribution_enabled()?;
     if config
         .private_export
         .try_exists()
@@ -113,45 +70,16 @@ pub fn run(config: Config) -> Result<(), &'static str> {
     {
         return Err("existing governed state required");
     }
-    let declaration = serde_json::from_slice(&read(&config.custody_declaration)?)
-        .map_err(|_| "custody declaration invalid")?;
-    let custody = Arc::new(
-        CustodyIdentity::connect_declared_at_timeout(
-            &config.custody_endpoint,
-            &config.custody_app,
-            declaration,
-            ms(config.custody_timeout_ms),
-        )
-        .map_err(|_| "custody unavailable or refused")?,
-    );
-    let epoch = custody.custody_epoch().ok_or("custody locked")?;
-    let control = control_salt(config.pool.pool, config.device);
-    let device = device_salt(config.pool.pool, config.device);
-    let retained = Arc::new(
-        RetainedKeys::capture(
-            custody.as_ref(),
-            &[
-                control.clone(),
-                device.clone(),
-                config.outbound_key_salt.clone(),
-            ],
-        )
-        .map_err(|_| "scoped custody release refused")?,
-    );
-    let sealing = custody
-        .derive_keypair(&config.group_sealing_salt)
-        .map_err(|_| "group custody release refused")?;
-    let storage = SealedRecordStorage::open_with_key(&config.group_store, sealing.to_seed());
-    drop(sealing);
-    let key_source = Arc::new(RwLock::new(group_keys(
-        &storage,
-        &config.group_store,
-        &config.group_record,
-        config.group_id,
-    )?));
-    if custody.custody_epoch() != Some(epoch) {
-        return Err("custody changed during setup");
-    }
+    let Receiving {
+        custody,
+        epoch,
+        control,
+        device,
+        retained,
+        storage,
+        keys,
+    } = super::custody::open(&config)?;
+    let key_source = Arc::new(RwLock::new(keys));
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -211,7 +139,8 @@ pub fn run(config: Config) -> Result<(), &'static str> {
                     tokio::time::sleep_until((Instant::now()+ms(config.worker_limits.refresh_ms)).min(end)).await;
                     if Instant::now()>=end || config.stop_file.try_exists().unwrap_or(true) {break;}
                     if custody.custody_epoch()!=Some(epoch) {stop_failure=Some("custody binding ended");break;}
-                    let Ok(keys)=group_keys(&storage,&config.group_store,&config.group_record,config.group_id) else {
+                    let Ok(keys)=group_keys(&storage,&config.group_store,&config.group_record,config.group_id,
+                        retained.master_public_key().to_bytes()) else {
                         stop_failure=Some("group state reload refused");break;
                     };
                     *key_source.write().unwrap_or_else(|p|p.into_inner())=keys;

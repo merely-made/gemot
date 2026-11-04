@@ -422,3 +422,66 @@ within the plan's 100 MB cap. Owner: `moot-relay-pools-p3a`; retained for
 reproducing the named-provider qualification. Provider identities/group
 custody material are not published with these receipts. Existing P2 outputs
 were preserved; only public netDB contacts were copied into the P3a provider.
+
+## 2026-11-04: P3a custody receiving preparation
+
+Added `relay-pool custody-check <private-config.json>`. It shares
+`examples/relay-pool/custody.rs::open` with the real worker startup: connect
+through the existing declared Castellan SDK, capture control/worker/outbound
+scoped keys, open the existing sealed GroupSession record and fence setup with
+a fresh resident status. It requires authoritative custodian epoch evidence;
+a legacy resident without that evidence is refused. It does not open Moot or
+pool databases, control sync or I2P, publish a bootstrap, switch/unlock the
+resident or provision identity/group authority. Output names stages only.
+Preflight success remains point-in-time custody/group receiving, not a live
+lock-delivery, permission, routing or privacy acceptance result.
+
+The sealed session must match both the configured group and custody persona.
+This check also applies to every worker reload. Configuration refuses equality
+among the four control, public worker, outbound signer and group-storage salts.
+Disabled contributions return before custody/declaration/state access in both
+commands. All existing transport/group/custody dependencies and pins remain
+unchanged. The example's source documentation now gives operator receiving
+order and declaration/grant requirements, including the scope of prefix grants.
+
+### Verification
+
+Stable target/build directories and job count match the preceding receipt.
+
+```text
+cargo test -p gemot --example relay-pool --features relay-pool-runner --frozen -- --test-threads=1
+cargo clippy -p gemot --example relay-pool --features relay-pool-runner --frozen --no-deps
+cargo build -p gemot --example relay-pool --features relay-pool-runner --frozen
+```
+
+Six example tests pass, including the three prior checks and these additions:
+absent Windows custody endpoint refuses within its bound without relay state;
+key-scope collisions refuse offline; a real sealed GroupSession can decrypt
+with the receiving keyring while wrong operator, group and sealing keys refuse.
+The disabled-contribution check now covers preflight too. Clippy exits zero;
+existing library warnings and the runner's existing function-length warning
+remain. The ordinary executable builds. An initial test compile referenced an
+undeclared UUID dependency; the fixture instead reuses its unique temporary
+directory name, with no added dependency. No public I2P rerun was needed for
+this receiving-only change; earlier public receipts keep their original scope.
+
+### Deployment boundary and cleanup
+
+Read-only process inventory found installed Djinn/custodian processes. No
+live custody API, grant, unlock, profile or personal vault was accessed, and
+none of those processes was stopped or reconfigured. The existing pinned
+custodian fixture is Unix-only; the Mere Djinn testkit supplies isolated
+resident/receipt tools, not a ready Windows separate-custodian relay setup.
+No substitute key service, fixture vault or independent operator was invented.
+
+Actual operator-owned configuration/declaration/group state is still needed
+for live receiving and lock-delivery qualification. The independent trial
+also needs two identified operators, machines and uplinks, plus the third
+requester/recipient router. These remain open deployment gates. The recipient
+identity disclosure and I2P fail-closed/privacy boundaries are unchanged.
+
+All new fixtures use automatically removed temporary directories. No provider
+was launched and no isolated Cargo target, Cargo home or worktree was created.
+The existing private P3a runtime stays at **1,646,637 bytes**, owned by
+`moot-relay-pools-p3a`; all plan-local testing files stay at **6,279,004 bytes**.
+Existing evidence and unrelated source-split work are preserved.

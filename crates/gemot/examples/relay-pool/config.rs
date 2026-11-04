@@ -198,6 +198,16 @@ pub fn read(path: &Path) -> Result<Vec<u8>, &'static str> {
     Ok(bytes)
 }
 impl Config {
+    pub fn contribution_enabled(&self) -> Result<(), &'static str> {
+        if self.device_limits.pending == 0
+            || self.device_limits.sessions == 0
+            || self.device_limits.bytes == 0
+            || self.device_limits.bytes_per_second == 0
+        {
+            return Err("device contribution disabled");
+        }
+        Ok(())
+    }
     pub fn load(path: &Path) -> Result<Self, &'static str> {
         let config: Self =
             serde_json::from_slice(&read(path)?).map_err(|_| "configuration invalid")?;
@@ -266,6 +276,21 @@ impl Config {
             return Err("configuration bounds refused");
         }
         self.tunnels.profile()?;
+        // Public worker identity, private control identity and group storage
+        // protection must not become the same key through configuration.
+        let control = gemot::moot::relay::control_salt(self.pool.pool, self.device);
+        let device = gemot::moot::relay::device_salt(self.pool.pool, self.device);
+        let salts = [
+            &control,
+            &device,
+            &self.outbound_key_salt,
+            &self.group_sealing_salt,
+        ];
+        for (index, salt) in salts.iter().enumerate() {
+            if salts[..index].contains(salt) {
+                return Err("custody key scopes overlap");
+            }
+        }
         for target in &self.targets {
             transport::i2p::I2pAddress::parse(&target.destination)
                 .map_err(|_| "target locator refused")?;
