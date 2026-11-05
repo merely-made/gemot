@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "options": {
+    "target": "html",
+    "reject_loss": true,
+    "preserve_native_bytes": false,
+    "title_suffix": " | Notes",
+    "stylesheet": null,
+    "allow_remote_images": false,
+    "link_schemes": [
+      "https",
+      "http",
+      "gemini",
+      "scroll",
+      "spartan",
+      "titan",
+      "ipfs",
+      "mailto"
+    ],
+    "max_page_bytes": 1048576,
+    "max_site_bytes": 16777216
+  },
+  "pages": {
+    "index.gmi": {
+      "format": "gemtext",
+      "title": "A & B",
+      "metadata": {
+        "path": "index.gmi",
+        "author": "A \"B\"",
+        "language": "en-US",
+        "classification": 2,
+        "published": "2026-11-04T00:00:00Z",
+        "modified": "2026-11-04T00:00:01Z",
+        "abstract_source": "# A & B\n"
+      },
+      "source": "# A & B\n\n=> about.gmi Other\n\n<literal> & literal text\n"
+    },
+    "about.gmi": {
+      "format": "gemtext",
+      "title": "Next",
+      "metadata": {
+        "path": "about.gmi",
+        "author": "A \"B\"",
+        "language": "en-US",
+        "classification": 2,
+        "published": "2026-11-04T00:00:00Z",
+        "modified": "2026-11-04T00:00:01Z",
+        "abstract_source": "# A & B\n"
+      },
+      "source": "# Next\n\nA note.\n"
+    }
+  },
+  "assets": {
+    "assets/style.css": {
+      "media_type": "text/css",
+      "bytes": [
+        98,
+        111,
+        100,
+        121,
+        32,
+        123,
+        32,
+        99,
+        111,
+        108,
+        111,
+        114,
+        58,
+        32,
+        110,
+        97,
+        118,
+        121,
+        59,
+        32,
+        125,
+        10
+      ]
+    },
+    "assets/pixel.png": {
+      "media_type": "image/png",
+      "bytes": [
+        137,
+        80,
+        78,
+        71
+      ]
+    }
+  }
+}

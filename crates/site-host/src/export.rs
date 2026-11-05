@@ -76,7 +76,7 @@ pub fn export_micron_snapshot(
     })
 }
 
-fn checked_destination(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn checked_destination(path: &Path) -> Result<PathBuf, String> {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -126,7 +126,7 @@ fn checked_destination(path: &Path) -> Result<PathBuf, String> {
     Ok(absolute)
 }
 
-fn write_new_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_new_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)

@@ -7,6 +7,8 @@
 //! Knot-owned native files and publication. The server can only see an explicit
 //! immutable snapshot, never the draft filesystem or editor buffer.
 pub mod export;
+#[cfg(feature = "generate")]
+pub mod generate;
 pub mod handoff;
 #[cfg(feature = "history")]
 pub mod history;

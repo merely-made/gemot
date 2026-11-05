@@ -46,3 +46,9 @@ Renderer, storage, identity and transport source identities in both consumers
 remain unchanged. Primary Mere foreign files/index entries and concurrent Gemot
 relay work are preserved. Two pre-existing generated-cache deletion blocks are
 not retried; the reused Mere worktree remains available for the following cuts.
+
+## 2026-11-04, S3 format writers
+
+V2 writer artifacts are separate from native V1. Model all-feature/all-target suites pass 38 tests, with two existing ignored cases; host suites pass 47 tests, with three existing ignored process cases. Seven writer tests include four fixed body/digest goldens, unchanged V1 byte preservation, richer Scroll parsing, unsafe/unsupported input refusal, deterministic links/metadata/assets and declarative template escaping. Three host tests exercise a separate `site-build` process, reopened exact-file custody, changed-asset refusal and generated Gemtext over a real loopback Spartan listener. Model/host selected Rust 1.97.1 gates and both Clippy gates pass. These are library, process and loopback scopes; existing headed/physical/remote receipts retain their inputs.
+
+Commands, baseline inventory, immutable build artifacts and compact summaries are in `Code/testing/gemot/site-workflow-20261104`, sharing a 100 MB cap with S4. Original V1 fixtures and format bytes remain unchanged. Default generation is opt-in and adds only the maintained parser profile; the ordinary model stays free of editor, renderer and community runtime dependencies. HTML input, unmapped Scroll action/relation conversion and JavaScript/Lua execution are outside these selected writer profiles.

@@ -21,13 +21,13 @@ Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026
 ## Site generation and serving
 
 - [Shared site extraction](2026-11-04_site_extraction_plan.md): native model and
-  host libraries from Mere/Knot, actual receiving gates, later format writers,
-  and the optional namespace/agreed-work workflow kept in scope.
+  host libraries from Mere/Knot, checked Gemtext/Scroll/Markdown/HTML writer
+  artifacts, and the in-progress namespace/agreed-work workflow.
 
 Native site libraries landed, 2026-11-04: `gemot-site` and `gemot-site-host`
 are consumed directly by Knot and Mere. The [site extraction plan](2026-11-04_site_extraction_plan.md)
-records native qualification and the later Gemtext/Scroll/Markdown/HTML writer
-scope. Formats and protocols are separate choices; ordinary sites keep an
+records native qualification and the landed versioned Gemtext/Scroll/Markdown/HTML
+writers (`generate`, `site-build`). Formats and protocols are separate choices; ordinary sites keep an
 optional Moot adapter. CSS/assets and JavaScript/Lua extensions remain separately
 scoped. Mere's site-publication plan retains resident and browser integration.
 

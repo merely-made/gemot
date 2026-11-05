@@ -1,6 +1,6 @@
 # Shared site generation and serving
 
-**Status, 2026-11-04: native extraction landed (S1/S2); S3/S4 open.** Gemot receives the portable model from
+**Status, 2026-11-04: S1–S3 landed; S4 namespace/agreed-work implementation in progress.** Gemot receives the portable model from
 Mere and the filesystem/publication/listener library from Knot. This plan owns
 the shared libraries; Mere's site-publication plan retains resident/browser
 integration. Existing listener receipts keep their original machine, protocol
@@ -125,3 +125,7 @@ The plan's receipt record is
   compiles locked; its resident executable passes independent Gemini/TLS,
   Scroll/TLS and Micron/Retinue loopback publisher/resident cases. These are
   synthetic local process receipts, separate from remote/physical acceptance.
+
+- 2026-11-04: implementation authorized for S3 followed by S4. New writer artifacts use V2; existing native V1 bytes remain unchanged. The work uses the existing clean main checkout and stable Gemot target. New bounded evidence is `Code/testing/gemot/site-workflow-20261104` with a 100 MB aggregate cap. Namespace/work facts extend the existing objects lane so normal replication, drops and retention snapshots carry them. Detailed command, conflict and host lifecycle semantics are recorded as code/tests land.
+
+- 2026-11-04: S3 writer/host implementation covers three source profiles and four output profiles through versioned checked artifacts, declarative HTML templates, source metadata/identity, assets, explicit loss refusal and native literal preservation. Native parsers come from the pinned Errand cohort; richer Scroll input links and relations are never silently treated as read links. `site-build`, reopened export custody and generated native delivery are the actual consumers. HTML input, richer unmapped Scroll conversions and JS/Lua execution retain their separate extension scope.

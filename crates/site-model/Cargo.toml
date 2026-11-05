@@ -8,6 +8,9 @@
 "description" = "Portable native-site manifests and canonical publication snapshots"
 
 [dependencies]
+scroll-protocol = { version = "=0.1.0", git = "https://github.com/merely-made/errand.git", rev = "897fb963d184f0e379ab9041d68e17e726cb7763", default-features = false, optional = true }
+gemini-protocol = { version = "=0.1.7", git = "https://github.com/merely-made/errand.git", rev = "897fb963d184f0e379ab9041d68e17e726cb7763", default-features = false, optional = true }
+pulldown-cmark = { version = "=0.13.4", default-features = false, features = ["html"], optional = true }
 "serde" = { "version" = "1", "features" = ["derive"] }
 "serde_json" = { "version" = "1" }
 "blake3" = { "version" = "1" }
@@ -20,6 +23,7 @@
 "stickleback" = { "version" = "0.2.0", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "7a3453a02bc7dea391ef18814c1bfa1a46e67160", "optional" = true }
 
 [features]
+generate = ["dep:pulldown-cmark", "dep:scroll-protocol", "dep:gemini-protocol"]
 "default" = []
 "history" = ["dep:muniment"]
 "publication" = ["dep:muniment", "dep:eidetic", "dep:gemot", "dep:personae", "dep:stickleback"]

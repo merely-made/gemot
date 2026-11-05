@@ -51,6 +51,7 @@
 "https://github.com/merely-made/murm.git" = { "murm-sync" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "ce53cebb2ae9f420de5a0dcaa5a9768c639910af" }, "retinue" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "ce53cebb2ae9f420de5a0dcaa5a9768c639910af" } }
 
 [features]
+generate = ["site-model/generate"]
 "default" = []
 "history" = ["site-model/history", "dep:muniment"]
 "publication" = ["site-model/publication", "dep:muniment", "muniment/redb", "dep:gemot", "dep:personae", "dep:zeroize", "dep:stickleback"]
@@ -69,3 +70,8 @@
 
 [lints]
 "workspace" = true
+
+[[bin]]
+name = "site-build"
+path = "src/bin/site_build.rs"
+required-features = ["generate"]

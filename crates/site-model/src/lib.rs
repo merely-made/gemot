@@ -18,6 +18,9 @@ pub mod history;
 #[cfg(feature = "publication")]
 pub mod publication;
 
+#[cfg(feature = "generate")]
+pub mod generate;
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
