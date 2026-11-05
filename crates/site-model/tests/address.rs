@@ -33,6 +33,9 @@ fn round_trips_every_form() {
         format!("knot://{KEY}/dir/"),
         format!("knot://{KEY}/100%40home"),
         format!("knot://{KEY}/@team/page"),
+        format!("knot://{KEY}/My Notes/field note.knot"),
+        format!("knot://{KEY}/me@home.knot"),
+        format!("knot://{KEY}/a?b#c"),
     ] {
         let parsed = parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
         assert_eq!(parsed.to_string(), text);
@@ -82,9 +85,7 @@ fn refuses_malformed_hosts() {
 #[test]
 fn refuses_malformed_paths() {
     assert_eq!(parse(&format!("knot://{KEY}")), Err(AddressError::Path));
-    for path in [
-        "", "a//b", "../x", "a/./b", "a/..", "a b", "a\tb", "a\\b", "a?b", "a#b", "/",
-    ] {
+    for path in ["", "a//b", "../x", "a/./b", "a/..", "a\tb", "a\\b", "/"] {
         assert_eq!(
             parse(&format!("knot://{KEY}/{path}")),
             Err(AddressError::Path),
@@ -99,14 +100,7 @@ fn refuses_malformed_paths() {
 
 #[test]
 fn refuses_malformed_pins() {
-    for pin in [
-        "",
-        "abc",
-        &PIN[..63],
-        &format!("{PIN}0"),
-        &format!("{}z", &PIN[..63]),
-        "a@b",
-    ] {
+    for pin in ["", "abc", &PIN[..63], &format!("{PIN}0"), "a@b"] {
         assert_eq!(
             parse(&format!("knot://{KEY}/p@{pin}")),
             Err(AddressError::Pin),
@@ -134,4 +128,11 @@ fn pinned_builder_matches_written_pin() {
     let base = parse(&format!("knot://{KEY}/p")).unwrap();
     let pin = parse(&format!("knot://{KEY}/p@{PIN}")).unwrap();
     assert_eq!(base.pinned(pin.pin.unwrap()), pin);
+}
+
+#[test]
+fn non_hex_text_after_at_stays_in_the_path() {
+    let address = parse(&format!("knot://{KEY}/p@{}z", &PIN[..63])).unwrap();
+    assert_eq!(address.pin, None);
+    assert!(address.path.starts_with("p@ffee"));
 }

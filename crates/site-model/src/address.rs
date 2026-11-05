@@ -16,9 +16,10 @@
 //! in the address; today's Personae-root addresses are the root tier and parse
 //! unchanged. The second form is the governed form: the host is a Moot
 //! collection anchor, marked by the `.moot` suffix so that no 64-hex host can
-//! be read both ways. The path names a page or file. A trailing `@<edition id>`
-//! pins an edition; a literal `@` ending the last segment must be written
-//! `%40`. Hosts and pins are accepted in either case and rendered lowercase,
+//! be read both ways. The path names a page or file and may hold spaces. A
+//! trailing `@<hex>` pins an edition and must be a full 64-hex id; an `@` whose
+//! tail is not hex (`me@home.knot`) stays part of the path, and a path that
+//! must end in `@` plus hex is written with `%40`. Hosts and pins are accepted in either case and rendered lowercase,
 //! so [`KnotAddress`]'s `Display` output re-parses to an equal value.
 //!
 //! Parsing only checks shape. Nothing here resolves a host, verifies a log or
@@ -101,14 +102,7 @@ fn write_hex(f: &mut fmt::Formatter<'_>, bytes: &[u8; 32]) -> fmt::Result {
 }
 
 fn valid_path(path: &str) -> bool {
-    if path.is_empty()
-        || path
-            .chars()
-            .any(|c| c.is_control() || c.is_whitespace() || c == '\\')
-    {
-        return false;
-    }
-    if path.contains(['?', '#']) {
+    if path.is_empty() || path.chars().any(|c| c.is_control() || c == '\\') {
         return false;
     }
     // A trailing slash names a folder; any other empty or dot segment is refused.
@@ -133,7 +127,9 @@ impl KnotAddress {
         let (host, tail) = rest.split_once('/').ok_or(AddressError::Path)?;
         let host = Self::parse_host(host)?;
         let (path, pin) = match tail.rsplit_once('@') {
-            Some((path, pin)) if !pin.contains('/') => {
+            // Text after the last `@` is a pin only when it is hex (or empty):
+            // `me@home.knot` is a file name, `p@abc` a malformed pin.
+            Some((path, pin)) if pin.bytes().all(|b| b.is_ascii_hexdigit()) => {
                 (path, Some(hex32(pin).ok_or(AddressError::Pin)?))
             }
             _ => (tail, None),
