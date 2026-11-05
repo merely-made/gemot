@@ -15,6 +15,8 @@
 #[cfg(feature = "history")]
 pub mod history;
 
+pub mod address;
+pub mod clip;
 pub mod remembered;
 pub mod site_log;
 
