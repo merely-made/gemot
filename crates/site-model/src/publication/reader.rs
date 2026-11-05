@@ -52,16 +52,7 @@ impl Default for ReaderLimits {
     }
 }
 
-/// History considered by verification. Neither scope proves global freshness.
-/// The stateless verifier sees supplied history only; [`history::ReaderHistory`]
-/// also preserves previously observed authority across reads and restarts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EvidenceScope {
-    SuppliedHistoryOnly,
-    /// Valid against supplied evidence merged with durably remembered authority.
-    /// Unseen newer evidence elsewhere can still exist.
-    SuppliedAndRememberedHistory,
-}
+pub use crate::remembered::EvidenceScope;
 
 #[derive(Clone, Debug)]
 pub struct VerifiedPublication {

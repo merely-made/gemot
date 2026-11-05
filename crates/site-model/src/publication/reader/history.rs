@@ -4,23 +4,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Remembered authority for portable readers. Persist full Gemot evidence,
-//! including changes that make a page unreadable. Atomic comparison prevents
-//! concurrent observations from overwriting history they have not seen.
-//! The host must preserve storage; deletion or whole-store rollback is outside
-//! this adapter's protection. No newest-state or availability promise is made.
-
-use std::sync::{Arc, Mutex};
+//! Gemot adapter for remembered reader authority (the optional solo-Moot path).
+//! Persist full Gemot evidence, including changes that make a page
+//! unreadable. The shared store in [`crate::remembered`] provides atomic
+//! comparison, the clock high-water mark and the capacity bound.
 
 use gemot::moot::{Moot, MootId, MootRetentionSettings};
-use muniment::{Backend, StoreError, WriteOp};
-use serde::{Deserialize, Serialize};
+use muniment::{Backend, StoreError};
 use stickleback::DropExportProfile;
 
-use super::{
-    EvidenceScope, ReaderLimits, ReaderTrust, VerifiedPublication, verify_reader_evidence,
-};
+use super::{ReaderLimits, ReaderTrust, VerifiedPublication, verify_reader_evidence};
 use crate::publication::PublicationError;
+pub use crate::remembered::ReaderObservation;
+use crate::remembered::{Authority, EvidenceScope, Remembered, RememberedError};
 
 #[derive(Debug)]
 pub enum ReaderHistoryError {
@@ -65,34 +61,66 @@ impl From<gemot::moot::MootError> for ReaderHistoryError {
     }
 }
 
-/// A local observation receipt, not a publication signature or custody promise.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReaderObservation {
-    pub history_digest: [u8; 32],
-    pub evaluated_at_ms: u64,
+impl From<RememberedError<PublicationError>> for ReaderHistoryError {
+    fn from(e: RememberedError<PublicationError>) -> Self {
+        match e {
+            RememberedError::Storage(e) => Self::Storage(e),
+            RememberedError::Authority(e) => Self::Verification(e),
+            RememberedError::InvalidState(e) => Self::InvalidState(e),
+            RememberedError::Capacity => Self::Capacity,
+            RememberedError::ClockRollback => Self::ClockRollback,
+            RememberedError::ConcurrentChange => Self::ConcurrentChange,
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct State {
-    version: u8,
-    trust: ReaderTrust,
-    observation: ReaderObservation,
-}
-
-type StoredPair = (Option<Vec<u8>>, Option<Vec<u8>>);
-
-/// Host-owned storage and trust. Constructing a handle does not initialize or
-/// reset any records. Each observation requires transactional backend support.
-/// Old evidence is merged, never used to replace remembered authority. Restart
-/// durability follows the supplied backend; use persistent storage for that gate.
-pub struct ReaderHistory<B> {
-    backend: B,
+struct GemotAuthority {
     trust: ReaderTrust,
     retention: MootRetentionSettings,
     limits: ReaderLimits,
-    state_key: String,
-    history_key: String,
+}
+
+impl Authority for GemotAuthority {
+    type Anchor = ReaderTrust;
+    type Error = PublicationError;
+    const NAMESPACE: &'static str = "site-reader/v1";
+    const EVIDENCE_NAME: &'static str = "history.drop";
+
+    fn anchor(&self) -> &ReaderTrust {
+        &self.trust
+    }
+
+    fn max_evidence_bytes(&self) -> usize {
+        self.limits.max_history_bytes
+    }
+
+    async fn merge(
+        &self,
+        remembered: Option<&[u8]>,
+        supplied: &[u8],
+    ) -> Result<Vec<u8>, PublicationError> {
+        let moot = Moot::in_memory(
+            MootId(self.trust.collection.moot_id),
+            self.trust.founder,
+            self.retention.clone(),
+        );
+        if let Some(remembered) = remembered {
+            moot.import_plain_drop(remembered, self.limits.drop).await?;
+        }
+        // Admission can have partial effects before refusal; all effects live
+        // in this disposable Moot until the complete import/export succeeds.
+        moot.import_plain_drop(supplied, self.limits.drop).await?;
+        let mut merged = Vec::new();
+        moot.export_plain_drop(&mut merged, DropExportProfile::default(), self.limits.drop)
+            .await?;
+        Ok(merged)
+    }
+}
+
+/// Host-owned storage and trust. Old evidence is merged, never used to
+/// replace remembered authority.
+pub struct ReaderHistory<B> {
+    store: Remembered<B, GemotAuthority>,
 }
 
 impl<B: Backend + Sync> ReaderHistory<B> {
@@ -102,63 +130,14 @@ impl<B: Backend + Sync> ReaderHistory<B> {
         retention: MootRetentionSettings,
         limits: ReaderLimits,
     ) -> Self {
-        // ReaderTrust has a fixed, derived serialization; key identity includes
-        // the external root as well as the intended Moot and collection.
-        let identity = blake3::hash(&serde_json::to_vec(&trust).expect("reader trust encoding"));
-        let prefix = format!("site-reader/v1/{}", identity.to_hex());
-        Self {
-            backend,
+        let authority = GemotAuthority {
             trust,
             retention,
             limits,
-            state_key: format!("{prefix}/state.json"),
-            history_key: format!("{prefix}/history.drop"),
-        }
-    }
-
-    async fn load(&self) -> Result<(StoredPair, Option<State>), ReaderHistoryError> {
-        let pair = Arc::new(Mutex::new(None));
-        let captured = pair.clone();
-        let state_key = self.state_key.clone();
-        let history_key = self.history_key.clone();
-        self.backend
-            .transact(Box::new(move |reader| {
-                *captured.lock().expect("reader snapshot lock") = Some((|| {
-                    Ok::<_, StoreError>((reader.get(&state_key)?, reader.get(&history_key)?))
-                })());
-                vec![]
-            }))
-            .await?;
-        let pair = pair
-            .lock()
-            .expect("reader snapshot lock")
-            .take()
-            .ok_or_else(|| ReaderHistoryError::InvalidState("transaction did not run".into()))??;
-        let state = match (&pair.0, &pair.1) {
-            (None, None) => None,
-            (Some(metadata), Some(history)) => {
-                if metadata.len() > 4096 || history.len() > self.limits.max_history_bytes {
-                    return Err(ReaderHistoryError::Capacity);
-                }
-                let state: State = serde_json::from_slice(metadata)
-                    .map_err(|e| ReaderHistoryError::InvalidState(e.to_string()))?;
-                if state.version != 1
-                    || state.trust != self.trust
-                    || state.observation.history_digest != *blake3::hash(history).as_bytes()
-                {
-                    return Err(ReaderHistoryError::InvalidState(
-                        "identity or evidence digest mismatch".into(),
-                    ));
-                }
-                Some(state)
-            },
-            _ => {
-                return Err(ReaderHistoryError::InvalidState(
-                    "incomplete state/evidence pair".into(),
-                ));
-            },
         };
-        Ok((pair, state))
+        Self {
+            store: Remembered::new(backend, authority),
+        }
     }
 
     /// Admit and durably remember authority even if no page can be opened.
@@ -168,87 +147,7 @@ impl<B: Backend + Sync> ReaderHistory<B> {
         history: &[u8],
         at_ms: u64,
     ) -> Result<ReaderObservation, ReaderHistoryError> {
-        Ok(self.observe_inner(history, at_ms).await?.0)
-    }
-
-    async fn observe_inner(
-        &self,
-        history: &[u8],
-        at_ms: u64,
-    ) -> Result<(ReaderObservation, Vec<u8>), ReaderHistoryError> {
-        if history.len() > self.limits.max_history_bytes {
-            return Err(ReaderHistoryError::Capacity);
-        }
-        let (previous, state) = self.load().await?;
-        if state
-            .as_ref()
-            .is_some_and(|s| at_ms < s.observation.evaluated_at_ms)
-        {
-            return Err(ReaderHistoryError::ClockRollback);
-        }
-        let moot = Moot::in_memory(
-            MootId(self.trust.collection.moot_id),
-            self.trust.founder,
-            self.retention.clone(),
-        );
-        if let Some(remembered) = &previous.1 {
-            moot.import_plain_drop(remembered.as_slice(), self.limits.drop)
-                .await?;
-        }
-        // Admission can have partial effects before refusal; all effects live
-        // in this disposable Moot until the complete import/export succeeds.
-        moot.import_plain_drop(history, self.limits.drop).await?;
-        let mut merged = Vec::new();
-        moot.export_plain_drop(&mut merged, DropExportProfile::default(), self.limits.drop)
-            .await?;
-        if merged.len() > self.limits.max_history_bytes {
-            return Err(ReaderHistoryError::Capacity);
-        }
-        let observation = ReaderObservation {
-            history_digest: *blake3::hash(&merged).as_bytes(),
-            evaluated_at_ms: at_ms,
-        };
-        let next = serde_json::to_vec(&State {
-            version: 1,
-            trust: self.trust.clone(),
-            observation: observation.clone(),
-        })
-        .map_err(|e| ReaderHistoryError::InvalidState(e.to_string()))?;
-        let next_history = merged.clone();
-        let state_key = self.state_key.clone();
-        let history_key = self.history_key.clone();
-        let outcome = Arc::new(Mutex::new(None));
-        let captured = outcome.clone();
-        self.backend
-            .transact(Box::new(move |reader| {
-                let check = (|| {
-                    if (reader.get(&state_key)?, reader.get(&history_key)?) != previous {
-                        return Err(ReaderHistoryError::ConcurrentChange);
-                    }
-                    Ok(())
-                })();
-                match check {
-                    Ok(()) => vec![
-                        WriteOp::Put {
-                            key: state_key,
-                            value: next,
-                        },
-                        WriteOp::Put {
-                            key: history_key,
-                            value: next_history,
-                        },
-                    ],
-                    Err(error) => {
-                        *captured.lock().expect("reader commit lock") = Some(error);
-                        vec![]
-                    },
-                }
-            }))
-            .await?;
-        if let Some(error) = outcome.lock().expect("reader commit lock").take() {
-            return Err(error);
-        }
-        Ok((observation, merged))
+        Ok(self.store.observe(history, at_ms).await?.0)
     }
 
     /// Remember valid authority first, then verify content against its union.
@@ -261,17 +160,18 @@ impl<B: Backend + Sync> ReaderHistory<B> {
         snapshot: &[u8],
         at_ms: u64,
     ) -> Result<VerifiedPublication, ReaderHistoryError> {
-        let (observation, merged) = self.observe_inner(history, at_ms).await?;
+        let (observation, merged) = self.store.observe(history, at_ms).await?;
+        let authority = self.store.authority();
         let mut verified = verify_reader_evidence(
-            &self.trust,
+            &authority.trust,
             &merged,
             snapshot,
-            self.retention.clone(),
+            authority.retention.clone(),
             at_ms,
-            self.limits,
+            authority.limits,
         )
         .await?;
-        if self.load().await?.1.as_ref().map(|s| &s.observation) != Some(&observation) {
+        if self.store.observation().await?.as_ref() != Some(&observation) {
             return Err(ReaderHistoryError::ConcurrentChange);
         }
         verified.scope = EvidenceScope::SuppliedAndRememberedHistory;

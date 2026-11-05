@@ -20,6 +20,13 @@ Knot supplies saved files and protocol-serving adapters. Djinn supplies durable
 custody and listener lifetime. Replication and publication authority remain
 owned by their existing layers.
 
+The default build also carries the ordinary-site reader: `site_log` verifies a
+Stickleback edition chain from an Ed25519 log key alone and opens the snapshot the
+newest edition names; `SiteLogHistory` remembers the head per key and refuses known
+rollback and equivocation. `remembered` is the one store (compare-and-write, clock
+high-water mark, capacity bound, corrupt-state refusal) that this adapter and the
+Gemot `publication` adapter share. Neither needs a carrier; only the latter needs Gemot.
+
 Optional `publication` binds retained Gemini, Scroll and Micron snapshots to
 Gemot's signed contributions and causal collections. Eidetic's `save_schema`
 and `save_typed` retain `publication::snapshot_schema()` and the snapshot itself;
