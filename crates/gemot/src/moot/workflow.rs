@@ -3,6 +3,8 @@
 #[cfg(feature = "work-host")]
 pub mod keeper;
 pub mod namespace;
+pub mod discovery;
+mod discovery_network;
 pub mod work;
 
 use serde::{Deserialize, Serialize};

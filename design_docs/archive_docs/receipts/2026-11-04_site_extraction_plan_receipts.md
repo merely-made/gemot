@@ -101,3 +101,25 @@ the existing `C:/t/cargo-targets/gemot` remains the shared reusable build owner.
 `workflow-msrv` passes the feature-enabled Gemot library on Rust 1.97.1,
 locked and offline. The signed-proof suite is compiler-warning free; Clippy
 retains the warning scope stated above.
+
+## 2026-11-04, discovery receiving source
+
+Murm carrier source `e33a430574057d259b2acd8f19bd44291a4e2873`, followed by
+reannouncement fix `2d5760aac0d9f77813b45bc9f7695b9f8c1e120e`, is public.
+The Murm sync suite passes 14 cases. The real two-endpoint gossip case passes
+again with identical application bytes delivered twice through fresh carrier
+nonces; sender/receiver byte ceilings and pending queues remain bounded.
+
+Gemot `gemot-discovery-final` passes 14 workflow cases (one helper separately
+ignored and exercised by its parent). Three new discovery cases cover signed
+metadata, exact current collection selection, recipient and publisher authority,
+withdrawal, expiry, stale/repeated sequences, persisted equivocation, protected
+watermarks, scope/signature tampering, and refusal of credentials, local targets
+and active schemes. The previous keeper/reviewer process case also passes on
+the new Murm cohort. The bounded authority/record prelude compiles in this gate.
+
+Command logs and compact receipts are under
+`Code/testing/gemot/discovery-ui-20261104`, cap 100 MB. This receives shared
+source for app integration; app, headed and remote-machine outcomes are recorded
+separately as they are exercised. Public descriptions are deliberate disclosures;
+restricted metadata encryption is not qualified by this carrier.

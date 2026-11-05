@@ -1626,6 +1626,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "url",
 ]
 
 [[package]]
@@ -3010,7 +3011,7 @@ dependencies = [
 [[package]]
 name = "mere-transport"
 version = "0.0.2"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+source = "git+https://www.github.com/merely-made/murm.git?rev=2d5760aac0d9f77813b45bc9f7695b9f8c1e120e#2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 dependencies = [
  "bytes",
  "hkdf 0.13.0",
@@ -3148,7 +3149,7 @@ dependencies = [
 [[package]]
 name = "murm"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+source = "git+https://www.github.com/merely-made/murm.git?rev=2d5760aac0d9f77813b45bc9f7695b9f8c1e120e#2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3174,8 +3175,9 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+source = "git+https://www.github.com/merely-made/murm.git?rev=2d5760aac0d9f77813b45bc9f7695b9f8c1e120e#2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 dependencies = [
+ "getrandom 0.4.3",
  "mere-p2panda-net",
  "muniment",
  "p2panda-core",
@@ -4661,7 +4663,7 @@ dependencies = [
 [[package]]
 name = "retinue"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+source = "git+https://www.github.com/merely-made/murm.git?rev=2d5760aac0d9f77813b45bc9f7695b9f8c1e120e#2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 dependencies = [
  "aes 0.9.3",
  "bzip2",
@@ -5774,7 +5776,7 @@ dependencies = [
 [[package]]
 name = "truchman"
 version = "0.1.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=5b45742f87ecbd67ffbca814f8e1945e33cb55a0#5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+source = "git+https://www.github.com/merely-made/murm.git?rev=2d5760aac0d9f77813b45bc9f7695b9f8c1e120e#2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 dependencies = [
  "sha2 0.11.1",
  "tokio",

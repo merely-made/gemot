@@ -163,3 +163,11 @@ cargo test -p gemot --test workflow --features work-host --locked
 
 The process helper is separately ignored and invoked by its parent test. The
 socket fixture fixes reader identity; it does not qualify a production transport.
+
+`workflow::discovery` signs bounded, expiring catalogue advertisements through a
+Moot-scoped derived key. `CatalogueDirectory` retains sequence watermarks and
+conflicts across restart, and rechecks provider/reader authority and exact current
+collection versions for visibility. `MootLanes::publish_catalogue_history` sends
+the bounded authority/record prelude; Murm carries opaque hints separately. Public
+metadata requires an explicit host disclosure action; topic knowledge grants no
+collection access and supplies no metadata confidentiality.

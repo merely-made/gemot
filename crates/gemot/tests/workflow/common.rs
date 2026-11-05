@@ -55,6 +55,7 @@ pub async fn initialize<B: Backend + Clone>(moot: &Moot<B>) {
                 fauna_cap(),
                 collection_cap(COLLECTION),
                 offer_cap(WORK),
+                gemot::moot::workflow::discovery::catalogue_cap(COLLECTION.collection_id.0),
                 settlement_cap(WORK),
             ]);
         }

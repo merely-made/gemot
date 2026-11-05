@@ -21,7 +21,7 @@ authors = [
 ]
 
 [workspace.dependencies]
-murm-sync = { version = "0.0.1", git = "https://www.github.com/merely-made/murm.git", rev = "5b45742f87ecbd67ffbca814f8e1945e33cb55a0" }
+murm-sync = { version = "0.0.1", git = "https://www.github.com/merely-made/murm.git", rev = "2d5760aac0d9f77813b45bc9f7695b9f8c1e120e" }
 notochord = { version = "0.1.1", git = "https://github.com/merely-made/dramatis.git", branch = "main", features = ["tokio"] }
 serde_json = "1"
 
@@ -69,7 +69,7 @@ rev = "7a3453a02bc7dea391ef18814c1bfa1a46e67160"
 package = "mere-transport"
 version = "0.0.2"
 git = "https://www.github.com/merely-made/murm.git"
-rev = "5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+rev = "2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 
 [workspace.dependencies.errand]
 version = "0.4.0"
@@ -104,7 +104,7 @@ branch = "main"
 [workspace.dependencies.murm]
 version = "0.0.1"
 git = "https://www.github.com/merely-made/murm.git"
-rev = "5b45742f87ecbd67ffbca814f8e1945e33cb55a0"
+rev = "2d5760aac0d9f77813b45bc9f7695b9f8c1e120e"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

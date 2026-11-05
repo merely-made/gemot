@@ -7,6 +7,44 @@ use crate::moot::workflow::work::{WorkAction, WorkEvent, WorkView};
 use crate::moot::workflow::{RecordId, WorkflowEvent, WorkflowFact};
 
 impl<B: Backend + Clone> Moot<B> {
+    pub async fn validate_catalogue_advertisement(
+        &self,
+        reader: RecordId,
+        hint: &crate::moot::workflow::discovery::SignedCatalogueAdvertisement,
+        now: u64,
+        max_lifetime_ms: u64,
+    ) -> Result<(), MootError> {
+        use crate::moot::workflow::discovery::catalogue_cap;
+        hint.verify(self.moot_id.0, now, max_lifetime_ms)
+            .map_err(MootError::Workflow)?;
+        let ad = &hint.advertisement;
+        let view = self
+            .collection_for_reader(
+                reader,
+                &CollectionTarget::FollowAccepted(ad.collection.collection),
+                now,
+            )
+            .await?;
+        if ad.description.is_some() {
+            if view.version != ad.collection || view.effective_selected.is_empty() {
+                return Err(MootError::Workflow(
+                    "stale or empty advertised collection".into(),
+                ));
+            }
+            let group = self.membership().await?;
+            let request = MootAuthorizationRequest {
+                subject: ad.provider,
+                capability_path: cap_path(&catalogue_cap(ad.collection.collection.collection_id.0)),
+                at_ms: now,
+            };
+            if let GateDecision::Deny(reason) =
+                self.authorize_current_capability(&group, &request).await?
+            {
+                return Err(MootError::Unauthorized(reason));
+            }
+        }
+        Ok(())
+    }
     async fn project_workflow<R>(
         &self,
         at_ms: u64,

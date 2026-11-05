@@ -40,6 +40,7 @@ name = "relay-pool"
 required-features = ["relay-pool-runner"]
 
 [dependencies]
+url = "2"
 eidetic = { workspace = true, optional = true }
 eidetic-search = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

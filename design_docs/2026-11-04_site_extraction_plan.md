@@ -124,6 +124,31 @@ or a mounted application UI. Broader P1 historical-authority proof, protected
 peer key distribution, automatic scheduling and compensation execution remain
 separate owner work in the Moot publication plan.
 
+### S5. Discovery advertisements and application controls
+
+Authorized 2026-11-04: Murm carries bounded opaque gossip advertisements on the
+existing endpoint; Gemot owns canonical signed hints, exact collection versions,
+provider authority, recipient read checks, lifetime ceilings, replay watermarks,
+withdrawal and conflict handling. Subject classes never determine topics. This
+slice advertises explicitly public site descriptions; confidential descriptions
+need an encrypted audience path. Cached hints are never access capabilities.
+
+The receiving source implements `workflow::discovery` and a bounded publication
+of the authority/record prelude through existing Moot lanes. Murm delivery nonces
+allow unchanged signed hints to be repeated for late history and newly joined
+peers without weakening application sequence/expiry checks. Restore retains
+watermarks; current collection, membership and grants are rechecked at listing
+and opening. Credential-bearing, active-script and loopback addresses refuse.
+
+Turnstone owns public publishing intent, subject/abstract browsing, withdrawal
+and worker-validated navigation. Knot owns saved-site format selection and
+checked artifact export. New app controls must reject changed focus, stale
+sessions/generations and expired/withdrawn hints, and never make building a
+publication action. Canonical app scope remains in their existing site/place
+plans. Required local carrier, signature/state and app consumer receipts have a
+100 MB aggregate cap at `Code/testing/gemot/discovery-ui-20261104`. Remote-machine,
+physical and headed qualification remain separate from model/native tests.
+
 ## Findings
 
 - 2026-11-04: the model has no editor dependency. Knot's host library already

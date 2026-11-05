@@ -3,6 +3,8 @@
 mod common;
 #[path = "workflow/history.rs"]
 mod history;
+#[path="workflow/discovery.rs"]
+mod discovery;
 use common::*;
 use gemot::moot::workflow::{WorkflowEvent, namespace::*, work::*};
 use gemot::moot::*;
