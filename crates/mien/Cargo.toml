@@ -24,7 +24,7 @@ workspace = true
 
 [dependencies]
 murm-sync.workspace = true
-p2panda-core = "0.7.0"
+p2panda-core = { package = "p2mere-core", version = "0.8" }
 thiserror = "1"
 
 [dependencies.insigne]
@@ -40,7 +40,8 @@ features = [
 ]
 
 [dependencies.p2panda-store]
-version = "0.7.0"
+package = "p2mere-store"
+version = "0.8"
 default-features = false
 
 [dependencies.serde]
@@ -53,7 +54,7 @@ features = [
 workspace = true
 
 [dev-dependencies]
-p2panda-sync = "0.7.0"
+p2panda-sync = { package = "p2mere-sync", version = "0.8" }
 tempfile = "3"
 tokio-stream = "0.1"
 
