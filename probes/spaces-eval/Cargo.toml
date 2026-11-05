@@ -1,0 +1,98 @@
+# R25 probe: p2panda-spaces against Gemot's MootGroup and Stickleback's group
+# session and lane. A standalone workspace on purpose: it joins no default build
+# and no member list of Gemot's workspace. Run it through the build wrapper:
+#   python3 /Users/markik/Code/tools/build_storage.py build --lane release-log-spaces-probe \
+#     --cwd <gemot>/probes/spaces-eval -- +1.99.1 test --locked
+[package]
+name = "spaces-eval"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MPL-2.0"
+
+[workspace]
+
+[dependencies]
+gemot = { path = "../../crates/gemot" }
+stickleback = { git = "https://www.github.com/merely-made/eidetic.git", rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31" }
+muniment = { git = "https://www.github.com/merely-made/eidetic.git", rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31" }
+identity = { package = "personae", version = "0.3.0", git = "https://github.com/merely-made/dramatis.git", branch = "main" }
+# The family's current supplier (what Gemot and Stickleback run on): the published
+# p2mere 0.8 crates. The intake branch below is 0.9 and links beside them.
+auth-old = { package = "p2mere-auth", version = "0.8", default-features = false }
+core-old = { package = "p2mere-core", version = "0.8" }
+# The intake branch of the p2mere fork, which carries p2panda-spaces.
+p2spaces = { package = "p2mere-spaces", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", features = ["test_utils"] }
+p2auth = { package = "p2mere-auth", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false }
+p2core = { package = "p2mere-core", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false }
+p2enc = { package = "p2mere-encryption", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false, features = ["data_scheme"] }
+p2store = { package = "p2mere-store", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false, features = ["spaces"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+pollster = "0.4"
+thiserror = "1"
+serde = { version = "1", features = ["derive"] }
+
+[patch."https://github.com/merely-made/mere.git".muniment]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch."https://github.com/merely-made/mere.git".chartulary]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch."https://github.com/merely-made/mere.git".eidetic]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch."https://github.com/merely-made/mere.git".stickleback]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch."https://github.com/merely-made/mere.git".mere-proofs]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch."https://github.com/merely-made/mere.git".servitor]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch.crates-io.muniment]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+
+[patch.crates-io.errand]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.finger-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.gemini-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.gopher-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.guppy-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.misfin]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.nex-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.scroll-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
+[patch.crates-io.spartan-protocol]
+git = "https://github.com/merely-made/errand.git"
+rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+
