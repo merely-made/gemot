@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 use super::*;
 use gemot::moot::workflow::discovery::*;
-async fn hint(
+pub(super) async fn hint(
     moot: &Moot<muniment::MemoryBackend>,
     sequence: u64,
     description: bool,
@@ -16,6 +16,7 @@ async fn hint(
         &person(7),
         CatalogueAdvertisement {
             version: 1,
+            audience: None,
             collection,
             provider: root(&person(7)),
             sequence,

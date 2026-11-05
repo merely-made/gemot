@@ -51,3 +51,5 @@ publication/browsing/validated navigation, and Knot owns saved-site format
 selection and checked export. Public revisions, commands, source-graph checks
 and remaining headed/remote/protected-metadata boundaries are recorded in the
 [site receipt](archive_docs/receipts/2026-11-04_site_extraction_plan_receipts.md#2026-11-04-application-receiving-closure).
+
+[S6 in the site plan](2026-11-04_site_extraction_plan.md#s6-protected-descriptions-and-headed-qualification) records native-window qualification and audience-bound group-encrypted descriptions, caches and bodies. Current authority and traffic visibility remain separate from encryption.

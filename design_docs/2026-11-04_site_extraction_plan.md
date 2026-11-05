@@ -149,6 +149,41 @@ plans. Required local carrier, signature/state and app consumer receipts have a
 100 MB aggregate cap at `Code/testing/gemot/discovery-ui-20261104`. Remote-machine,
 physical and headed qualification remain separate from model/native tests.
 
+### S6. Protected descriptions and headed qualification
+
+Authorized 2026-11-05 after S5's local native trials. Knot's real site tile
+qualifies generation, existing-output and dirty-source refusal; its completion
+wake is corrected. Turnstone's real shell qualifies public advertisement,
+subject/query browsing, invoked opening and withdrawal with a marked public test
+identity. Installed personal custody and remote-machine qualification remain
+separate.
+
+Protected advertisements bind a member audience into the signed V2 message.
+Public V1 messages omit the new optional field, preserving their signed bytes.
+Stickleback group data encryption seals the wire hint, local journal and metadata
+body with separate authenticated contexts bound to the Moot and, for bodies,
+the resource. Wire ingress requires the current group epoch, then applies the
+same reader/provider authority, exact-version, expiry and replay checks as public
+hints. Protected plaintext refuses public ingress. Retained epochs may reopen a
+journal after rotation; visibility still requires present authority.
+
+Hosts must keep protected titles, URLs, abstracts and subjects out of clear
+record fields and public caches. Turnstone uses opaque collection ids derived
+under a private per-profile namespace, generic record labels, encrypted bodies
+and a separate encrypted journal. Each audience keeps its own bounded directory.
+Explicit public publishing stays public; choosing a member advertisement cannot
+make an older public disclosure secret. Current members receive group keys
+through the existing invitation/rotation path. Removed recipients cannot open
+future epochs; old keys or learned plaintext cannot be remotely erased.
+
+Encryption protects descriptions, not peer traffic, group epoch identifiers or
+all community record structure. Keyless, stale-epoch and tampered payloads fail
+without a plaintext fallback. Required receipts: cross-context/audience/tamper,
+legacy public wire, replay/restart/withdrawal and epoch-removal tests, actual
+consumer persistence and live peer controls. The aggregate lane is
+`Code/testing/gemot/headed-protected-20261105`, explicitly refined to **200 MB**
+to preserve the headed fixture's preallocated storage. Original evidence is kept.
+
 ## Findings
 
 - 2026-11-04: the model has no editor dependency. Knot's host library already

@@ -479,3 +479,6 @@ async fn concurrent_offers_can_be_resolved_by_declining_an_exact_offer() {
 #[cfg(feature = "work-host")]
 #[path = "workflow/keeper.rs"]
 mod keeper;
+
+#[path = "workflow/protected_discovery.rs"]
+mod protected_discovery;

@@ -170,3 +170,25 @@ The aggregate receipt at `Code/testing/gemot/discovery-ui-20261104` remains belo
 no isolated target, Cargo home or worktree was created. Local-peer command and
 native widget receipts do not qualify a headed window, remote machine,
 protected-description encryption or the keeper's production remote protocol.
+
+## 2026-11-05, headed controls and protected receiving source
+
+`Code/testing/gemot/headed-protected-20261105/headed-receipt.json` records the
+actual Windows windows, inputs, captures and marked synthetic fixtures. The
+first Knot run exposed the missing generation busy flag; the corrected native
+trial reports completion without another input and refuses existing output and
+unsaved source. Turnstone's ignored native trial passes after public publication,
+subject/query filtering, invoked opening and withdrawal; its journal contains
+the signed withdrawal. The lane's cap is refined from 100 to 200 MB to preserve
+preallocated native storage; original evidence and the refinement are retained.
+
+`gemot-protected-suite` passes 17 workflow cases with one process helper ignored
+and exercised through its parent. Three protected cases cover hidden hint/cache/
+body bytes, separately bound domains and resources, current-epoch delivery,
+recipient removal, present read authority, replay after encrypted-cache restart,
+withdrawal, tamper, byte bounds, and refusal to downgrade a protected signed hint
+onto public ingress. Public V1 signed messages omit the new audience field.
+The independent keeper-process scenario still passes. Actual protected app
+receiving is recorded after the shared source is published. Local privacy does
+not establish anonymous peer traffic, erase old plaintext, or qualify remote
+machines or personal installed custody.

@@ -15,6 +15,13 @@ use servitor::Cap;
 use std::collections::BTreeMap;
 
 pub const MAX_ADVERTISEMENT_BYTES: usize = 16 * 1024;
+#[path = "discovery/protected.rs"]
+pub mod protected;
+/// A signed disclosure boundary. None on a V1 advertisement remains public.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CatalogueAudience {
+    pub members_of: RecordId,
+}
 fn salt(moot: RecordId) -> Vec<u8> {
     let mut s = b"gemot/catalogue-advertisement/v1/".to_vec();
     s.extend(moot);
@@ -69,6 +76,9 @@ impl CatalogueDescription {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogueAdvertisement {
     pub version: u16,
+    // Omitted for legacy public hints so their signed V1 bytes stay unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience: Option<CatalogueAudience>,
     pub collection: CollectionVersion,
     pub provider: RecordId,
     pub sequence: u64,
@@ -114,7 +124,12 @@ impl SignedCatalogueAdvertisement {
     }
     pub fn verify(&self, moot: RecordId, now: u64, max_lifetime_ms: u64) -> Result<(), String> {
         let ad = &self.advertisement;
-        if ad.version != 1
+        let audience_valid = match (ad.version, ad.audience) {
+            (1, None) => true,
+            (2, Some(audience)) => audience.members_of == moot,
+            _ => false,
+        };
+        if !audience_valid
             || ad.collection.collection.moot_id != moot
             || ad.sequence == 0
             || ad.issued_at_ms > now
@@ -231,6 +246,37 @@ impl CatalogueDirectory {
         max_entries: usize,
     ) -> Result<bool, String> {
         let hint = SignedCatalogueAdvertisement::decode(bytes)?;
+        if hint.advertisement.audience.is_some() {
+            return Err("protected advertisement refused on public ingress".into());
+        }
+        self.receive_verified(moot, reader, hint, now, max_lifetime_ms, max_entries)
+            .await
+    }
+    /// Only a successfully opened current-epoch envelope can use this ingress.
+    pub async fn receive_protected<B: Backend + Clone>(
+        &mut self,
+        moot: &Moot<B>,
+        reader: RecordId,
+        bytes: &[u8],
+        keys: &stickleback::DataKeyring,
+        now: u64,
+        max_lifetime_ms: u64,
+        max_entries: usize,
+    ) -> Result<bool, String> {
+        let hint =
+            protected::open_advertisement(moot.moot_id().0, keys, bytes, now, max_lifetime_ms)?;
+        self.receive_verified(moot, reader, hint, now, max_lifetime_ms, max_entries)
+            .await
+    }
+    async fn receive_verified<B: Backend + Clone>(
+        &mut self,
+        moot: &Moot<B>,
+        reader: RecordId,
+        hint: SignedCatalogueAdvertisement,
+        now: u64,
+        max_lifetime_ms: u64,
+        max_entries: usize,
+    ) -> Result<bool, String> {
         moot.validate_catalogue_advertisement(reader, &hint, now, max_lifetime_ms)
             .await
             .map_err(|e| e.to_string())?;
@@ -280,6 +326,16 @@ impl CatalogueDirectory {
             }
         }
         out
+    }
+    pub fn require_audience(&self, audience: Option<CatalogueAudience>) -> Result<(), String> {
+        if self
+            .entries
+            .values()
+            .any(|e| e.hint.advertisement.audience != audience)
+        {
+            return Err("catalogue journal audience mismatch".into());
+        }
+        Ok(())
     }
     pub fn digest(hint: &SignedCatalogueAdvertisement) -> Result<RecordId, String> {
         Ok(*Hash::digest(hint.encode()?).as_bytes())
