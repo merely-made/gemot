@@ -1,0 +1,15 @@
+[package]
+name = "gemot-address"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MPL-2.0"
+repository = "https://github.com/merely-made/gemot"
+description = "The knot:// release address grammar, with no carrier or storage dependency"
+
+[lints]
+workspace = true
+
+[workspace]
+resolver = "2"
+lints = { rust = { unsafe_code = "warn" }, clippy = { all = "warn", missing_errors_doc = "warn", missing_panics_doc = "warn", missing_safety_doc = "warn", undocumented_unsafe_blocks = "warn", too_many_lines = "warn" } }

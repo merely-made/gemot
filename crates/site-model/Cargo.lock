@@ -1221,6 +1221,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "gemot-address"
+version = "0.1.0"
+
+[[package]]
 name = "gemot-site"
 version = "0.1.0"
 dependencies = [
@@ -1229,6 +1233,7 @@ dependencies = [
  "eidetic",
  "gemini-protocol",
  "gemot",
+ "gemot-address",
  "language-tags",
  "mere-proofs",
  "mien",

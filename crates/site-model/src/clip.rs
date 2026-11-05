@@ -154,14 +154,12 @@ pub fn clip_body(
     })
 }
 
-impl KnotAddress {
-    /// The address of one clip edition, for Copy link.
-    pub fn for_clip(key: [u8; 32], edition: EditionId) -> Self {
-        Self {
-            host: AddressHost::LogKey(key),
-            path: CLIP_PATH.into(),
-            pin: Some(edition.0),
-        }
+/// The address of one clip edition, for Copy link.
+pub fn clip_address(key: [u8; 32], edition: EditionId) -> KnotAddress {
+    KnotAddress {
+        host: AddressHost::LogKey(key),
+        path: CLIP_PATH.into(),
+        pin: Some(edition.0),
     }
 }
 
@@ -223,7 +221,7 @@ pub fn fork_body(
 ) -> Result<EditionBody, ClipError> {
     let mut body = clip_body(payload, tool, created_ms)?;
     body.fork_of = Some(frame.edition.id);
-    let hint = KnotAddress::for_clip(frame.key, frame.edition.id).to_string();
+    let hint = clip_address(frame.key, frame.edition.id).to_string();
     if hint.len() <= EditionLimits::default().max_text_bytes {
         body.hints.push(hint);
     }

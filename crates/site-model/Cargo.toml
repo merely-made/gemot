@@ -8,6 +8,7 @@
 "description" = "Portable native-site manifests and canonical publication snapshots"
 
 [dependencies]
+gemot-address = { version = "0.1.0", path = "../address" }
 scroll-protocol = { version = "=0.1.0", git = "https://github.com/merely-made/errand.git", rev = "897fb963d184f0e379ab9041d68e17e726cb7763", default-features = false, optional = true }
 gemini-protocol = { version = "=0.1.7", git = "https://github.com/merely-made/errand.git", rev = "897fb963d184f0e379ab9041d68e17e726cb7763", default-features = false, optional = true }
 pulldown-cmark = { version = "=0.13.4", default-features = false, features = ["html"], optional = true }

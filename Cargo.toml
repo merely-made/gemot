@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 # Independent ordinary-site crates; their optional Moot adapter has its own gate.
-exclude = ["crates/site-model", "crates/site-host"]
+exclude = ["crates/address", "crates/site-model", "crates/site-host"]
 members = [
     "crates/gemot",
     "crates/mooting",

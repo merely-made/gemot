@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: MPL-2.0
 //! The release address grammar: round trips, refusals, the old root form.
 
-use gemot_site::address::{AddressError, AddressHost, KnotAddress};
+use gemot_address::{AddressError, AddressHost, KnotAddress};
 
 const KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 const PIN: &str = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";

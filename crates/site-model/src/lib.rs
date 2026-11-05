@@ -15,7 +15,7 @@
 #[cfg(feature = "history")]
 pub mod history;
 
-pub mod address;
+pub use gemot_address as address;
 pub mod clip;
 /// The edition record types this crate's addresses and clips use, so a consumer
 /// that pins another Stickleback revision names the same types.

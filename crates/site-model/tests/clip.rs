@@ -6,7 +6,9 @@
 //! A clip becomes an edition, opens by address, and republishes as a fork.
 
 use gemot_site::address::KnotAddress;
-use gemot_site::clip::{ClipError, ClipPayloadV1, clip_body, fork_body, open_clip, republish};
+use gemot_site::clip::{
+    ClipError, ClipPayloadV1, clip_address, clip_body, fork_body, open_clip, republish,
+};
 use stickleback::edition::{
     EditionError, EditionKind, EditionLimits, EditionWriter, SigningKey, verify_edition_chain,
 };
@@ -51,7 +53,7 @@ fn clip_becomes_an_edition_with_provenance() {
     assert_eq!(edition.body.provenance.source, "turnstone");
     assert_eq!(edition.body.provenance.created_ms, 7);
     assert!(edition.body.fork_of.is_none());
-    let address = KnotAddress::for_clip(public(&signing), edition.id);
+    let address = clip_address(public(&signing), edition.id);
     let frame = open_clip(&address, &ops, &bytes).unwrap();
     assert_eq!(frame.payload.source_url, "https://example.test/essay");
     assert_eq!(frame.edition.id, edition.id);
@@ -75,19 +77,19 @@ fn open_refuses_wrong_payload_foreign_log_and_governed_addresses() {
         .unwrap()
         .head()
         .id;
-    let address = KnotAddress::for_clip(public(&signing), id);
+    let address = clip_address(public(&signing), id);
     let mut other = payload();
     other.knot_body = "swapped\n".into();
     assert_eq!(
         open_clip(&address, &ops, &other.encode().unwrap()).unwrap_err(),
         ClipError::PayloadMismatch
     );
-    let foreign = KnotAddress::for_clip(public(&key(9)), id);
+    let foreign = clip_address(public(&key(9)), id);
     assert!(matches!(
         open_clip(&foreign, &ops, &bytes),
         Err(ClipError::Edition(EditionError::WrongAuthor))
     ));
-    let missing = KnotAddress::for_clip(public(&signing), stickleback::edition::EditionId([3; 32]));
+    let missing = clip_address(public(&signing), stickleback::edition::EditionId([3; 32]));
     assert_eq!(
         open_clip(&missing, &ops, &bytes).unwrap_err(),
         ClipError::PinNotInEvidence
@@ -107,12 +109,7 @@ fn republished_edition_verifies_with_fork_of_pointing_at_the_source() {
     let source_chain =
         verify_edition_chain(&public(&signing), &ops, EditionLimits::default()).unwrap();
     let source_id = source_chain.head().id;
-    let frame = open_clip(
-        &KnotAddress::for_clip(public(&signing), source_id),
-        &ops,
-        &bytes,
-    )
-    .unwrap();
+    let frame = open_clip(&clip_address(public(&signing), source_id), &ops, &bytes).unwrap();
 
     let reader = key(2);
     let mut writer = EditionWriter::new(reader.clone());
@@ -144,7 +141,7 @@ fn republished_edition_verifies_with_fork_of_pointing_at_the_source() {
     );
     // The fork's payload keeps the original source and carries the edit.
     let reopened = open_clip(
-        &KnotAddress::for_clip(public(&reader), fork.id),
+        &clip_address(public(&reader), fork.id),
         &[fork_op],
         &fork_bytes,
     )
@@ -161,7 +158,7 @@ fn unedited_republish_keeps_the_content_digest_and_a_fork_is_only_a_first_editio
         .unwrap()
         .head()
         .id;
-    let frame = open_clip(&KnotAddress::for_clip(public(&signing), id), &ops, &bytes).unwrap();
+    let frame = open_clip(&clip_address(public(&signing), id), &ops, &bytes).unwrap();
     let mut writer = EditionWriter::new(key(3));
     let (_, same) = republish(&frame, &mut writer, None, "knot", 1).unwrap();
     assert_eq!(same, bytes);
