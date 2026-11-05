@@ -45,3 +45,9 @@ archived whole under `archive_docs/2026-11-01/`.
 - [Source splits, H8](moothold_docs/implementation_strategy/2026-11-04_source_splits_plan.md): 13 additional originals landed, zero exceptions remain; Mere owns the aggregate and existing acceptance boundaries remain separate.
 
 Catalogue discovery (2026-11-04): [S5 in the site plan](2026-11-04_site_extraction_plan.md#s5-discovery-advertisements-and-application-controls) owns signed catalogue advertisements and the Murm/Turnstone/Knot receiving chain. Public descriptions are explicit; protected metadata requires a separate encrypted audience.
+
+S5 application receiving is qualified locally: Turnstone owns public metadata
+publication/browsing/validated navigation, and Knot owns saved-site format
+selection and checked export. Public revisions, commands, source-graph checks
+and remaining headed/remote/protected-metadata boundaries are recorded in the
+[site receipt](archive_docs/receipts/2026-11-04_site_extraction_plan_receipts.md#2026-11-04-application-receiving-closure).

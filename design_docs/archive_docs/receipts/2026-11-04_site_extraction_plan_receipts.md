@@ -123,3 +123,50 @@ Command logs and compact receipts are under
 source for app integration; app, headed and remote-machine outcomes are recorded
 separately as they are exercised. Public descriptions are deliberate disclosures;
 restricted metadata encryption is not qualified by this carrier.
+
+## 2026-11-04, application receiving closure
+
+Shared source is public at Gemot `89a5935` and Murm `2d5760a`. Turnstone's
+functional integration is `cb9bd91a`, followed by the explicit production Mien
+feature dependency at `10ccc41e`. Knot's generation controls are `2279669`, with
+canonical receipts and relocated library commands at `e8e5bac`.
+
+`turnstone-place-qualified` passes all 85 place cases. Its live case founds a
+place, advertises before invitation, admits and connects a later peer, receives
+and opens the signed hint through worker validation, withdraws it and refuses
+the old navigation. Existing projection, rotation, revocation, restart and
+session cases pass. `turnstone-ui-final` runs the same final native executable's
+four catalogue UI cases: semantic filtering, expiry/focus refusal, host-only
+publication and stale/duplicate navigation guards. `turnstone-peer-production`
+passes locked all-target Clippy with peers, including the normal shipping app;
+Mien is explicitly selected rather than leaking through a test-only dependency.
+Clippy has warnings; this is not a warnings-clean receipt.
+
+`knot-desktop-suite` passes 374 tests with one ignored helper, including the new
+saved-source build cases. `knot-full-site-widget` passes all three writer-control
+cases and clicks the actual complete site tile through Genet layout/hit testing.
+It verifies Markdown export, native exact-byte output, dirty-source refusal,
+checked export reopening, unchanged existing output and absence of a publisher.
+Default locked all-target Clippy and line-ceiling commit hooks pass for both
+apps. No size exception was added: catalogue actions have a separate typed home.
+
+Initial failed compilation attempts are retained. The unconditional catalogue
+timer made a quiet-state place test stall; the corrected timer wakes only active
+catalogue state and the original regression passes. Its interrupted suite and
+an overlapping Windows linker refusal are non-acceptance attempts. The first
+feature-enabled production check exposed the test-only Mien dependency, then
+the corrected production gate passed. Logs and `gates.jsonl` preserve all attempts.
+
+`source-cohorts.json` and `receiving-graph-audit.json` compare the baseline and
+receiving lock records and edges. Turnstone changes only its nine Gemot/Murm
+package sources, with no duplicate shared package versions and no registry or
+other Git record change. Knot changes the two shared site sources and enables
+pulldown-cmark's escape dependency/edge for HTML output. Renderer, storage and
+other Git records remain unchanged in both consumers. The preexisting Mere WIP
+and five unrelated Gemot working-tree statuses are preserved.
+
+The aggregate receipt at `Code/testing/gemot/discovery-ui-20261104` remains below
+100 MB. Stable targets `C:/t/cargo-targets/{murm,gemot,turnstone,knot}` are reused;
+no isolated target, Cargo home or worktree was created. Local-peer command and
+native widget receipts do not qualify a headed window, remote machine,
+protected-description encryption or the keeper's production remote protocol.

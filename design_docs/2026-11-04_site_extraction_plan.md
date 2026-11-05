@@ -190,3 +190,17 @@ The plan's receipt record is
   Murm's `p2panda-discovery` finds peers sharing opaque topics. Gemot owns
   semantic catalogues and their audience, and never derives confidential topics
   from predictable subject classes. Source: [Scroll specification](https://raw.githubusercontent.com/michael-lazar/smolnet-portal/master/docs/scroll_spec.txt).
+
+- 2026-11-04: S5's public-description receiving chain is qualified and public.
+  Murm `2d5760a` carries bounded repeatable opaque hints; Gemot `89a5935` owns
+  signed catalogue validation. Turnstone `cb9bd91a` supplies host-only public
+  advertising, subject/abstract browsing, withdrawal and owner-validated opening;
+  `10ccc41e` explicitly supplies Mien to production peer builds. Knot `2279669`
+  supplies saved-site format selection and checked export, with receipt/command
+  corrections at `e8e5bac`. Murm passes 14 sync cases, Gemot 14 workflow cases
+  plus its separately ignored helper, Turnstone 85 place and four catalogue UI
+  cases, and Knot 374 desktop cases with one ignored helper. The full site tile
+  also passes its three focused writer/widget cases. Both app commit checks and
+  Turnstone's feature-enabled all-target production Clippy gate pass. These are
+  automated Windows/native and local-peer receipts; headed, remote-machine,
+  protected-description encryption and production keeper serving remain open.
