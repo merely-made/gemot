@@ -101,6 +101,7 @@ impl DropExportSelector<super::MootExt> for MootDropSelector {
                 MootEvent::Shared { .. }
                 | MootEvent::Withdrawn { .. }
                 | MootEvent::Collection { .. }
+                | MootEvent::Workflow { .. }
                 | MootEvent::HistoryPruned { .. },
             )) => self.fauna_priority,
             Err(_) => return DropExportDecision::Omit,
@@ -312,6 +313,8 @@ pub enum MootError {
     WithdrawalUnknownTarget,
     #[error("withdrawal identity did not author the target shared operation")]
     WithdrawalWrongIdentity,
+    #[error("workflow command refused: {0}")]
+    Workflow(String),
     #[error("collection event references another Moot")]
     ForeignCollection,
     #[error("collection fork does not reproduce its named parent membership")]
@@ -521,6 +524,9 @@ mod governance;
 
 #[path = "service/records.rs"]
 mod records;
+
+#[path = "service/workflow.rs"]
+mod workflow;
 
 #[path = "service/drop.rs"]
 mod drop;

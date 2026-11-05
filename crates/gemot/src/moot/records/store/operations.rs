@@ -126,6 +126,18 @@ impl<B: Backend + Clone> MootStore<B> {
         moot_id: [u8; 32],
         event: &MootEvent,
     ) -> Result<Operation<MootExt>, MootStoreError> {
+        let operation = self.prepare_for_identity(identity, moot_id, event).await?;
+        self.accept(moot_id, &operation).await?;
+        Ok(operation)
+    }
+
+    /// Prepare a signed command for domain validation before it is persisted.
+    pub async fn prepare_for_identity<P: IdentityProvider + ?Sized>(
+        &self,
+        identity: &P,
+        moot_id: [u8; 32],
+        event: &MootEvent,
+    ) -> Result<Operation<MootExt>, MootStoreError> {
         let salt = object_identity_salt(moot_id);
         let keypair = identity.derive_keypair(&salt)?;
         let attestation = identity.attest_derived_key(&salt)?;
@@ -142,7 +154,6 @@ impl<B: Backend + Clone> MootStore<B> {
             backlink,
             Some(attestation),
         );
-        self.accept(moot_id, &operation).await?;
         Ok(operation)
     }
 

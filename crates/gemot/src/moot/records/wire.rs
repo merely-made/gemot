@@ -79,6 +79,10 @@ pub enum MootEvent {
     Collection {
         event: super::collection::CollectionEvent,
     },
+    /// Governed directory and agreed-work records on the objects lane.
+    Workflow {
+        event: super::super::workflow::WorkflowEvent,
+    },
     /// Constitution-authorized current state and retained event frontiers.
     RetentionCheckpoint {
         checkpoint: Box<RetentionCheckpoint>,
@@ -253,6 +257,16 @@ pub fn from_operation(op: &Operation<MootExt>) -> Result<([u8; 32], MootEvent), 
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
     let event: MootEvent =
         decode_cbor_strict(body.to_bytes().as_slice()).map_err(|_| WireError::Malformed)?;
+    if let MootEvent::Workflow { event } = &event {
+        event.validate(op.header.extensions.moot_id)
+            .map_err(|_| WireError::Malformed)?;
+    }
+    if let MootEvent::RetentionCheckpoint { checkpoint } = &event {
+        if checkpoint.snapshot.roster.workflow.iter()
+            .any(|f| !f.verified_for(op.header.extensions.moot_id)) {
+            return Err(WireError::Malformed);
+        }
+    }
     Ok((op.header.extensions.moot_id, event))
 }
 

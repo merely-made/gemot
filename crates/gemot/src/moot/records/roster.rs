@@ -104,6 +104,9 @@ pub struct MootRoster {
     /// Raw signed collection facts, retained independently of current authority.
     #[serde(default)]
     pub collections: Vec<CollectionFact>,
+    /// Raw signed workflow facts survive snapshots and authority changes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workflow: Vec<super::super::workflow::WorkflowFact>,
 }
 
 impl MootRoster {
@@ -193,6 +196,12 @@ impl MootRoster {
         let mut fauna: Vec<FaunaEntry> = Vec::new();
         let mut withdrawals: BTreeMap<[u8; 32], FaunaWithdrawal> = BTreeMap::new();
         let mut collections: BTreeMap<[u8; 32], CollectionFact> = BTreeMap::new();
+        let mut workflow = BTreeMap::new();
+        for fact in &snapshot.roster.workflow {
+            if fact.verified_for(moot_id) {
+                workflow.insert(fact.op_hash, fact.clone());
+            }
+        }
 
         if let Some(declaration) = &snapshot.roster.declaration {
             declarations.insert(declaration.op_hash, declaration.clone());
@@ -290,6 +299,11 @@ impl MootRoster {
                         op_hash,
                     });
                 }
+                MootEvent::Workflow { .. } => {
+                    if let Some(fact) = super::super::workflow::WorkflowFact::from_operation(op) {
+                        workflow.insert(op_hash, fact);
+                    }
+                }
                 MootEvent::RetentionCheckpoint { .. } | MootEvent::HistoryPruned { .. } => {}
             }
         }
@@ -328,6 +342,7 @@ impl MootRoster {
             fauna,
             withdrawals,
             collections,
+            workflow: workflow.into_values().collect(),
         }
     }
 }
@@ -341,6 +356,7 @@ impl Default for MootRoster {
             fauna: Vec::new(),
             withdrawals: Vec::new(),
             collections: Vec::new(),
+            workflow: Vec::new(),
         }
     }
 }

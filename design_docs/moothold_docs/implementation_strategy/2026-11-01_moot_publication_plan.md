@@ -214,37 +214,43 @@ lands it with a receipt; record the landing here.
 
 ## Findings
 
-- 2026-11-04: reviewed the older namespace/agreed-work proposal against current
-  source. Stable collection identities and causal versions exist in
-  `crates/gemot/src/moot/records/collection.rs`; authorized mutation is now in
-  `crates/gemot/src/moot/service/records.rs`. The general governed name-binding
-  and offer/agreement/submission/review domain is not implemented. Its eventual
-  records must participate in authority, folds, native drops and retention
-  checkpoints, rather than only surviving a local append.
-- The existing site binding already supports a pinned contribution or following
-  an effective collection (`crates/site-model/src/publication.rs`); that
-  host-selected binding is not a governed namespace directory. The shared site
-  generator is one producer of immutable deliverables. Community review,
-  publication selection, hosting consent and observed availability retain their
-  distinct authority and records; ordinary site generation remains usable
-  independently of Moot membership.
-- The proposed unpaid contribution/review, volunteer keeper and fresh-reader
-  search demonstration remains a useful candidate, not a qualified workflow.
-  Reuse `crates/mooting/src/recognition.rs` for frozen-electorate evaluation.
-  `crates/mien/src/ledger.rs` already rewards an open owned commitment only once;
-  acceptance-to-Standing integration still needs evidence and stable effect
-  identity. Bounded relay workers in `crates/gemot/src/moot/relay/host.rs` provide
-  a concrete host-lifecycle precedent, with separate live readiness.
-- Eidetic retention still writes owner/manifest-specific bodies
-  (`eidetic/crates/eidetic-core/src/retention.rs`); shared physical bytes and
-  independent retention claims, permission, quota and release/GC semantics remain
-  separate design work. Community search already exchanges admitted capture
-  records and rebuilds `DocumentIndex`; the captured collection adapter lives in
-  `mere/ports/moot/src/captured_web.rs`. These findings are source inspection,
-  without new builds or peer/restart acceptance. Older context is in
-  `mere/design_docs/mere_docs/research/2026-06-04_resource_coordination_brief.md`
-  and the retired, explicitly unbuilt
-  `mere/design_docs/archive_docs/2026-10-06_retired_plans/2026-06-30_bounty_verification_economy_plan.md`.
+- 2026-11-04: the first namespace/agreed-work slice now lives in
+  `crates/gemot/src/moot/workflow/` and `service/workflow.rs`. Signed objects-lane
+  facts survive drops, governed checkpoints and prefix pruning, including full
+  signed operation proofs. A checkpoint signer cannot synthesize worker consent.
+  Stable bindings
+  pin or follow collection versions; exact-head updates, conflicting values and
+  duplicate names fail closed. Read scopes attach to stable collections rather
+  than names. The older site-host `SiteBindingV1` remains an independent optional
+  publication adapter, not this governed directory.
+- Exact offers, designated-worker consent, bounded service windows, submissions,
+  frozen reviewers, explicit replacement heads, cancellation and bounded
+  renewal/handoff are implemented. Replacement requires cancellation, a new
+  exact offer and successor consent. Mooting evaluates review thresholds.
+  `AcceptedWork` requires every required window and optionally names an existing
+  worker-owned Standing commitment; Standing remains a separate effect with its
+  existing closed-commitment replay guard. Settlement failures preserve review.
+- The optional `work-host` keeper saves durable acquisition intent, uses Eidetic
+  verified retention and rechecks current authority on retrieval/search. Its
+  `CatalogueDocument` carries Scroll's UDC-inspired broad class, abstract and
+  language. These are signed-content claims, not authority or confidential
+  discovery topics. Murm supplies peer/topic discovery; Gemot owns semantics.
+- The unpaid keeper/reviewer/fresh-reader demonstration is now qualified in
+  independent local processes with keeper redb restart, source exit, verified
+  retrieval and permitted `DocumentIndex` search. Revocation, withdrawal, replay,
+  missing facts, concurrent edits and checkpoint pruning are automated controls.
+  See [S4 scope and limits](../../2026-11-04_site_extraction_plan.md) and
+  [receipts](../../archive_docs/receipts/2026-11-04_site_extraction_plan_receipts.md).
+  This closes the first S4 demonstration, not the broader P1 two-machine or
+  historical-authority gates. The synthetic socket adapter fixes reader identity;
+  authenticated production transport, scheduling, UI mounting, protected peer
+  keys, payment execution and a filesystem mount retain their named owners.
+- Eidetic still stores owner/manifest-specific bodies. Reuse within one owner
+  does not establish cross-owner/security-domain physical deduplication. Keeper
+  job claims are separate from stored copies. Cancellation stops service without
+  choosing release/GC semantics; these remain explicit host/Eidetic work. Earlier
+  background remains in
+  `mere/design_docs/mere_docs/research/2026-06-04_resource_coordination_brief.md`.
 
 - 2026-09-04: `crates/commons/src/lib.rs` exposes `Replica::accept` (line 955)
   and `projection_with_authority` (line 975); use the retained/effective split

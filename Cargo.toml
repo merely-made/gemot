@@ -91,6 +91,11 @@ rev = "7a3453a02bc7dea391ef18814c1bfa1a46e67160"
 version = "0.1.1"
 path = "crates/gemot"
 
+[workspace.dependencies.eidetic-search]
+git = "https://www.github.com/merely-made/eidetic.git"
+rev = "7a3453a02bc7dea391ef18814c1bfa1a46e67160"
+default-features = false
+
 [workspace.dependencies.personae]
 version = "0.3.0"
 git = "https://github.com/merely-made/dramatis.git"

@@ -52,3 +52,52 @@ not retried; the reused Mere worktree remains available for the following cuts.
 V2 writer artifacts are separate from native V1. Model all-feature/all-target suites pass 38 tests, with two existing ignored cases; host suites pass 47 tests, with three existing ignored process cases. Seven writer tests include four fixed body/digest goldens, unchanged V1 byte preservation, richer Scroll parsing, unsafe/unsupported input refusal, deterministic links/metadata/assets and declarative template escaping. Three host tests exercise a separate `site-build` process, reopened exact-file custody, changed-asset refusal and generated Gemtext over a real loopback Spartan listener. Model/host selected Rust 1.97.1 gates and both Clippy gates pass. These are library, process and loopback scopes; existing headed/physical/remote receipts retain their inputs.
 
 Commands, baseline inventory, immutable build artifacts and compact summaries are in `Code/testing/gemot/site-workflow-20261104`, sharing a 100 MB cap with S4. Original V1 fixtures and format bytes remain unchanged. Default generation is opt-in and adds only the maintained parser profile; the ordinary model stays free of editor, renderer and community runtime dependencies. HTML input, unmapped Scroll action/relation conversion and JavaScript/Lua execution are outside these selected writer profiles.
+
+## 2026-11-04, S4 namespace, agreed work and keeper
+
+Implemented in `crates/gemot/src/moot/workflow/` with aggregate commands in
+`service/workflow.rs`. Namespace and work facts use the objects lane, normal
+outbound operations, drops and roster checkpoints. Checkpoints carry complete
+signed workflow operation proofs and reject mismatched field/author/body/hash
+claims, including a forged snapshot signed by the legitimate checkpoint owner.
+Empty historical rosters keep their old encoding through omitted empty fields.
+
+The final dedicated suite (`workflow-signed-tests`) passes **11 cases**, with
+one separately ignored process entry invoked five times by the parent process
+case. The workspace/all-target suite (`workflow-final-tests`) passes all five
+members with `gemot/work-host`; the final proof hardening is covered by the
+subsequent dedicated suite. Controls include conflicting/renamed/removed names,
+exact pinned targets and separate read access; repeated/wrong-worker consent;
+conflicting offers, submissions and review branches; failed settlement; frozen
+reviewers through Mooting; current membership/grant expiry; withdrawal; bounded
+renewal/handoff consent; missing facts, reverse-order fold and duplicate import;
+redb reopen, governed checkpoint and actual prefix pruning; malformed wire and
+checkpoint forgery refusal. Optional Standing is exercised separately after
+accepted work, with duplicate fulfillment rewarding once.
+
+The process case starts an independent contributor source, acquires its exact
+catalogue into Eidetic retention, stops the source, reconstructs the keeper from
+redb and uses a fresh reader process to retrieve, hash-check and locally search
+the permitted collection before signed review. `processes-signed/` contains
+compact keeper/reader receipts. The fixture uses a fixed authenticated-subject
+input and a synthetic loopback socket adapter; this is not remote identity,
+two-machine, protected-key, headed or physical qualification. Source metadata
+includes Scroll broad class 7 and a searchable abstract. Class 5 returns no hit.
+Private-without-sealer, corrupt-byte and restart-integrity refusals are tested.
+A renewed job reuses one owner copy for two distinct job records; retiring the
+old job does not erase the new job's bytes. Physical release/GC policy and
+cross-owner deduplication are not selected here.
+
+`workflow-clippy` passes across workspace/all-targets with `work-host` (561
+warnings, including existing documentation/style warnings; not a warnings-clean
+gate). New search dependencies reuse Mere's already qualified `eidetic-search`
+7a3453a and `genet-text` ad362723 cohort. Existing source identities are unchanged.
+Initial compile failures and the interrupted, unseeded dependency resolution are
+preserved as non-acceptance attempts. Full command/results are in
+`Code/testing/gemot/site-workflow-20261104/gates.jsonl`; all logs and compact
+receipts remain below the 100 MB cap. No new worktree or Cargo home was created;
+the existing `C:/t/cargo-targets/gemot` remains the shared reusable build owner.
+
+`workflow-msrv` passes the feature-enabled Gemot library on Rust 1.97.1,
+locked and offline. The signed-proof suite is compiler-warning free; Clippy
+retains the warning scope stated above.

@@ -28,6 +28,7 @@ pub mod delegation;
 pub mod flora;
 pub mod group;
 pub mod hosting;
+pub mod workflow;
 mod id;
 /// Cross-lane proof: every lane shares the Moot id as its topic, so the
 /// combination needs its own receipt rather than one-lane-at-a-time ones.

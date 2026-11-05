@@ -28,6 +28,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
+work-host = ["dep:eidetic", "dep:eidetic-search", "dep:serde_json"]
 # Typed private coordination over existing group encryption and sync sessions.
 relay-pool = ["dep:tokio"]
 relay-pool-native = ["relay-pool", "dep:murm", "dep:notochord"]
@@ -39,6 +40,9 @@ name = "relay-pool"
 required-features = ["relay-pool-runner"]
 
 [dependencies]
+eidetic = { workspace = true, optional = true }
+eidetic-search = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 murm-sync.workspace = true
 p2panda-core = "0.7.0"
 redb = "2"

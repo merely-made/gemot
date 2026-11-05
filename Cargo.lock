@@ -1255,6 +1255,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "eidetic-search"
+version = "0.0.1"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160#7a3453a02bc7dea391ef18814c1bfa1a46e67160"
+dependencies = [
+ "eidetic 0.0.3 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
+ "genet-text",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1585,6 +1597,7 @@ dependencies = [
  "castellan-client",
  "chartulary 0.3.0 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
  "eidetic 0.0.3 (git+https://www.github.com/merely-made/eidetic.git?rev=7a3453a02bc7dea391ef18814c1bfa1a46e67160)",
+ "eidetic-search",
  "errand",
  "gemini-protocol",
  "insigne",
@@ -1670,6 +1683,14 @@ dependencies = [
  "typenum",
  "version_check",
  "zeroize",
+]
+
+[[package]]
+name = "genet-text"
+version = "0.1.0"
+source = "git+https://github.com/merely-made/genet.git?branch=main#ad362723109b7e1738dfce13a625cf1a1b5e9ed1"
+dependencies = [
+ "unicode-segmentation",
 ]
 
 [[package]]

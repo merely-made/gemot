@@ -22,7 +22,7 @@ Canonical migration and receipts: `mere/design_docs/archive_docs/2026-10-28/2026
 
 - [Shared site extraction](2026-11-04_site_extraction_plan.md): native model and
   host libraries from Mere/Knot, checked Gemtext/Scroll/Markdown/HTML writer
-  artifacts, and the in-progress namespace/agreed-work workflow.
+  artifacts, and the locally qualified namespace/agreed-work keeper workflow.
 
 Native site libraries landed, 2026-11-04: `gemot-site` and `gemot-site-host`
 are consumed directly by Knot and Mere. The [site extraction plan](2026-11-04_site_extraction_plan.md)
@@ -34,7 +34,7 @@ scoped. Mere's site-publication plan retains resident and browser integration.
 ## Community authority and publishing
 
 - [2026-11-03_moot_relay_pools_plan](moothold_docs/implementation_strategy/2026-11-03_moot_relay_pools_plan.md): P0/P1 native and P2 I2P relay pools; [qualification](archive_docs/receipts/2026-11-03_moot_relay_pools_plan_receipts.md) names exact scopes. P3a host composition, private control keys, bounded custody-client runner and shared preflight are implemented. Single-operator three-router preparation/execution lives in `scripts/relay_fleet{,_run}.py`; the public rehearsal passed with application workers on the controller. Actual operator custody, distributed workers and independent uplinks stay open; wider profiles remain P3b. Spaces is not adopted.
-- [2026-11-01_moot_publication_plan](moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md): live plan. Publication/hosting authority, honest retention, collections, co-op and addressed delivery; the November 4 findings refresh the namespace/agreed-work candidate against current records, Standing, retention and derived search.
+- [2026-11-01_moot_publication_plan](moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md): live plan. Publication/hosting authority, honest retention, collections, co-op and addressed delivery; the November 4 findings record the first namespace/agreed-work keeper workflow and its remaining production boundaries.
 - [2026-08-09_boundary_identity_and_grant_composition](moothold_docs/research/2026-08-09_boundary_identity_and_grant_composition.md): how the moot layer composes with a high-latency, multi-transport substrate.
 - [2026-08-12_radio_scopes_as_moots](moothold_docs/research/2026-08-12_radio_scopes_as_moots.md): civic-deployment radio scopes modelled as moots; ratified 2026-08-12.
 - [2026-09-05_author_offline_publication_proof](moothold_docs/research/2026-09-05_author_offline_publication_proof.md): the same-machine author-offline publication proof and its receipt.

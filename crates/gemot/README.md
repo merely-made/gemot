@@ -26,13 +26,15 @@ and `STAGE`. Every row below is a path under `gemot::moot`.
 | `standing` | Trust receipts: `StandingEvent`, `ChainRoot`, `CommitmentId`, `Scope`, `Ledger`, `StandingConfig`, `PersonaChains`, `PersonaKey`, the policy slot (`StandingFacts`, `GateConfig`, `GateDecision`, `Policy`, `DenyReason`, `authorize`, `may_act`), `StandingStore`, `StandingExt`, and `persona_vault` for vault-derived persona keys |
 | `tulpa` | Community-adopted revisioned artifacts: proposal facts, frozen-electorate `RecognitionContext` endorsements, adopted-version projection, revocation, rollback, `TulpaStore`, and `TulpaExt`. `ArtifactRef` carries digest plus byte count only. |
 | `flora` | Federated LoRA receipt lane: `FloraRoundSpec`, heterogeneous participant ranks, exact `FloraContributionReceipt` and candidate artifact refs, rank-budget validation, `FloraStore`, and `FloraExt`. The only stack is A vertical / B horizontal with scaling on B. |
+| `workflow` | Governed namespace bindings; exact offers, consent, submissions and frozen-reviewer decisions; optional `keeper` acquisition/retention/search host (`work-host`). |
 | `typed_authorization` | `TypedMootAuthorization` answers gemot's `MootAuthorizationProvider` from the shared `mere-capability` algebra; `MootAuthority` presents the same certificates as a `servitor::AuthorityProvider` |
 
 Each domain module has the same shape: an event grammar, a deterministic fold,
 a `*Store` over `muniment`, and a `*Ext` p2panda operation extension with its
 own `to_operation_seed` and `from_operation`. Constitution, delegation,
 records, Standing, Tulpa, and FLORA also export `verify`; the membership lane validates
-through its store instead.
+through its store instead. Workflow facts reuse the records store/extension and
+objects lane, including complete signed proofs in retained checkpoints.
 
 ## The `Moot` aggregate
 
@@ -47,6 +49,7 @@ all seven domains. `MootFile` is the redb-backed alias.
 | Delegation | `delegations`, `delegation_projections`, `delegation_scope_key_epochs`, `authorize_current_delegated`, `authorize_delegated` |
 | Records | `declare`, `join`, `share`, `authorized_fauna`, `checkpoint`, `prune_current` |
 | Membership | `membership`, `update_membership`, `update_membership_for_identity` |
+| Workflow | `directory`, `bind_for_identity`, `resolve_name`, `collection_for_reader`, `work_view`, `work_for_identity` |
 | Standing | `record_standing` |
 | Tulpa / FLORA | `record_tulpa`, `record_flora` |
 | Drops | `export_plain_drop`, `export_protected_drop`, `import_plain_drop`, `import_protected_drop` |
@@ -93,7 +96,7 @@ typed vocabulary; `servitor` for the participant-gate adapter. `mooting` for
 only, for the two-peer convergence tests and the `moot-peer` example, which play
 the host. The tests take the `Endpoint` and `Gossip` handles through
 `murm-sync`, which owns live network sessions; `transport` owns endpoints.
-Stickleback remains the validated operation store and admission layer. The crate declares no cargo features.
+Stickleback remains the validated operation store and admission layer. The default feature set is empty. `work-host` adds Eidetic verified custody and derived `DocumentIndex` search; relay features separately opt into their host adapters.
 
 ## Consumers
 
@@ -134,3 +137,29 @@ in the
 ## License
 
 MPL-2.0 (see LICENSE).
+
+## Namespace and agreed work
+
+The [site/workflow plan](../../design_docs/2026-11-04_site_extraction_plan.md)
+names the implemented grammar, authority/conflict rules and qualification limits.
+`workflow::namespace::collection_read_cap` is separate from mutation scopes.
+Offers use `work::offer_cap`; participants use `work_cap`; settlement additionally
+requires `settlement_cap`. Hosts supply current time and authenticated identities.
+Names, subject descriptions and signed availability claims never confer access.
+
+With `work-host`, supply `Keeper` owner, job/input/byte limits and a bounded
+`WorkFetcher` using your existing transport. Call `reconcile` to acquire/recover,
+then `retrieve` or `search` with the authenticated reader. Stored job state is
+progress only; each read checks authority and verified bytes. Cancellation keeps
+copies until an explicit host/Eidetic release policy decides their disposition.
+`CatalogueDocument` indexes abstract/body and optionally filters Scroll's broad
+UDC-inspired subject digit; it does not create public or secret discovery topics.
+
+Reproduce the local process demonstration and controls:
+
+```text
+cargo test -p gemot --test workflow --features work-host --locked
+```
+
+The process helper is separately ignored and invoked by its parent test. The
+socket fixture fixes reader identity; it does not qualify a production transport.

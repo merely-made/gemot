@@ -1,6 +1,6 @@
 # Shared site generation and serving
 
-**Status, 2026-11-04: S1–S3 landed; S4 namespace/agreed-work implementation in progress.** Gemot receives the portable model from
+**Status, 2026-11-04: S1–S3 landed; S4 first namespace/work/keeper slice implemented and locally qualified.** Gemot receives the portable model from
 Mere and the filesystem/publication/listener library from Knot. This plan owns
 the shared libraries; Mere's site-publication plan retains resident/browser
 integration. Existing listener receipts keep their original machine, protocol
@@ -81,20 +81,48 @@ separately from writing a format. The existing native cut does not close S3.
 
 ### S4. Preserve the community workflow scope
 
-The namespace/agreed-work candidate remains in
-`design_docs/moothold_docs/implementation_strategy/2026-11-01_moot_publication_plan.md`,
-2026-11-04 Findings. A generated site is one possible deliverable. Governed
-bindings, offers, agreements, submissions and review still need their domain
-records and deterministic authority/fold/export/retention coverage. Recognition,
-publication selection, hosting consent, verified custody, observed availability
-and optional settlement remain separate outcomes. Reuse existing collections,
-Mooting, Standing, retention and derived `DocumentIndex` machinery.
+The community domain lives in `crates/gemot/src/moot/workflow/`; its signed
+facts extend the existing objects lane. Full signed workflow operations survive
+checkpoints, and signature/body/author bindings are rechecked after pruning; a
+checkpoint author cannot fabricate a worker's consent. `NamespaceEvent` binds a stable id to a
+same-Moot pinned collection version or explicitly followed accepted collection.
+Exact-head updates support rename, removal and conflict resolution. Conflicting
+values and duplicate names fail closed. Names confer no access; readers need
+Read membership, current admission and the separate stable collection read scope.
 
-The proposed first demonstration is unpaid contribution/review, a volunteer
-keeper, and a fresh reader after contributor shutdown and keeper restart.
-Done only after actual acquisition, retention, retrieval and permitted search
-are exercised with revocation, withdrawal, replay and concurrent-update controls.
-The source extraction keeps this in scope without claiming that workflow built.
+`WorkTerms` freezes a designated worker, criteria, inputs, windows/cadence, byte
+ceiling, reviewers/quorum, compensation (including explicit None), optional
+Standing commitment, renewal ceiling and handoff permission. Signed consent to
+an exact offer is one stable agreement even when repeated. Submissions and a
+reviewer's decisions have explicit replacement heads. Conflicts abstain until
+resolved; Mooting evaluates the frozen reviewers. Issuers may withdraw exact
+offers and named workers may decline them; later replayed consent cannot revive
+a cancelled offer. Cancellation, a new exact offer
+and successor consent form renewal/handoff. Cancellation survives later loss of
+a grant; it chooses no physical deletion policy. An `AcceptedWork` receipt needs
+an accepted result in every required window. Hosts can explicitly consume its
+optional commitment through the existing Standing API; the ledger rewards an
+owned commitment once.
+Settlement receipts are independent of acceptance, including payment failure.
+
+The optional `work-host` feature supplies `Keeper`, host-selected limits and a
+bounded `WorkFetcher` seam. It saves acquisition intent before fetching, verifies
+and retains via Eidetic transactions, and reconciles actual copies after restart.
+Serving and derived `DocumentIndex` search recheck worker/reader access, current
+collection selection, withdrawal, expiry and byte integrity. Same-owner copies
+are reused; jobs remain distinct claims. Protected payloads require a supplied
+wallet sealer. Releasing physical copies, cross-owner deduplication and GC policy
+remain with Eidetic and explicit host policy.
+
+The first demonstration is qualified with independent local processes and redb:
+contributor acquisition, source exit, keeper restart, fresh-reader retrieval,
+permitted local search and signed review. Tests cover withdrawal, revocation,
+replay, conflicting updates, missing dependencies, drops and checkpoint pruning.
+The process transport is a synthetic loopback adapter with a fixed reader root;
+it is not a new authenticated remote protocol, a two-machine or physical trial,
+or a mounted application UI. Broader P1 historical-authority proof, protected
+peer key distribution, automatic scheduling and compensation execution remain
+separate owner work in the Moot publication plan.
 
 ## Findings
 
@@ -129,3 +157,11 @@ The plan's receipt record is
 - 2026-11-04: implementation authorized for S3 followed by S4. New writer artifacts use V2; existing native V1 bytes remain unchanged. The work uses the existing clean main checkout and stable Gemot target. New bounded evidence is `Code/testing/gemot/site-workflow-20261104` with a 100 MB aggregate cap. Namespace/work facts extend the existing objects lane so normal replication, drops and retention snapshots carry them. Detailed command, conflict and host lifecycle semantics are recorded as code/tests land.
 
 - 2026-11-04: S3 writer/host implementation covers three source profiles and four output profiles through versioned checked artifacts, declarative HTML templates, source metadata/identity, assets, explicit loss refusal and native literal preservation. Native parsers come from the pinned Errand cohort; richer Scroll input links and relations are never silently treated as read links. `site-build`, reopened export custody and generated native delivery are the actual consumers. HTML input, richer unmapped Scroll conversions and JS/Lua execution retain their separate extension scope.
+
+- 2026-11-04: Scroll metadata is carried into `CatalogueDocument`: abstract,
+  language and raw broad subject suffix 0..9. The Scroll specification uses a
+  UDC-inspired class digit, with 4 general/unclassified; this is not full UDC
+  notation. Catalogue search can filter that digit and index the abstract.
+  Murm's `p2panda-discovery` finds peers sharing opaque topics. Gemot owns
+  semantic catalogues and their audience, and never derives confidential topics
+  from predictable subject classes. Source: [Scroll specification](https://raw.githubusercontent.com/michael-lazar/smolnet-portal/master/docs/scroll_spec.txt).
