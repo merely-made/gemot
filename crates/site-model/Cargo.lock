@@ -430,7 +430,7 @@ dependencies = [
 [[package]]
 name = "chartulary"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "muniment",
  "petgraph",
@@ -927,7 +927,7 @@ dependencies = [
 [[package]]
 name = "eidetic"
 version = "0.0.3"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1199,7 +1199,7 @@ source = "git+https://github.com/merely-made/errand.git?rev=897fb963d184f0e379ab
 [[package]]
 name = "gemot"
 version = "0.1.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=3ed2ba46dde8ad2e8337c202c0a8b2276018c135#3ed2ba46dde8ad2e8337c202c0a8b2276018c135"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=b5dfae9be4b18c9a845584e31e3bc5cfc816c27f#b5dfae9be4b18c9a845584e31e3bc5cfc816c27f"
 dependencies = [
  "insigne",
  "mere-proofs",
@@ -1207,10 +1207,10 @@ dependencies = [
  "mooting",
  "muniment",
  "murm-sync",
- "p2panda-auth",
- "p2panda-core",
- "p2panda-encryption",
- "p2panda-store",
+ "p2mere-auth",
+ "p2mere-core",
+ "p2mere-encryption",
+ "p2mere-store",
  "personae",
  "redb",
  "serde",
@@ -1817,7 +1817,7 @@ dependencies = [
 [[package]]
 name = "insigne"
 version = "0.0.2"
-source = "git+https://github.com/merely-made/dramatis.git?branch=main#798a1a7c42e058d4438013eea7db332bf63466e0"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e8d4487ab4b1fc27bbde0ea6c681c68c84b33e06"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -2346,37 +2346,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "mere-p2panda-net"
-version = "0.7.5"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
-dependencies = [
- "futures-channel",
- "futures-util",
- "hex",
- "iroh",
- "iroh-base",
- "iroh-gossip",
- "iroh-mdns-address-lookup",
- "p2panda-core",
- "p2panda-discovery",
- "p2panda-store",
- "p2panda-sync",
- "postcard",
- "ractor",
- "rand 0.10.3",
- "rand_chacha 0.10.0",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "mere-proofs"
 version = "0.1.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "blake3",
  "serde",
@@ -2386,13 +2358,13 @@ dependencies = [
 [[package]]
 name = "mien"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=3ed2ba46dde8ad2e8337c202c0a8b2276018c135#3ed2ba46dde8ad2e8337c202c0a8b2276018c135"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=b5dfae9be4b18c9a845584e31e3bc5cfc816c27f#b5dfae9be4b18c9a845584e31e3bc5cfc816c27f"
 dependencies = [
  "insigne",
  "muniment",
  "murm-sync",
- "p2panda-core",
- "p2panda-store",
+ "p2mere-core",
+ "p2mere-store",
  "personae",
  "serde",
  "stickleback",
@@ -2419,9 +2391,9 @@ dependencies = [
 [[package]]
 name = "mooting"
 version = "0.1.0"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=3ed2ba46dde8ad2e8337c202c0a8b2276018c135#3ed2ba46dde8ad2e8337c202c0a8b2276018c135"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=b5dfae9be4b18c9a845584e31e3bc5cfc816c27f#b5dfae9be4b18c9a845584e31e3bc5cfc816c27f"
 dependencies = [
- "p2panda-core",
+ "p2mere-core",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -2449,7 +2421,7 @@ dependencies = [
 [[package]]
 name = "muniment"
 version = "0.2.1"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2461,18 +2433,22 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=b6bedc30e21e119e3884402d297dbe2b62fe8dbb#b6bedc30e21e119e3884402d297dbe2b62fe8dbb"
+source = "git+https://www.github.com/merely-made/murm.git?rev=bc82e1aa92e4076bd12b1910b3fe3ab992b7acb8#bc82e1aa92e4076bd12b1910b3fe3ab992b7acb8"
 dependencies = [
+ "bytes",
+ "futures-util",
  "getrandom 0.4.3",
- "mere-p2panda-net",
  "muniment",
- "p2panda-core",
- "p2panda-store",
- "p2panda-sync",
+ "p2mere-core",
+ "p2mere-net",
+ "p2mere-store",
+ "p2mere-sync",
  "serde",
  "stickleback",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "tokio-util",
 ]
 
 [[package]]
@@ -2988,20 +2964,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "p2panda-auth"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
+name = "p2mere-auth"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a13476ace1708dbe7e4a589f9157356642c203e863b3a5c222dd9b08c582d1a"
 dependencies = [
- "p2panda-core",
+ "p2mere-core",
  "petgraph",
  "thiserror 2.0.21",
  "tracing",
 ]
 
 [[package]]
-name = "p2panda-core"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
+name = "p2mere-core"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28ea441b4854075a8eb1332d57984baaf2a768902541d3c3e62d948633a7c087"
 dependencies = [
  "blake3",
  "cbor-core",
@@ -3014,14 +2992,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "p2panda-discovery"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
+name = "p2mere-discovery"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82bcfbb37c11ac71730a07ef52d3b68fec707abb4704be0a358e96fc196ec630"
 dependencies = [
  "blake3",
  "futures-util",
- "p2panda-core",
- "p2panda-store",
+ "p2mere-core",
+ "p2mere-store",
  "rand 0.10.3",
  "serde",
  "thiserror 2.0.21",
@@ -3029,9 +3008,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "p2panda-encryption"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
+name = "p2mere-encryption"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26404e33cdbebb369b548bfc6d04dd17f5ab603e1f28ff6d1a1a888ff5637300"
 dependencies = [
  "chacha20poly1305 0.10.1",
  "curve25519-dalek 5.0.0",
@@ -3040,7 +3020,7 @@ dependencies = [
  "hpke-rs",
  "hpke-rs-crypto",
  "hpke-rs-rust-crypto",
- "p2panda-core",
+ "p2mere-core",
  "rand_chacha 0.9.0",
  "serde",
  "serde_bytes",
@@ -3052,24 +3032,55 @@ dependencies = [
 ]
 
 [[package]]
-name = "p2panda-store"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
-dependencies = [
- "async-stream",
- "futures-util",
- "p2panda-core",
-]
-
-[[package]]
-name = "p2panda-sync"
-version = "0.7.1"
-source = "git+https://github.com/mark-ik/p2panda.git?tag=mere-p2panda-net-0.7.5-upstream-20261013#1f69c9bcb9f2a9d798b1c25b2ec2f47c0416bd65"
+name = "p2mere-net"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95f5612d4dc546548f05deda490a92077e566a98d7d7586bf0a16d671cac37e6"
 dependencies = [
  "futures-channel",
  "futures-util",
- "p2panda-core",
- "p2panda-store",
+ "hex",
+ "iroh",
+ "iroh-base",
+ "iroh-gossip",
+ "iroh-mdns-address-lookup",
+ "p2mere-core",
+ "p2mere-discovery",
+ "p2mere-store",
+ "p2mere-sync",
+ "postcard",
+ "ractor",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "p2mere-store"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf78d706cd74af9f10814d27de71fa5e31ea027d07d07e08b700641fce80859f"
+dependencies = [
+ "async-stream",
+ "futures-util",
+ "p2mere-core",
+]
+
+[[package]]
+name = "p2mere-sync"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9fe6ce7331ca4867f71ffa7c88a7c3b266f27d0a01d3c2c1dfba521ec38592d"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "p2mere-core",
+ "p2mere-store",
  "pin-project-lite",
  "serde",
  "thiserror 2.0.21",
@@ -3157,7 +3168,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "personae"
 version = "0.3.1"
-source = "git+https://github.com/merely-made/dramatis.git?branch=main#798a1a7c42e058d4438013eea7db332bf63466e0"
+source = "git+https://github.com/merely-made/dramatis.git?branch=main#e8d4487ab4b1fc27bbde0ea6c681c68c84b33e06"
 dependencies = [
  "blake3",
  "chacha20poly1305 0.11.0",
@@ -4004,7 +4015,7 @@ dependencies = [
 [[package]]
 name = "servitor"
 version = "0.0.3"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "chartulary",
  "insigne",
@@ -4184,7 +4195,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stickleback"
 version = "0.2.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb#a7a1458a22c80ef83e64f75d7cff8a77ee1d31eb"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=1fcdb359e72ac6309a96823c3ab5558eaaa3ec31#1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
 dependencies = [
  "blake3",
  "futures-util",
@@ -4192,9 +4203,9 @@ dependencies = [
  "insigne",
  "mere-proofs",
  "muniment",
- "p2panda-core",
- "p2panda-encryption",
- "p2panda-store",
+ "p2mere-core",
+ "p2mere-encryption",
+ "p2mere-store",
  "personae",
  "serde",
  "serde_bytes",
