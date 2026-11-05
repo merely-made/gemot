@@ -31,6 +31,33 @@ pub struct ReaderTrust {
     pub collection: CollectionRef,
 }
 
+impl ReaderTrust {
+    /// The trust a governed address names, with the page inside the collection.
+    ///
+    /// The address carries the Moot and collection but not the founder: the
+    /// reader supplies the founder it already trusts for that Moot, so the
+    /// provider that served the address cannot choose it.
+    ///
+    /// # Errors
+    /// Refuses an address that is not the governed `.moot` form.
+    pub fn for_address(
+        address: &crate::address::KnotAddress,
+        founder: [u8; 32],
+    ) -> Result<(Self, &str), PublicationError> {
+        let parts = address
+            .collection()
+            .ok_or_else(|| refuse("Address is not a governed .moot address"))?;
+        let trust = Self {
+            founder,
+            collection: CollectionRef {
+                moot_id: parts.moot_id,
+                collection_id: gemot::moot::CollectionId(parts.collection_id),
+            },
+        };
+        Ok((trust, parts.page))
+    }
+}
+
 /// Caller-owned limits. Transports must also bound acquisition before buffering.
 #[derive(Clone, Copy, Debug)]
 pub struct ReaderLimits {

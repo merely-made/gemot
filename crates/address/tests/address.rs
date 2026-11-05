@@ -8,6 +8,7 @@
 use gemot_address::{AddressError, AddressHost, KnotAddress};
 
 const KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+const COL: &str = "a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0";
 const PIN: &str = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
 
 fn parse(text: &str) -> Result<KnotAddress, AddressError> {
@@ -28,8 +29,8 @@ fn round_trips_every_form() {
     for text in [
         format!("knot://{KEY}/index.scroll"),
         format!("knot://{KEY}/a/b/c.gmi@{PIN}"),
-        format!("knot://{KEY}.moot/index.scroll"),
-        format!("knot://{KEY}.moot/dir/@{PIN}"),
+        format!("knot://{KEY}.moot/{COL}/index.scroll"),
+        format!("knot://{KEY}.moot/{COL}/dir/@{PIN}"),
         format!("knot://{KEY}/dir/"),
         format!("knot://{KEY}/100%40home"),
         format!("knot://{KEY}/@team/page"),
@@ -48,15 +49,15 @@ fn case_is_accepted_and_rendered_lowercase() {
     let upper = format!("KNOT://{}/p@{}", KEY.to_uppercase(), PIN.to_uppercase());
     let parsed = parse(&upper).unwrap();
     assert_eq!(parsed.to_string(), format!("knot://{KEY}/p@{PIN}"));
-    let moot = parse(&format!("knot://{}.MOOT/p", KEY.to_uppercase())).unwrap();
-    assert!(matches!(moot.host, AddressHost::MootAnchor(_)));
-    assert_eq!(moot.to_string(), format!("knot://{KEY}.moot/p"));
+    let moot = parse(&format!("knot://{}.MOOT/{COL}/p", KEY.to_uppercase())).unwrap();
+    assert!(matches!(moot.host, AddressHost::MootId(_)));
+    assert_eq!(moot.to_string(), format!("knot://{KEY}.moot/{COL}/p"));
 }
 
 #[test]
 fn moot_marker_cannot_be_read_as_a_key() {
-    let moot = parse(&format!("knot://{KEY}.moot/p")).unwrap();
-    let key = parse(&format!("knot://{KEY}/p")).unwrap();
+    let moot = parse(&format!("knot://{KEY}.moot/{COL}/p")).unwrap();
+    let key = parse(&format!("knot://{KEY}/{COL}/p")).unwrap();
     assert_ne!(moot, key);
     assert!(moot.log_key().is_none());
 }
@@ -135,4 +136,48 @@ fn non_hex_text_after_at_stays_in_the_path() {
     let address = parse(&format!("knot://{KEY}/p@{}z", &PIN[..63])).unwrap();
     assert_eq!(address.pin, None);
     assert!(address.path.starts_with("p@ffee"));
+}
+
+#[test]
+fn governed_form_names_moot_collection_and_page() {
+    let address = parse(&format!("knot://{KEY}.moot/{COL}/notes/today.scroll@{PIN}")).unwrap();
+    let parts = address.collection().unwrap();
+    assert_eq!((parts.moot_id[0], parts.moot_id[31]), (0x00, 0xff));
+    assert_eq!(
+        (parts.collection_id[0], parts.collection_id[31]),
+        (0xa1, 0xc0)
+    );
+    assert_eq!(parts.page, "notes/today.scroll");
+    // The collection's root has an empty page; a bare collection needs its slash.
+    assert_eq!(
+        parse(&format!("knot://{KEY}.moot/{COL}/"))
+            .unwrap()
+            .collection()
+            .unwrap()
+            .page,
+        ""
+    );
+    assert!(
+        parse(&format!("knot://{KEY}/p"))
+            .unwrap()
+            .collection()
+            .is_none()
+    );
+}
+
+#[test]
+fn governed_form_refuses_a_path_without_a_collection() {
+    for tail in [
+        "index.scroll",
+        "notes/",
+        &COL[..62],
+        &format!("{COL}0/p"),
+        "zz/p",
+    ] {
+        assert_eq!(
+            parse(&format!("knot://{KEY}.moot/{tail}")),
+            Err(AddressError::Collection),
+            "{tail}"
+        );
+    }
 }

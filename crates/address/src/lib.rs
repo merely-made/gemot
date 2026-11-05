@@ -8,15 +8,19 @@
 //!
 //! ```text
 //! knot://<64-hex key>/<path>[@<64-hex edition id>]
-//! knot://<64-hex anchor>.moot/<path>[@<64-hex edition id>]
+//! knot://<64-hex moot id>.moot/<64-hex collection id>/<path>[@<64-hex edition id>]
 //! ```
 //!
 //! The first form's host is a release-log key. Its tier (root, associated or
 //! unassociated) is a property of how the key was derived and is not visible
 //! in the address; today's Personae-root addresses are the root tier and parse
-//! unchanged. The second form is the governed form: the host is a Moot
-//! collection anchor, marked by the `.moot` suffix so that no 64-hex host can
-//! be read both ways. The path names a page or file and may hold spaces. A
+//! unchanged. The second form is the governed form: the host is a Moot id,
+//! marked by the `.moot` suffix so that no 64-hex host can be read both ways,
+//! and the first path segment is the 64-hex id of one collection in that Moot
+//! (Gemot's `CollectionRef` is the pair, so one host value cannot carry both).
+//! The rest of the path names a page or file and may hold spaces. The
+//! address carries no founder: the reader's trust root for the Moot is
+//! supplied independently of it. A
 //! trailing `@<hex>` pins an edition and must be a full 64-hex id; an `@` whose
 //! tail is not hex (`me@home.knot`) stays part of the path, and a path that
 //! must end in `@` plus hex is written with `%40`. Hosts and pins are accepted in either case and rendered lowercase,
@@ -38,17 +42,26 @@ const MOOT_SUFFIX: &str = ".moot";
 pub enum AddressHost {
     /// A release-log key, of any tier.
     LogKey([u8; 32]),
-    /// A Moot collection anchor: the governed form.
-    MootAnchor([u8; 32]),
+    /// A Moot id: the governed form. The collection is the path's first segment.
+    MootId([u8; 32]),
 }
 
 impl AddressHost {
     /// The 32 key or anchor bytes.
     pub fn bytes(&self) -> &[u8; 32] {
         match self {
-            Self::LogKey(bytes) | Self::MootAnchor(bytes) => bytes,
+            Self::LogKey(bytes) | Self::MootId(bytes) => bytes,
         }
     }
+}
+
+/// The parts of a governed address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MootCollection<'a> {
+    pub moot_id: [u8; 32],
+    pub collection_id: [u8; 32],
+    /// The page or file inside the collection's site, possibly empty (the root).
+    pub page: &'a str,
 }
 
 /// A parsed release address.
@@ -70,6 +83,8 @@ pub enum AddressError {
     Host,
     /// The path is missing, empty or unsafe.
     Path,
+    /// A governed address whose first path segment is not a 64-hex collection id.
+    Collection,
     /// The text after `@` is not a 64-hex edition id.
     Pin,
 }
@@ -80,6 +95,7 @@ impl fmt::Display for AddressError {
             Self::Scheme => "not a knot:// address",
             Self::Host => "the host is not a 64-hex key or anchor",
             Self::Path => "the path is missing or malformed",
+            Self::Collection => "the first path segment is not a 64-hex collection id",
             Self::Pin => "the pin is not a 64-hex edition id",
         })
     }
@@ -137,11 +153,15 @@ impl KnotAddress {
         if !valid_path(path) {
             return Err(AddressError::Path);
         }
-        Ok(Self {
+        let address = Self {
             host,
             path: path.to_string(),
             pin,
-        })
+        };
+        if matches!(address.host, AddressHost::MootId(_)) && address.collection().is_none() {
+            return Err(AddressError::Collection);
+        }
+        Ok(address)
     }
 
     fn parse_host(host: &str) -> Result<AddressHost, AddressError> {
@@ -150,7 +170,7 @@ impl KnotAddress {
             && host[64..].eq_ignore_ascii_case(MOOT_SUFFIX);
         let key = hex32(if moot { &host[..64] } else { host }).ok_or(AddressError::Host)?;
         Ok(if moot {
-            AddressHost::MootAnchor(key)
+            AddressHost::MootId(key)
         } else {
             AddressHost::LogKey(key)
         })
@@ -160,8 +180,21 @@ impl KnotAddress {
     pub fn log_key(&self) -> Option<&[u8; 32]> {
         match &self.host {
             AddressHost::LogKey(key) => Some(key),
-            AddressHost::MootAnchor(_) => None,
+            AddressHost::MootId(_) => None,
         }
+    }
+
+    /// The Moot, collection and page, when this is the governed form.
+    pub fn collection(&self) -> Option<MootCollection<'_>> {
+        let AddressHost::MootId(moot_id) = self.host else {
+            return None;
+        };
+        let (first, page) = self.path.split_once('/').unwrap_or((&self.path, ""));
+        Some(MootCollection {
+            moot_id,
+            collection_id: hex32(first)?,
+            page,
+        })
     }
 
     /// The same address pinned to `edition`.
@@ -183,7 +216,7 @@ impl fmt::Display for KnotAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(SCHEME)?;
         write_hex(f, self.host.bytes())?;
-        if matches!(self.host, AddressHost::MootAnchor(_)) {
+        if matches!(self.host, AddressHost::MootId(_)) {
             f.write_str(MOOT_SUFFIX)?;
         }
         write!(f, "/{}", self.path)?;

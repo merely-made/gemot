@@ -94,7 +94,11 @@ fn open_refuses_wrong_payload_foreign_log_and_governed_addresses() {
         open_clip(&missing, &ops, &bytes).unwrap_err(),
         ClipError::PinNotInEvidence
     );
-    let moot: KnotAddress = format!("knot://{}.moot/clip", hex(&public(&signing)))
+    let moot: KnotAddress = format!(
+        "knot://{}.moot/{}/clip",
+        hex(&public(&signing)),
+        hex(&[5; 32])
+    )
         .parse()
         .unwrap();
     assert_eq!(

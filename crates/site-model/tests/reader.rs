@@ -466,3 +466,33 @@ fn replacement_resolves_from_history_and_refuses_the_previous_snapshot() {
 
 #[path = "reader/remembered.rs"]
 mod remembered;
+
+fn hex(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+#[test]
+fn a_governed_address_names_the_trust_and_resolves_to_p10_verification() {
+    pollster::block_on(async {
+        let mut a = Author::new().await;
+        a.publish(FIXTURES[0], None, 10).await;
+        let history = a.export().await;
+        let text = format!(
+            "knot://{}.moot/{}/index.gmi",
+            hex(&MOOT),
+            hex(&COLLECTION.0)
+        );
+        let address: gemot_site::address::KnotAddress = text.parse().unwrap();
+        let (trust, page) = ReaderTrust::for_address(&address, a.trust.founder).unwrap();
+        assert_eq!((&trust, page), (&a.trust, "index.gmi"));
+        let verified = verify(&trust, &history, FIXTURES[0]).await.unwrap();
+        assert_eq!(verified.scope, EvidenceScope::SuppliedHistoryOnly);
+        // The founder is the reader's, not the address's: a wrong one refuses.
+        let (other, _) = ReaderTrust::for_address(&address, [99; 32]).unwrap();
+        assert!(verify(&other, &history, FIXTURES[0]).await.is_err());
+        // A log-key address is not governed.
+        let log: gemot_site::address::KnotAddress =
+            format!("knot://{}/index.gmi", hex(&MOOT)).parse().unwrap();
+        assert!(ReaderTrust::for_address(&log, a.trust.founder).is_err());
+    });
+}
