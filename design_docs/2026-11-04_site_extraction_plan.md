@@ -184,6 +184,25 @@ consumer persistence and live peer controls. The aggregate lane is
 `Code/testing/gemot/headed-protected-20261105`, explicitly refined to **200 MB**
 to preserve the headed fixture's preallocated storage. Original evidence is kept.
 
+Qualified receiving source is public: Gemot `495e5e6` and Turnstone `69550c0e`.
+Turnstone's member native-window trial exercises the explicit encrypted prompt,
+Arts browsing, validated opening, withdrawal and encrypted-journal reopening.
+The prior public V1 journal also restores in that profile. Fourteen focused
+catalogue/palette cases and the 88-case place suite pass, including live
+late-invitee delivery through rotation and retained-file plaintext inspection.
+The production `peers` all-target Clippy gate passes with existing warnings.
+Core workflow tests pass 17 cases plus the parent-exercised ignored process
+helper; the Rust 1.97.1 check passes. Knot's native fix is `0bccade`, with its
+374-case, one-ignored desktop regression qualified at two test threads and
+documented at `c0013fc`. The earlier timing attempt is preserved.
+
+Current custody lifecycle controls pass. Ten unrelated Windows capture fixtures
+fail during graph-persistence setup with `Access is denied` in both the receiving
+and retained pre-encryption executable; both logs remain. The source audit
+changes only Turnstone's four Gemot package sources. Installed personal custody,
+remote machines, anonymous traffic and production remote keeper serving retain
+their separate qualification gates.
+
 ## Findings
 
 - 2026-11-04: the model has no editor dependency. Knot's host library already
@@ -237,5 +256,6 @@ The plan's receipt record is
   cases, and Knot 374 desktop cases with one ignored helper. The full site tile
   also passes its three focused writer/widget cases. Both app commit checks and
   Turnstone's feature-enabled all-target production Clippy gate pass. These are
-  automated Windows/native and local-peer receipts; headed, remote-machine,
-  protected-description encryption and production keeper serving remain open.
+  automated Windows/native and local-peer receipts. S6 above closes the local
+  headed and protected-description gates; remote-machine and production keeper
+  serving qualification remain open.

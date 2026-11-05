@@ -192,3 +192,39 @@ The independent keeper-process scenario still passes. Actual protected app
 receiving is recorded after the shared source is published. Local privacy does
 not establish anonymous peer traffic, erase old plaintext, or qualify remote
 machines or personal installed custody.
+
+## 2026-11-05, protected application receiving closure
+
+Public source: Gemot `495e5e65f250023ef5a6d8db40389f933ba274be`, Turnstone
+`69550c0ec640411b4cc0f91ee96f7cf82af2b200`, and Knot's native correction
+`0bccade` with regression closeout `c0013fc`. Murm's unchanged `2d5760a`
+continues carrying opaque bounded advertisements. Turnstone's source audit
+changes only four Gemot package source records; every other registry and Git
+record, including renderer and storage, is unchanged.
+
+The receipt lane's `protected-headed-receipt.json` and three member captures
+record the actual native shell: explicit encrypted prompt, Members-labelled Arts
+result, invoked owner-validated opening, withdrawal and empty results. After
+closing, the test opens the encrypted journal with retained actual group keys
+and verifies the signed withdrawal. Its prior public V1 fixture also restores.
+These are synthetic public test keys and offline document acquisition, separate
+from installed personal custody and remote-machine acceptance.
+
+`turnstone-protected-lock` passes 14 cases: five UI controls, five worker cases,
+two live-peer cases and two existing palette cases. The complete place suite
+passes 88. Four identity declarations and three exact custody lifecycle cases
+pass. Locked all-target Clippy passes both with production `peers` and in the
+commit's ordinary configuration, retaining existing warnings. A broader custody
+name filter also selects ten capture fixtures that fail at unchanged graph-save
+setup with Windows `Access is denied`; the retained pre-encryption executable
+reproduces the same four-pass/ten-fail outcome before the changed method runs.
+Both attempts are preserved. Knot's corrected desktop suite passes 374 cases
+with one helper ignored at two test threads. Its earlier timing failure, passing
+exact retry and qualified full run remain alongside the headed evidence.
+
+All generated build output reuses stable repository targets. No isolated target,
+Cargo home or worktree was created, and owned native windows were closed. The
+lane's aggregate cap remains 200 MB; `closure.json` records final heads and
+retained bytes. Group key holders are the cryptographic audience; current
+membership and collection-read grants remain separate listing/open authority.
+Encryption does not erase prior disclosures or hide routing and epoch traffic.

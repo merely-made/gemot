@@ -49,7 +49,12 @@ Catalogue discovery (2026-11-04): [S5 in the site plan](2026-11-04_site_extracti
 S5 application receiving is qualified locally: Turnstone owns public metadata
 publication/browsing/validated navigation, and Knot owns saved-site format
 selection and checked export. Public revisions, commands, source-graph checks
-and remaining headed/remote/protected-metadata boundaries are recorded in the
+and the original S5 qualification boundaries are recorded in the
 [site receipt](archive_docs/receipts/2026-11-04_site_extraction_plan_receipts.md#2026-11-04-application-receiving-closure).
 
 [S6 in the site plan](2026-11-04_site_extraction_plan.md#s6-protected-descriptions-and-headed-qualification) records native-window qualification and audience-bound group-encrypted descriptions, caches and bodies. Current authority and traffic visibility remain separate from encryption.
+
+S6 receiving is public at Gemot `495e5e6`, Turnstone `69550c0e` and Knot
+`0bccade` (regression receipt `c0013fc`). Both native catalogue audiences and
+Knot generation controls are qualified locally. The receipt keeps baseline
+Windows fixture failures and the separate installed-custody/remote-machine gates.
