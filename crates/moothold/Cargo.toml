@@ -23,7 +23,7 @@ workspace = true
 workspace = true
 
 [dependencies]
-p2panda-core = { package = "p2mere-core", version = "0.8" }
+p2panda-core = { package = "p2mere-core", version = "0.9" }
 thiserror = "1"
 
 [dependencies.gemot]
@@ -43,7 +43,7 @@ workspace = true
 
 [dependencies.p2panda-store]
 package = "p2mere-store"
-version = "0.8"
+version = "0.9"
 default-features = false
 
 [dependencies.serde]
