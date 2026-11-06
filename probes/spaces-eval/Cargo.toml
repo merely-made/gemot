@@ -14,8 +14,8 @@ license = "MPL-2.0"
 
 [dependencies]
 gemot = { path = "../../crates/gemot" }
-stickleback = { git = "https://www.github.com/merely-made/eidetic.git", rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31" }
-muniment = { git = "https://www.github.com/merely-made/eidetic.git", rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31" }
+stickleback = { git = "https://github.com/merely-made/eidetic.git", branch = "main" }
+muniment = { git = "https://github.com/merely-made/eidetic.git", branch = "main" }
 identity = { package = "personae", version = "0.3.0", git = "https://github.com/merely-made/dramatis.git", branch = "main" }
 # The family's current supplier (what Gemot and Stickleback run on): the published
 # p2mere 0.8 crates. The intake branch below is 0.9 and links beside them.
@@ -33,66 +33,66 @@ thiserror = "1"
 serde = { version = "1", features = ["derive"] }
 
 [patch."https://github.com/merely-made/mere.git".muniment]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".chartulary]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".eidetic]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".stickleback]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".mere-proofs]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".servitor]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch.crates-io.muniment]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "1fcdb359e72ac6309a96823c3ab5558eaaa3ec31"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch.crates-io.errand]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.finger-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.gemini-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.gopher-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.guppy-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.misfin]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.nex-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.scroll-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.spartan-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 

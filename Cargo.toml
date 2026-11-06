@@ -37,17 +37,17 @@ git = "https://github.com/merely-made/dramatis.git"
 branch = "main"
 
 [workspace.dependencies.servitor]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.stickleback]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.proofs]
 package = "mere-proofs"
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.mooting]
 version = "0.1.0"
@@ -58,12 +58,12 @@ version = "0.0.1"
 path = "crates/mien"
 
 [workspace.dependencies.muniment]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.chartulary]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.transport]
 package = "mere-transport"
@@ -74,26 +74,26 @@ branch = "main"
 [workspace.dependencies.errand]
 version = "0.4.0"
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [workspace.dependencies.gemini-protocol]
 version = "=0.1.7"
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [workspace.dependencies.eidetic]
 version = "0.0.3"
 default-features = false
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [workspace.dependencies.gemot]
 version = "0.1.1"
 path = "crates/gemot"
 
 [workspace.dependencies.eidetic-search]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 default-features = false
 
 [workspace.dependencies.personae]
@@ -133,66 +133,66 @@ path = "crates/moothold"
 path = "crates/commons"
 
 [patch."https://github.com/merely-made/mere.git".muniment]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".chartulary]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".eidetic]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".stickleback]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".mere-proofs]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".servitor]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch.crates-io.muniment]
-git = "https://www.github.com/merely-made/eidetic.git"
-rev = "98f2c6977d7210d2149b80ee8be0b3e0f724d44b"
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
 
 [patch.crates-io.errand]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.finger-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.gemini-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.gopher-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.guppy-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.misfin]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.nex-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.scroll-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
 [patch.crates-io.spartan-protocol]
 git = "https://github.com/merely-made/errand.git"
-rev = "dce1f08546b8475e42a5a01ca1ea18794c6e9b97"
+branch = "main"
 
