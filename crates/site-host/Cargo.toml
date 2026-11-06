@@ -15,13 +15,13 @@
 [dependencies]
 "site-model" = { "package" = "gemot-site", "version" = "0.1.0", "path" = "../site-model" }
 "muniment" = { "version" = "0.2.1", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "5182e4e244c85b1008182a1be6b822f65a8efe50", "optional" = true }
-"gemot" = { "version" = "0.1.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "b5dfae9be4b18c9a845584e31e3bc5cfc816c27f", "optional" = true }
+"gemot" = { "version" = "0.1.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "120bac79877be97ac9a7b1c79e7eb1b78238003a", "optional" = true }
 "personae" = { "version" = "0.3.0", "git" = "https://github.com/merely-made/dramatis.git", "branch" = "main", "optional" = true }
 "zeroize" = { "version" = "1", "optional" = true }
 "stickleback" = { "version" = "0.2.0", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "5182e4e244c85b1008182a1be6b822f65a8efe50", "optional" = true }
 "proofs" = { "package" = "mere-proofs", "version" = "0.1.0", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "5182e4e244c85b1008182a1be6b822f65a8efe50", "optional" = true }
 "servitor" = { "version" = "0.0.3", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "5182e4e244c85b1008182a1be6b822f65a8efe50", "optional" = true }
-"mien" = { "version" = "0.0.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "b5dfae9be4b18c9a845584e31e3bc5cfc816c27f", "optional" = true }
+"mien" = { "version" = "0.0.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "120bac79877be97ac9a7b1c79e7eb1b78238003a", "optional" = true }
 "sha2" = { "version" = "0.11", "optional" = true }
 "serde" = { "version" = "1", "features" = ["derive"] }
 "serde_json" = "1"
