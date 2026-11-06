@@ -449,7 +449,7 @@ dependencies = [
 [[package]]
 name = "chartulary"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "muniment",
  "petgraph",
@@ -935,7 +935,7 @@ dependencies = [
 [[package]]
 name = "eidetic"
 version = "0.0.3"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1189,7 +1189,7 @@ source = "git+https://github.com/merely-made/errand.git?rev=897fb963d184f0e379ab
 [[package]]
 name = "gemot"
 version = "0.1.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=120bac79877be97ac9a7b1c79e7eb1b78238003a#120bac79877be97ac9a7b1c79e7eb1b78238003a"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
 dependencies = [
  "insigne",
  "mere-proofs",
@@ -2386,7 +2386,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "mere-proofs"
 version = "0.1.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "blake3",
  "serde",
@@ -2396,7 +2396,7 @@ dependencies = [
 [[package]]
 name = "mien"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=120bac79877be97ac9a7b1c79e7eb1b78238003a#120bac79877be97ac9a7b1c79e7eb1b78238003a"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
 dependencies = [
  "insigne",
  "muniment",
@@ -2429,7 +2429,7 @@ dependencies = [
 [[package]]
 name = "mooting"
 version = "0.1.0"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=120bac79877be97ac9a7b1c79e7eb1b78238003a#120bac79877be97ac9a7b1c79e7eb1b78238003a"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
 dependencies = [
  "p2mere-core",
  "serde",
@@ -2459,7 +2459,7 @@ dependencies = [
 [[package]]
 name = "muniment"
 version = "0.2.1"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "async-trait",
  "blake3",
@@ -2471,7 +2471,7 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=0aaf4b16d3d265a7d0af09f083d622284f5846d7#0aaf4b16d3d265a7d0af09f083d622284f5846d7"
+source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "bytes",
  "futures-util",
@@ -4085,7 +4085,7 @@ dependencies = [
 [[package]]
 name = "servitor"
 version = "0.0.3"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "chartulary",
  "insigne",
@@ -4265,7 +4265,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 [[package]]
 name = "stickleback"
 version = "0.2.0"
-source = "git+https://www.github.com/merely-made/eidetic.git?rev=5182e4e244c85b1008182a1be6b822f65a8efe50#5182e4e244c85b1008182a1be6b822f65a8efe50"
+source = "git+https://www.github.com/merely-made/eidetic.git?rev=86e78dd37914fd61f8ca336bf0ab2da716356fca#86e78dd37914fd61f8ca336bf0ab2da716356fca"
 dependencies = [
  "blake3",
  "cbor-core",
