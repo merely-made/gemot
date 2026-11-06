@@ -1068,7 +1068,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 3.0.9",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1354,7 +1354,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3024,7 +3024,7 @@ dependencies = [
 [[package]]
 name = "mere-transport"
 version = "0.0.2"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "bytes",
  "hkdf 0.13.0",
@@ -3162,7 +3162,7 @@ dependencies = [
 [[package]]
 name = "murm"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3188,7 +3188,7 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "bytes",
  "futures-util",
@@ -4746,7 +4746,7 @@ dependencies = [
 [[package]]
 name = "retinue"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "aes 0.9.3",
  "bzip2",
@@ -4840,7 +4840,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4898,7 +4898,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5510,7 +5510,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5862,7 +5862,7 @@ dependencies = [
 [[package]]
 name = "truchman"
 version = "0.1.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "sha2 0.11.1",
  "tokio",
@@ -6152,7 +6152,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
