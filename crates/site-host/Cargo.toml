@@ -15,13 +15,13 @@
 [dependencies]
 "site-model" = { "package" = "gemot-site", "version" = "0.1.0", "path" = "../site-model" }
 "muniment" = { "version" = "0.2.1", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca", "optional" = true }
-"gemot" = { "version" = "0.1.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "f1dfad17aa809f96091abca5f792e4d6578637f1", "optional" = true }
+"gemot" = { "version" = "0.1.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "9bfea63e49667c7a1399644a09f875dba9a223a0", "optional" = true }
 "personae" = { "version" = "0.3.0", "git" = "https://github.com/merely-made/dramatis.git", "branch" = "main", "optional" = true }
 "zeroize" = { "version" = "1", "optional" = true }
 "stickleback" = { "version" = "0.2.0", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca", "optional" = true }
 "proofs" = { "package" = "mere-proofs", "version" = "0.1.0", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca", "optional" = true }
 "servitor" = { "version" = "0.0.3", "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca", "optional" = true }
-"mien" = { "version" = "0.0.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "f1dfad17aa809f96091abca5f792e4d6578637f1", "optional" = true }
+"mien" = { "version" = "0.0.1", "git" = "https://www.github.com/merely-made/gemot.git", "rev" = "9bfea63e49667c7a1399644a09f875dba9a223a0", "optional" = true }
 "sha2" = { "version" = "0.11", "optional" = true }
 "serde" = { "version" = "1", "features" = ["derive"] }
 "serde_json" = "1"
@@ -33,7 +33,7 @@
 "spartan-protocol" = "=0.1.1"
 "tokio" = { "version" = "1", "features" = ["rt", "sync", "net", "time", "macros"] }
 "blake3" = "1"
-"retinue" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "98f79b4ef56168239eb93ceaae1dcdde465ee34d", "optional" = true }
+"retinue" = { "git" = "https://github.com/merely-made/murm.git", "branch" = "main", "optional" = true }
 "getrandom" = { "version" = "0.2", "optional" = true }
 "tempfile" = "3"
 
@@ -45,10 +45,9 @@
 [patch]
 "crates-io" = { "chartulary" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "eidetic" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "scroll-protocol" = { "git" = "https://github.com/merely-made/errand.git", "rev" = "897fb963d184f0e379ab9041d68e17e726cb7763" }, "servitor" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "spartan-protocol" = { "git" = "https://github.com/merely-made/errand.git", "rev" = "897fb963d184f0e379ab9041d68e17e726cb7763" }, "stickleback" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "muniment" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "mere-proofs" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "gemini-protocol" = { "git" = "https://github.com/merely-made/errand.git", "rev" = "897fb963d184f0e379ab9041d68e17e726cb7763" } }
 "https://github.com/merely-made/mere.git" = {  }
-"https://github.com/merely-made/retinue.git" = { "retinue" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "98f79b4ef56168239eb93ceaae1dcdde465ee34d" } }
+"https://github.com/merely-made/retinue.git" = { "retinue" = { "git" = "https://github.com/merely-made/murm.git", "branch" = "main" } }
 "https://github.com/merely-made/eidetic.git" = { "chartulary" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "eidetic" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "mere-proofs" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "muniment" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "servitor" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" }, "stickleback" = { "git" = "https://www.github.com/merely-made/eidetic.git", "rev" = "86e78dd37914fd61f8ca336bf0ab2da716356fca" } }
 "https://github.com/merely-made/distillery.git" = {  }
-"https://github.com/merely-made/murm.git" = { "murm-sync" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "98f79b4ef56168239eb93ceaae1dcdde465ee34d" }, "retinue" = { "git" = "https://www.github.com/merely-made/murm.git", "rev" = "98f79b4ef56168239eb93ceaae1dcdde465ee34d" } }
 
 [features]
 generate = ["site-model/generate"]

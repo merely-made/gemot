@@ -1225,7 +1225,7 @@ dependencies = [
 [[package]]
 name = "gemot"
 version = "0.1.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=9bfea63e49667c7a1399644a09f875dba9a223a0#9bfea63e49667c7a1399644a09f875dba9a223a0"
 dependencies = [
  "insigne",
  "mere-proofs",
@@ -2480,7 +2480,7 @@ dependencies = [
 [[package]]
 name = "mien"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=9bfea63e49667c7a1399644a09f875dba9a223a0#9bfea63e49667c7a1399644a09f875dba9a223a0"
 dependencies = [
  "insigne",
  "muniment",
@@ -2513,7 +2513,7 @@ dependencies = [
 [[package]]
 name = "mooting"
 version = "0.1.0"
-source = "git+https://www.github.com/merely-made/gemot.git?rev=f1dfad17aa809f96091abca5f792e4d6578637f1#f1dfad17aa809f96091abca5f792e4d6578637f1"
+source = "git+https://www.github.com/merely-made/gemot.git?rev=9bfea63e49667c7a1399644a09f875dba9a223a0#9bfea63e49667c7a1399644a09f875dba9a223a0"
 dependencies = [
  "p2mere-core",
  "serde",
@@ -2555,7 +2555,7 @@ dependencies = [
 [[package]]
 name = "murm-sync"
 version = "0.0.1"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "bytes",
  "futures-util",
@@ -3874,7 +3874,7 @@ dependencies = [
 [[package]]
 name = "retinue"
 version = "0.3.0"
-source = "git+https://www.github.com/merely-made/murm.git?rev=98f79b4ef56168239eb93ceaae1dcdde465ee34d#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
+source = "git+https://github.com/merely-made/murm.git?branch=main#98f79b4ef56168239eb93ceaae1dcdde465ee34d"
 dependencies = [
  "aes 0.9.3",
  "bzip2",
@@ -4535,7 +4535,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
