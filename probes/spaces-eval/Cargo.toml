@@ -40,10 +40,6 @@ branch = "main"
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
 
-[patch."https://github.com/merely-made/mere.git".eidetic]
-git = "https://github.com/merely-made/eidetic.git"
-branch = "main"
-
 [patch."https://github.com/merely-made/mere.git".stickleback]
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
@@ -59,40 +55,3 @@ branch = "main"
 [patch.crates-io.muniment]
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
-
-[patch.crates-io.errand]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.finger-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.gemini-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.gopher-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.guppy-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.misfin]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.nex-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.scroll-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
-[patch.crates-io.spartan-protocol]
-git = "https://github.com/merely-made/errand.git"
-branch = "main"
-
