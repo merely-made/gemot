@@ -211,6 +211,12 @@ their separate qualification gates.
 - 2026-11-04: both receiving packages have standalone roots, retaining their
   original optional feature gates and explicitly selected supplier identities.
 
+- 2026-11-06: Mere cycle_breaks D3/P5 (`mere/design_docs/mere_docs/implementation_strategy/2026-11-06_cycle_breaks_plan.md`):
+  `murm-resolve` owns the release-address trait and no longer names `gemot-address`.
+  Gemot implements it in `gemot-site-host` (feature `murm-resolve`, `ReleaseAddressRef`),
+  chosen over `gemot-address` to keep the grammar crate free of Murm; its four tests pin the
+  mapping of the log and governed forms.
+
 ## Evidence and progress
 
 Required retained evidence: donor/receiver source and fixture comparisons,

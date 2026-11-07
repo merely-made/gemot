@@ -22,6 +22,8 @@ pub mod micron_submission;
 mod nomadnet;
 #[cfg(feature = "publication")]
 pub mod publication;
+#[cfg(feature = "murm-resolve")]
+pub mod release_address;
 mod server;
 pub mod submission;
 pub use local::{LocalServer, LocalServerConfig};

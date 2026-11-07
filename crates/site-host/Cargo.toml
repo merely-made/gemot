@@ -33,6 +33,7 @@
 "spartan-protocol" = "=0.1.1"
 "tokio" = { "version" = "1", "features" = ["rt", "sync", "net", "time", "macros"] }
 "blake3" = "1"
+"murm-resolve" = { "version" = "0.0.1", "git" = "https://github.com/merely-made/murm.git", "branch" = "main", "optional" = true }
 "retinue" = { "git" = "https://github.com/merely-made/murm.git", "branch" = "main", "optional" = true }
 "getrandom" = { "version" = "0.2", "optional" = true }
 "tempfile" = "3"
@@ -55,6 +56,13 @@ generate = ["site-model/generate"]
 "publication" = ["site-model/publication", "dep:muniment", "muniment/redb", "dep:gemot", "dep:personae", "dep:zeroize", "dep:stickleback"]
 "runtime-acceptance" = ["publication", "dep:proofs", "dep:servitor", "dep:mien", "dep:sha2"]
 "retinue" = ["dep:retinue", "dep:getrandom"]
+"murm-resolve" = ["dep:murm-resolve"]
+
+
+[[test]]
+"name" = "release_address"
+"path" = "tests/release_address.rs"
+"required-features" = ["murm-resolve"]
 
 [[test]]
 "name" = "nomadnet"

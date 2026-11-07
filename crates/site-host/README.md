@@ -10,6 +10,11 @@ collection authority and Eidetic custody. `retinue` enables NomadNet separately.
 The default-off `runtime-acceptance` fixtures require a real resident executable
 through `DJINN_MOOT_SITE_EXE` and are invoked explicitly for that receiving gate.
 
+`murm-resolve` implements Murm's `ReleaseAddress` trait for a borrowed `KnotAddress`
+(`release_address::ReleaseAddressRef`), so Murm's resolver takes Gemot's parsed `knot://`
+address while Murm names no Gemot package. The wrapper lives here, not in `gemot-address`,
+which stays free of Murm; neither type is local to a third crate, so a wrapper is needed.
+
 Run `cargo test --manifest-path crates/site-host/Cargo.toml --all-features`.
 The shared command is `site-publish`; an application supplies its own authoring
 and publication controls. Protocol and stored-contract identifiers preserve the
