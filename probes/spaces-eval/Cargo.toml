@@ -22,11 +22,11 @@ identity = { package = "personae", version = "0.3.0", git = "https://github.com/
 auth-old = { package = "p2mere-auth", version = "0.8", default-features = false }
 core-old = { package = "p2mere-core", version = "0.8" }
 # The intake branch of the p2mere fork, which carries p2panda-spaces.
-p2spaces = { package = "p2mere-spaces", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", features = ["test_utils"] }
-p2auth = { package = "p2mere-auth", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false }
-p2core = { package = "p2mere-core", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false }
-p2enc = { package = "p2mere-encryption", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false, features = ["data_scheme"] }
-p2store = { package = "p2mere-store", git = "https://github.com/merely-made/p2mere.git", branch = "intake-20261105", default-features = false, features = ["spaces"] }
+p2spaces = { package = "p2mere-spaces", git = "https://github.com/merely-made/p2mere.git", branch = "main", features = ["test_utils"] }
+p2auth = { package = "p2mere-auth", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false }
+p2core = { package = "p2mere-core", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false }
+p2enc = { package = "p2mere-encryption", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false, features = ["data_scheme"] }
+p2store = { package = "p2mere-store", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false, features = ["spaces"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 pollster = "0.4"
 thiserror = "1"
