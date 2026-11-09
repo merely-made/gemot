@@ -9,8 +9,8 @@
 
 [dependencies]
 gemot-address = { version = "0.1.0", path = "../address" }
-scroll-protocol = { version = "=0.1.0", git = "https://github.com/merely-made/errand.git", branch = "main", default-features = false, optional = true }
-gemini-protocol = { version = "=0.1.7", git = "https://github.com/merely-made/errand.git", branch = "main", default-features = false, optional = true }
+scroll-protocol = { version = "0.1.0", git = "https://github.com/merely-made/errand.git", branch = "main", default-features = false, optional = true }
+gemini-protocol = { version = "0.1.7", git = "https://github.com/merely-made/errand.git", branch = "main", default-features = false, optional = true }
 pulldown-cmark = { version = "=0.13.4", default-features = false, features = ["html"], optional = true }
 "serde" = { "version" = "1", "features" = ["derive"] }
 "serde_json" = { "version" = "1" }
