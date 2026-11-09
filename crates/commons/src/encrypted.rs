@@ -27,8 +27,7 @@ use std::sync::Arc;
 use chartulary::{Container, GraphLog, Relation, WriterId};
 use insigne::DerivedKeyAttestation;
 use muniment::{Backend, WriteOp};
-use murm_sync::JoinedSpace;
-use murm_sync::{Endpoint, Gossip};
+use murm_sync::{Endpoint, Gossip, JoinedSpace, StreamSession, StreamSync, StreamSyncLimits};
 use p2panda_core::cbor::{decode_cbor_strict, encode_cbor};
 use p2panda_core::operation::validate_operation;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic};
@@ -321,6 +320,19 @@ impl<B: Backend + Clone + Send + Sync + 'static> EncryptedReplica<B> {
 
     pub fn sync_store(&self) -> MunimentStore<B, EncryptedCommonsExt> {
         self.store.clone()
+    }
+
+    /// Prepare one bidirectional catch-up round for this encrypted graph.
+    /// Both peers must select the same container. The caller must authorize
+    /// the peer to read that container before running the session.
+    /// Received records use the same admission and parking as [`Self::accept`].
+    pub fn stream_sync(&self, limits: StreamSyncLimits) -> impl StreamSession + '_ {
+        StreamSync::<_, u64, EncryptedCommonsExt, _>::new(
+            self.container,
+            self.sync_store(),
+            limits,
+            move |operation| async move { self.accept(&operation).await.unwrap_or(false) },
+        )
     }
 
     pub fn writer(&self) -> WriterId {

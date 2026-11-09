@@ -258,3 +258,6 @@ mod convergence;
 
 #[path = "tests/storage.rs"]
 mod storage;
+
+#[path = "tests/stream_sync.rs"]
+mod stream_sync;

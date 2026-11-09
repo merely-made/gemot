@@ -76,6 +76,7 @@ workspace = true
 workspace = true
 features = [
     "reticulum",
+    "sync-lane",
     "test-identity",
 ]
 
