@@ -187,9 +187,6 @@ reason = "held by ostiary 0.0.1, rand 0.8.8, rand_chacha 0.3.1; gone when its ho
 crate = "rand_core@0.9.5"
 reason = "held by rand_chacha 0.9.0; gone when its holders move to rand_core 0.10.1 (rand_chacha 0.9.0 in the graph, 0.10.0 newest)"
 
-[[bans.skip]]
-crate = "redb@2.6.4"
-reason = "held by gemot 0.1.1 and muniment 0.2.1 (eidetic); gemot's constitution, delegation, membership and record stores are redb 2 files and redb 3 changed the file format, so moving to redb 4.5.0 waits on a decision about existing stores, and on muniment"
 
 [[bans.skip]]
 crate = "sha2@0.10.9"
