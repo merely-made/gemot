@@ -25,7 +25,7 @@ workspace = true
 [dependencies]
 murm-sync.workspace = true
 p2panda-core = { package = "p2mere-core", version = "0.10" }
-thiserror = "1"
+thiserror = "2"
 
 [dependencies.insigne]
 workspace = true

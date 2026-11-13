@@ -24,7 +24,7 @@ workspace = true
 
 [dependencies]
 p2panda-core = { package = "p2mere-core", version = "0.10" }
-thiserror = "1"
+thiserror = "2"
 
 [dependencies.gemot]
 workspace = true

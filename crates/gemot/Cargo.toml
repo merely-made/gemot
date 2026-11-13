@@ -47,7 +47,7 @@ serde_json = { workspace = true, optional = true }
 murm-sync.workspace = true
 p2panda-core = { package = "p2mere-core", version = "0.10" }
 redb = "2"
-thiserror = "1"
+thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"], optional = true }
 murm = { workspace = true, optional = true, features = ["relay"] }
 notochord = { workspace = true, optional = true }
@@ -118,7 +118,7 @@ features = [
 p2panda-sync = { package = "p2mere-sync", version = "0.10" }
 tokio-stream = "0.1"
 tempfile = "3"
-rcgen = "0.13"
+rcgen = "0.14"
 
 [dev-dependencies.chartulary]
 workspace = true

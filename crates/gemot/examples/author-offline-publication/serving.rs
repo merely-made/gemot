@@ -108,7 +108,7 @@ pub(super) async fn host_serve_process(root: &Path) -> Result<(), AnyError> {
 
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".into()])?;
     let cert_bytes = certified.cert.der().to_vec();
-    let key_bytes = certified.key_pair.serialize_der();
+    let key_bytes = certified.signing_key.serialize_der();
     let acceptor = gemini_protocol::server::acceptor(
         vec![CertificateDer::from(cert_bytes.clone())],
         PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key_bytes)),

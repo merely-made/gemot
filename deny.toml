@@ -213,7 +213,7 @@ reason = "held by asn1-rs-derive 0.6.0, asn1-rs-impl 0.2.0, async-stream-impl 0.
 
 [[bans.skip]]
 crate = "thiserror@1.0.69"
-reason = "held by commons-spine, gemot, mien, moothold and mooting (this workspace) and castellan-client, jni 0.21.1, mere-transport, murm, murm-sync, ostiary; gone when they move to thiserror 2.0.21"
+reason = "held by castellan-client, jni 0.21.1, mere-transport, murm, murm-sync and ostiary (registry and git releases outside this repository); gone when they move to thiserror 2.0.21"
 
 [[bans.skip]]
 crate = "thiserror-impl@1.0.69"

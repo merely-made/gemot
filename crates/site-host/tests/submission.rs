@@ -10,7 +10,7 @@ use std::{
 fn certificate() -> (tokio_rustls::TlsAcceptor, String) {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
     let pem = cert.cert.pem();
-    let key = rustls::pki_types::PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
+    let key = rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der());
     let acceptor = gemini_protocol::server::acceptor(vec![cert.cert.der().clone()], key.into())
         .unwrap();
     (acceptor, pem)

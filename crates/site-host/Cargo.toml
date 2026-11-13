@@ -27,7 +27,7 @@
 "serde_json" = "1"
 "scroll-protocol" = { "version" = "0.1.0", "default-features" = false }
 "rustls" = { "version" = "0.23", "default-features" = false, "features" = ["ring", "std", "tls12"] }
-"rcgen" = "0.13.2"
+"rcgen" = "0.14"
 "url" = "2"
 "gemini-protocol" = { "version" = "0.1.7", "features" = ["server"] }
 "spartan-protocol" = "0.1.1"
