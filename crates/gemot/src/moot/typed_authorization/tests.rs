@@ -7,7 +7,6 @@
 use super::*;
 use crate::moot::constitution::CapabilityGrant;
 use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-use chartulary::{Container, EditSpec, GraphLog, Relation};
 use identity::delegation::Issue;
 use identity::{IdentityProvider, InMemoryProvider};
 use insigne::delegation::{
@@ -15,6 +14,7 @@ use insigne::delegation::{
     SignedDelegationCertificate, SignedDelegationRevocation,
 };
 use mien::gate::StandingFacts;
+use portolan::{Container, EditSpec, GraphLog, Relation};
 use servitor::cap::ScopePath;
 use servitor::{Gate, GateError};
 

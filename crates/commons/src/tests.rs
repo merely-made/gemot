@@ -5,8 +5,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::*;
-use chartulary::taxonomy::{Recognized, RelationClass};
-use chartulary::{Author, EdgeId, FacetId};
+use portolan::taxonomy::{Recognized, RelationClass};
+use portolan::{Author, EdgeId, FacetId};
 use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
 use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
 use insigne::delegation::{

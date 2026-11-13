@@ -228,7 +228,7 @@ fn a_batch_round_trips_through_the_wire_with_writer_scoped_ids() {
     let decoded = from_operation(&op).expect("round trip");
 
     let carried = decoded.batch.edits.iter().find_map(|e| match e {
-        chartulary::GraphEdit::Connect { id, .. } => Some(*id),
+        portolan::GraphEdit::Connect { id, .. } => Some(*id),
         _ => None,
     });
     assert_eq!(carried, Some(minted));

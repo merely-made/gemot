@@ -24,7 +24,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use chartulary::{Container, GraphLog, Relation, WriterId};
+use portolan::{Container, GraphLog, Relation, WriterId};
 use insigne::DerivedKeyAttestation;
 use muniment::{Backend, WriteOp};
 use murm_sync::{Endpoint, Gossip, JoinedSpace, StreamSession, StreamSync, StreamSyncLimits};

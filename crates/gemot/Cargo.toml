@@ -120,7 +120,7 @@ tokio-stream = "0.1"
 tempfile = "3"
 rcgen = "0.14"
 
-[dev-dependencies.chartulary]
+[dev-dependencies.portolan]
 workspace = true
 
 [dev-dependencies.transport]

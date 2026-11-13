@@ -20,7 +20,7 @@ features = [
     "verify",
 ]
 
-[dependencies.chartulary]
+[dependencies.portolan]
 workspace = true
 
 [dependencies.muniment]

@@ -42,7 +42,7 @@ pub mod pruning;
 
 pub use keys::GroupKeys;
 
-use chartulary::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
+use portolan::{Batch, Container, GraphEdit, GraphLog, Identified, Relation, WriterId};
 use insigne::DerivedKeyAttestation;
 use muniment::Backend;
 use muniment::Journal;

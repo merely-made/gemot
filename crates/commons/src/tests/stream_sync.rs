@@ -6,8 +6,8 @@
 
 use std::net::TcpListener;
 
-use chartulary::EditSpec;
 use murm_sync::StreamSyncLimits;
+use portolan::EditSpec;
 use stickleback::DataKeyring;
 use transport::security::SetupLimits;
 use transport::sync_lane::{SyncLane, SyncLaneError};

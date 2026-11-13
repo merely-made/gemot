@@ -131,9 +131,9 @@ pub(crate) mod host {
 
 #[cfg(test)]
 mod tests {
-    use chartulary::{Author, Container};
     use muniment::MemoryBackend;
     use p2panda_core::SigningKey;
+    use portolan::{Author, Container};
     use proofs::Digest;
     use stickleback::DataKeyring;
 

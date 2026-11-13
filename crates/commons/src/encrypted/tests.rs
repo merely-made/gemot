@@ -4,8 +4,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-use chartulary::Author;
 use muniment::MemoryBackend;
+use portolan::Author;
 use servitor::{Cap, Mode, Subject};
 use stickleback::{GroupSecretId, decode_operation_record, operation_record};
 

@@ -61,7 +61,7 @@ path = "crates/mien"
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
 
-[workspace.dependencies.chartulary]
+[workspace.dependencies.portolan]
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
 
@@ -136,9 +136,6 @@ path = "crates/commons"
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
 
-[patch."https://github.com/merely-made/mere.git".chartulary]
-git = "https://github.com/merely-made/eidetic.git"
-branch = "main"
 
 [patch."https://github.com/merely-made/mere.git".eidetic]
 git = "https://github.com/merely-made/eidetic.git"
