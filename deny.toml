@@ -1,0 +1,288 @@
+# cargo-deny configuration for gemot.
+#
+#   cargo deny check bans
+#
+# Two versions of one crate in a build are a defect: move the older version's
+# holder forward. No duplicates: latest releases, or a skip below saying who
+# holds the older one and what removes it (Mark, 2026-11-12). One entry per
+# older version; delete an entry when its holder moves, and
+# `cargo deny check bans` will name any that no longer match.
+
+[graph]
+all-features = true
+
+[bans]
+multiple-versions = "deny"
+wildcards = "allow"
+
+[[bans.skip]]
+crate = "aead@0.5.2"
+reason = "held by aes-gcm 0.10.3, chacha20poly1305 0.10.1; gone when its holders move to aead 0.6.1 (aes-gcm 0.10.3 in the graph, 0.11.1 newest; chacha20poly1305 0.10.1 in the graph, 0.11.0 newest)"
+
+[[bans.skip]]
+crate = "aes@0.8.4"
+reason = "held by aes-gcm 0.10.3; gone when its holders move to aes 0.9.4 (aes-gcm 0.10.3 in the graph, 0.11.1 newest)"
+
+[[bans.skip]]
+crate = "aes-gcm@0.10.3"
+reason = "held by noq-proto 1.4.0, snow 0.10.0; gone when its holders move to aes-gcm 0.11.1 (noq-proto 1.4.0 is its latest release; snow 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "base64@0.22.1"
+reason = "held by attohttpc 0.30.1, ostiary 0.0.1, pem 3.0.6, portmapper 0.19.3, tokio-websockets 0.13.3; gone when its holders move to base64 0.23.1 (attohttpc 0.30.1 in the graph, 0.32.0 newest; ostiary 0.0.1 is its latest release; pem 3.0.6 in the graph, 4.0.0 newest; portmapper 0.19.3 in the graph, 0.20.0 newest; tokio-websockets 0.13.3 is its latest release)"
+
+[[bans.skip]]
+crate = "block-buffer@0.10.4"
+reason = "held by digest 0.10.7; gone when its holders move to block-buffer 0.12.1 (digest 0.10.7 in the graph, 0.11.3 newest)"
+
+[[bans.skip]]
+crate = "chacha20@0.9.1"
+reason = "held by chacha20poly1305 0.10.1; gone when its holders move to chacha20 0.10.2 (chacha20poly1305 0.10.1 in the graph, 0.11.0 newest)"
+
+[[bans.skip]]
+crate = "chacha20poly1305@0.10.1"
+reason = "held by p2mere-encryption 0.10.0, snow 0.10.0; gone when its holders move to chacha20poly1305 0.11.0 (p2mere-encryption 0.10.0 is its latest release; snow 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "cipher@0.4.4"
+reason = "held by aes 0.8.4, aes-gcm 0.10.3, chacha20 0.9.1, chacha20poly1305 0.10.1, ctr 0.9.2; gone when its holders move to cipher 0.5.2 (aes 0.8.4 in the graph, 0.9.4 newest; aes-gcm 0.10.3 in the graph, 0.11.1 newest; chacha20 0.9.1 in the graph, 0.10.2 newest; chacha20poly1305 0.10.1 in the graph, 0.11.0 newest; ctr 0.9.2 in the graph, 0.10.1 newest)"
+
+[[bans.skip]]
+crate = "cpufeatures@0.2.17"
+reason = "held by aes 0.8.4, chacha20 0.9.1, curve25519-dalek 4.1.3, poly1305 0.8.0, polyval 0.6.2, sha2 0.10.9; gone when its holders move to cpufeatures 0.3.1 (aes 0.8.4 in the graph, 0.9.4 newest; chacha20 0.9.1 in the graph, 0.10.2 newest; curve25519-dalek 4.1.3 in the graph, 5.0.0 newest; poly1305 0.8.0 in the graph, 0.9.1 newest; polyval 0.6.2 in the graph, 0.7.3 newest; sha2 0.10.9 in the graph, 0.11.1 newest)"
+
+[[bans.skip]]
+crate = "crypto-common@0.1.7"
+reason = "held by aead 0.5.2, cipher 0.4.4, digest 0.10.7, universal-hash 0.5.1; gone when its holders move to crypto-common 0.2.2 (aead 0.5.2 in the graph, 0.6.1 newest; cipher 0.4.4 in the graph, 0.5.2 newest; digest 0.10.7 in the graph, 0.11.3 newest; universal-hash 0.5.1 in the graph, 0.6.1 newest)"
+
+[[bans.skip]]
+crate = "ctr@0.9.2"
+reason = "held by aes-gcm 0.10.3; gone when its holders move to ctr 0.10.1 (aes-gcm 0.10.3 in the graph, 0.11.1 newest)"
+
+[[bans.skip]]
+crate = "curve25519-dalek@4.1.3"
+reason = "held by snow 0.10.0; gone when its holders move to curve25519-dalek 5.0.0 (snow 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "digest@0.10.7"
+reason = "held by blake2 0.10.6, hmac 0.12.1, sha2 0.10.9; gone when its holders move to digest 0.11.3 (blake2 0.10.6 in the graph, 0.11.0 newest; hmac 0.12.1 in the graph, 0.13.0 newest; sha2 0.10.9 in the graph, 0.11.1 newest)"
+
+[[bans.skip]]
+crate = "fiat-crypto@0.2.9"
+reason = "held by curve25519-dalek 4.1.3; gone when its holders move to fiat-crypto 0.3.0 (curve25519-dalek 4.1.3 in the graph, 5.0.0 newest)"
+
+[[bans.skip]]
+crate = "foldhash@0.1.5"
+reason = "held by hashbrown 0.15.5; gone when its holders move to foldhash 0.2.0 (hashbrown 0.15.5 in the graph, 0.17.1 newest)"
+
+[[bans.skip]]
+crate = "getrandom@0.2.17"
+reason = "held by rand_core 0.6.4, ring 0.17.14; gone when its holders move to getrandom 0.4.3 (rand_core 0.6.4 in the graph, 0.10.1 newest; ring 0.17.14 is its latest release)"
+
+[[bans.skip]]
+crate = "getrandom@0.3.4"
+reason = "held by rand_core 0.9.5, snow 0.10.0; gone when its holders move to getrandom 0.4.3 (rand_core 0.9.5 in the graph, 0.10.1 newest; snow 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "ghash@0.5.1"
+reason = "held by aes-gcm 0.10.3; gone when its holders move to ghash 0.6.0 (aes-gcm 0.10.3 in the graph, 0.11.1 newest)"
+
+[[bans.skip]]
+crate = "hash32@0.2.1"
+reason = "held by heapless 0.7.17; gone when its holders move to hash32 0.3.1 (heapless 0.7.17 in the graph, 0.9.3 newest)"
+
+[[bans.skip]]
+crate = "hashbrown@0.14.5"
+reason = "held by dashmap 6.2.1; gone when its holders move to hashbrown 0.17.1 (dashmap 6.2.1 is its latest release)"
+
+[[bans.skip]]
+crate = "hashbrown@0.15.5"
+reason = "held by petgraph 0.8.3; gone when its holders move to hashbrown 0.17.1 (petgraph 0.8.3 is its latest release)"
+
+[[bans.skip]]
+crate = "hax-lib@0.3.7"
+reason = "held by core-models 0.0.7; gone when its holders move to hax-lib 0.4.2 (core-models 0.0.7 is its latest release)"
+
+[[bans.skip]]
+crate = "hax-lib-macros@0.3.7"
+reason = "held by hax-lib 0.3.7; gone when its holders move to hax-lib-macros 0.4.2 (hax-lib 0.3.7 in the graph, 0.5.0 newest)"
+
+[[bans.skip]]
+crate = "hax-lib-macros-types@0.3.7"
+reason = "held by hax-lib-macros 0.3.7; gone when its holders move to hax-lib-macros-types 0.4.2 (hax-lib-macros 0.3.7 in the graph, 0.5.0 newest)"
+
+[[bans.skip]]
+crate = "heapless@0.7.17"
+reason = "held by postcard 1.1.3; gone when its holders move to heapless 0.9.3 (postcard 1.1.3 is its latest release)"
+
+[[bans.skip]]
+crate = "hkdf@0.12.4"
+reason = "held by p2mere-encryption 0.10.0; gone when its holders move to hkdf 0.13.0 (p2mere-encryption 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "hmac@0.12.1"
+reason = "held by hkdf 0.12.4; gone when its holders move to hmac 0.13.0 (hkdf 0.12.4 in the graph, 0.13.0 newest)"
+
+[[bans.skip]]
+crate = "inout@0.1.4"
+reason = "held by cipher 0.4.4; gone when its holders move to inout 0.2.6 (cipher 0.4.4 in the graph, 0.5.2 newest)"
+
+[[bans.skip]]
+crate = "jni@0.21.1"
+reason = "held by netdev 0.46.3, netdev 0.45.1; gone when its holders move to jni 0.22.4 (netdev 0.46.3 in the graph, 0.47.0 newest; netdev 0.45.1 in the graph, 0.47.0 newest)"
+
+[[bans.skip]]
+crate = "jni-sys@0.3.1"
+reason = "held by jni 0.21.1; gone when its holders move to jni-sys 0.4.1 (jni 0.21.1 in the graph, 0.22.4 newest)"
+
+[[bans.skip]]
+crate = "netdev@0.45.1"
+reason = "held by netwatch 0.19.3; gone when its holders move to netdev 0.46.3 (netwatch 0.19.3 in the graph, 0.20.0 newest)"
+
+[[bans.skip]]
+crate = "netlink-packet-core@0.8.2"
+reason = "held by netdev 0.45.1, netlink-packet-route 0.31.0, netlink-proto 0.12.2, netwatch 0.19.3; gone when its holders move to netlink-packet-core 0.9.0 (netdev 0.45.1 in the graph, 0.47.0 newest; netlink-packet-route 0.31.0 in the graph, 0.34.0 newest; netlink-proto 0.12.2 in the graph, 0.14.1 newest; netwatch 0.19.3 in the graph, 0.20.0 newest)"
+
+[[bans.skip]]
+crate = "netlink-packet-route@0.31.0"
+reason = "held by netdev 0.45.1, netwatch 0.19.3; gone when its holders move to netlink-packet-route 0.33.0 (netdev 0.45.1 in the graph, 0.47.0 newest; netwatch 0.19.3 in the graph, 0.20.0 newest)"
+
+[[bans.skip]]
+crate = "netlink-sys@0.8.8"
+reason = "held by netdev 0.45.1, netlink-proto 0.12.2, netwatch 0.19.3; gone when its holders move to netlink-sys 0.9.0 (netdev 0.45.1 in the graph, 0.47.0 newest; netlink-proto 0.12.2 in the graph, 0.14.1 newest; netwatch 0.19.3 in the graph, 0.20.0 newest)"
+
+[[bans.skip]]
+crate = "poly1305@0.8.0"
+reason = "held by chacha20poly1305 0.10.1; gone when its holders move to poly1305 0.9.1 (chacha20poly1305 0.10.1 in the graph, 0.11.0 newest)"
+
+[[bans.skip]]
+crate = "polyval@0.6.2"
+reason = "held by ghash 0.5.1; gone when its holders move to polyval 0.7.3 (ghash 0.5.1 in the graph, 0.6.0 newest)"
+
+[[bans.skip]]
+crate = "prettyplease@0.2.37"
+reason = "held by bindgen 0.72.1; gone when its holders move to prettyplease 0.3.0 (bindgen 0.72.1 in the graph, 0.73.2 newest)"
+
+[[bans.skip]]
+crate = "r-efi@5.3.0"
+reason = "held by getrandom 0.3.4; gone when its holders move to r-efi 6.0.0 (getrandom 0.3.4 in the graph, 0.4.3 newest)"
+
+[[bans.skip]]
+crate = "rand@0.8.8"
+reason = "held by p2mere-core 0.10.0; gone when its holders move to rand 0.10.3 (p2mere-core 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "rand_chacha@0.3.1"
+reason = "held by rand 0.8.8; gone when its holders move to rand_chacha 0.10.0 (rand 0.8.8 in the graph, 0.10.3 newest)"
+
+[[bans.skip]]
+crate = "rand_chacha@0.9.0"
+reason = "held by p2mere-encryption 0.10.0; gone when its holders move to rand_chacha 0.10.0 (p2mere-encryption 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "rand_core@0.6.4"
+reason = "held by ostiary 0.0.1, rand 0.8.8, rand_chacha 0.3.1; gone when its holders move to rand_core 0.10.1 (ostiary 0.0.1 is its latest release; rand 0.8.8 in the graph, 0.10.3 newest; rand_chacha 0.3.1 in the graph, 0.10.0 newest)"
+
+[[bans.skip]]
+crate = "rand_core@0.9.5"
+reason = "held by rand_chacha 0.9.0; gone when its holders move to rand_core 0.10.1 (rand_chacha 0.9.0 in the graph, 0.10.0 newest)"
+
+[[bans.skip]]
+crate = "redb@2.6.4"
+reason = "held by gemot 0.1.1 and muniment 0.2.1 (eidetic); gemot's constitution, delegation, membership and record stores are redb 2 files and redb 3 changed the file format, so moving to redb 4.5.0 waits on a decision about existing stores, and on muniment"
+
+[[bans.skip]]
+crate = "sha2@0.10.9"
+reason = "held by p2mere-encryption 0.10.0, snow 0.10.0; gone when its holders move to sha2 0.11.1 (p2mere-encryption 0.10.0 is its latest release; snow 0.10.0 is its latest release)"
+
+[[bans.skip]]
+crate = "shlex@1.3.0"
+reason = "held by bindgen 0.72.1; gone when its holders move to shlex 2.0.1 (bindgen 0.72.1 in the graph, 0.73.2 newest)"
+
+[[bans.skip]]
+crate = "spin@0.9.9"
+reason = "held by heapless 0.7.17; gone when its holders move to spin 0.10.1 (heapless 0.7.17 in the graph, 0.9.3 newest)"
+
+[[bans.skip]]
+crate = "syn@1.0.109"
+reason = "held by genawaiter-proc-macro 0.99.1, proc-macro-error 0.4.12, proc-macro-error-attr 0.4.12, syn-mid 0.5.4; gone when its holders move to syn 3.0.10 (genawaiter-proc-macro 0.99.1 is its latest release; proc-macro-error 0.4.12 in the graph, 1.0.4 newest; proc-macro-error-attr 0.4.12 in the graph, 1.0.4 newest; syn-mid 0.5.4 in the graph, 0.7.0 newest)"
+
+[[bans.skip]]
+crate = "syn@2.0.119"
+reason = "held by asn1-rs-derive 0.6.0, asn1-rs-impl 0.2.0, async-stream-impl 0.3.6, bindgen 0.72.1, curve25519-dalek-derive 0.1.1, derive_more-impl 2.1.1, hax-lib-macros 0.4.2, hax-lib-macros 0.3.7, iroh-metrics-derive 1.0.1, irpc-derive 0.17.0, jni-macros 0.22.4, jni-sys-macros 0.4.1, munge_macro 0.4.7, n0-error-macros 1.0.3, nested_enum_utils 0.2.3, num_enum_derive 0.7.6, pin-project-internal 1.1.13, postcard-derive 0.2.2, prettyplease 0.2.37, proc-macro-error2 2.0.1, spez 0.1.2, strum_macros 0.28.0, synstructure 0.13.2, thiserror-impl 1.0.69, tokio_with_wasm_proc 0.9.2, tracing-attributes 0.1.31, windows-implement 0.100.0, windows-implement 0.60.2, windows-interface 0.100.0, windows-interface 0.59.3, zerocopy-derive 0.8.63, zeroize_derive 1.5.0; gone when its holders move to syn 3.0.10 (asn1-rs-derive 0.6.0 in the graph, 0.7.0 newest; asn1-rs-impl 0.2.0 in the graph, 0.3.0 newest; async-stream-impl 0.3.6 is its latest release; bindgen 0.72.1 in the graph, 0.73.2 newest; curve25519-dalek-derive 0.1.1 is its latest release; derive_more-impl 2.1.1 is its latest release; hax-lib-macros 0.4.2 in the graph, 0.5.0 newest; hax-lib-macros 0.3.7 in the graph, 0.5.0 newest; iroh-metrics-derive 1.0.1 is its latest release; irpc-derive 0.17.0 in the graph, 1.0.0 newest; jni-macros 0.22.4 is its latest release; jni-sys-macros 0.4.1 is its latest release; munge_macro 0.4.7 is its latest release; n0-error-macros 1.0.3 is its latest release; nested_enum_utils 0.2.3 is its latest release; num_enum_derive 0.7.6 is its latest release; pin-project-internal 1.1.13 is its latest release; postcard-derive 0.2.2 is its latest release; prettyplease 0.2.37 in the graph, 0.3.0 newest; proc-macro-error2 2.0.1 is its latest release; spez 0.1.2 is its latest release; strum_macros 0.28.0 is its latest release; synstructure 0.13.2 in the graph, 0.14.0 newest; thiserror-impl 1.0.69 in the graph, 2.0.21 newest; tokio_with_wasm_proc 0.9.2 is its latest release; tracing-attributes 0.1.31 is its latest release; windows-implement 0.100.0 is its latest release; windows-implement 0.60.2 in the graph, 0.100.0 newest; windows-interface 0.100.0 is its latest release; windows-interface 0.59.3 in the graph, 0.100.0 newest; zerocopy-derive 0.8.63 is its latest release; zeroize_derive 1.5.0 is its latest release)"
+
+[[bans.skip]]
+crate = "thiserror@1.0.69"
+reason = "held by commons-spine, gemot, mien, moothold and mooting (this workspace) and castellan-client, jni 0.21.1, mere-transport, murm, murm-sync, ostiary; gone when they move to thiserror 2.0.21"
+
+[[bans.skip]]
+crate = "thiserror-impl@1.0.69"
+reason = "held by thiserror 1.0.69; gone with it"
+
+[[bans.skip]]
+crate = "universal-hash@0.5.1"
+reason = "held by poly1305 0.8.0, polyval 0.6.2; gone when its holders move to universal-hash 0.6.1 (poly1305 0.8.0 in the graph, 0.9.1 newest; polyval 0.6.2 in the graph, 0.7.3 newest)"
+
+[[bans.skip]]
+crate = "windows-core@0.62.2"
+reason = "held by iana-time-zone 0.1.65, windows 0.62.2, windows-collections 0.3.2, windows-future 0.3.2, windows-numerics 0.3.1, wmi 0.18.4; gone when its holders move to windows-core 0.100.0 (iana-time-zone 0.1.65 is its latest release; windows 0.62.2 is its latest release; windows-collections 0.3.2 in the graph, 0.100.0 newest; windows-future 0.3.2 in the graph, 0.100.0 newest; windows-numerics 0.3.1 in the graph, 0.100.0 newest; wmi 0.18.4 is its latest release)"
+
+[[bans.skip]]
+crate = "windows-implement@0.60.2"
+reason = "held by windows-core 0.62.2; gone when its holders move to windows-implement 0.100.0 (windows-core 0.62.2 in the graph, 0.100.0 newest)"
+
+[[bans.skip]]
+crate = "windows-interface@0.59.3"
+reason = "held by windows-core 0.62.2; gone when its holders move to windows-interface 0.100.0 (windows-core 0.62.2 in the graph, 0.100.0 newest)"
+
+[[bans.skip]]
+crate = "windows-link@0.2.1"
+reason = "held by chrono 0.4.45, jni 0.22.4, libloading 0.8.9, parking_lot_core 0.9.12, windows-core 0.62.2, windows-future 0.3.2, windows-numerics 0.3.1, windows-registry 0.6.1, windows-result 0.4.1, windows-strings 0.5.1, windows-sys 0.61.2, windows-threading 0.2.1; gone when its holders move to windows-link 0.100.0 (chrono 0.4.45 is its latest release; jni 0.22.4 is its latest release; libloading 0.8.9 in the graph, 0.9.0 newest; parking_lot_core 0.9.12 in the graph, 0.10.0 newest; windows-core 0.62.2 in the graph, 0.100.0 newest; windows-future 0.3.2 in the graph, 0.100.0 newest; windows-numerics 0.3.1 in the graph, 0.100.0 newest; windows-registry 0.6.1 in the graph, 0.100.0 newest; windows-result 0.4.1 in the graph, 0.100.0 newest; windows-strings 0.5.1 in the graph, 0.100.0 newest; windows-sys 0.61.2 is its latest release; windows-threading 0.2.1 in the graph, 0.100.0 newest)"
+
+[[bans.skip]]
+crate = "windows-result@0.4.1"
+reason = "held by ipconfig 0.3.4, netwatch 0.19.3, windows-core 0.62.2, windows-registry 0.6.1; gone when its holders move to windows-result 0.100.0 (ipconfig 0.3.4 is its latest release; netwatch 0.19.3 in the graph, 0.20.0 newest; windows-core 0.62.2 in the graph, 0.100.0 newest; windows-registry 0.6.1 in the graph, 0.100.0 newest)"
+
+[[bans.skip]]
+crate = "windows-strings@0.5.1"
+reason = "held by windows-core 0.62.2, windows-registry 0.6.1; gone when its holders move to windows-strings 0.100.0 (windows-core 0.62.2 in the graph, 0.100.0 newest; windows-registry 0.6.1 in the graph, 0.100.0 newest)"
+
+[[bans.skip]]
+crate = "windows-sys@0.45.0"
+reason = "held by jni 0.21.1; gone when its holders move to windows-sys 0.61.2 (jni 0.21.1 in the graph, 0.22.4 newest)"
+
+[[bans.skip]]
+crate = "windows-sys@0.52.0"
+reason = "held by ring 0.17.14; gone when its holders move to windows-sys 0.61.2 (ring 0.17.14 is its latest release)"
+
+[[bans.skip]]
+crate = "windows-targets@0.42.2"
+reason = "held by windows-sys 0.45.0; gone when its holders move to windows-targets 0.52.6 (windows-sys 0.45.0 in the graph, 0.61.2 newest)"
+
+[[bans.skip]]
+crate = "windows_aarch64_gnullvm@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_aarch64_gnullvm 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_aarch64_msvc@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_aarch64_msvc 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_i686_gnu@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_i686_gnu 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_i686_msvc@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_i686_msvc 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_x86_64_gnu@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_x86_64_gnu 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_x86_64_gnullvm@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_x86_64_gnullvm 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"
+
+[[bans.skip]]
+crate = "windows_x86_64_msvc@0.42.2"
+reason = "held by windows-targets 0.42.2; gone when its holders move to windows_x86_64_msvc 0.52.6 (windows-targets 0.42.2 in the graph, 0.53.5 newest)"

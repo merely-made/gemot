@@ -2,7 +2,7 @@
 # session and lane. A standalone workspace on purpose: it joins no default build
 # and no member list of Gemot's workspace. Run it through the build wrapper:
 #   python3 /Users/markik/Code/tools/build_storage.py build --lane release-log-spaces-probe \
-#     --cwd <gemot>/probes/spaces-eval -- +1.99.1 test --locked
+#     --cwd <gemot>/probes/spaces-eval -- test
 [package]
 name = "spaces-eval"
 version = "0.0.0"

@@ -160,6 +160,10 @@ branch = "main"
 git = "https://github.com/merely-made/eidetic.git"
 branch = "main"
 
+[patch.crates-io.eidetic]
+git = "https://github.com/merely-made/eidetic.git"
+branch = "main"
+
 [patch.crates-io.errand]
 git = "https://github.com/merely-made/errand.git"
 branch = "main"

@@ -158,7 +158,7 @@ UDC-inspired subject digit; it does not create public or secret discovery topics
 Reproduce the local process demonstration and controls:
 
 ```text
-cargo test -p gemot --test workflow --features work-host --locked
+cargo test -p gemot --test workflow --features work-host
 ```
 
 The process helper is separately ignored and invoked by its parent test. The
