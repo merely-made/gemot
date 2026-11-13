@@ -11,7 +11,7 @@ workspace = true
 
 [dependencies]
 murm-sync.workspace = true
-p2panda-core = { package = "p2mere-core", version = "0.10" }
+p2panda-core = { package = "p2mere-core", version = "0.11" }
 thiserror = "2"
 
 [dependencies.insigne]
@@ -46,7 +46,7 @@ workspace = true
 
 [dependencies.p2panda-encryption]
 package = "p2mere-encryption"
-version = "0.10"
+version = "0.11"
 features = [
     "data_scheme",
     "message_scheme",
@@ -54,7 +54,7 @@ features = [
 
 [dependencies.p2panda-store]
 package = "p2mere-store"
-version = "0.10"
+version = "0.11"
 default-features = false
 
 [dependencies.serde]

@@ -45,7 +45,7 @@ eidetic = { workspace = true, optional = true }
 eidetic-search = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 murm-sync.workspace = true
-p2panda-core = { package = "p2mere-core", version = "0.10" }
+p2panda-core = { package = "p2mere-core", version = "0.11" }
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "time"], optional = true }
 murm = { workspace = true, optional = true, features = ["relay"] }
@@ -73,12 +73,12 @@ features = [
 
 [dependencies.p2panda-auth]
 package = "p2mere-auth"
-version = "0.10"
+version = "0.11"
 default-features = false
 
 [dependencies.p2panda-encryption]
 package = "p2mere-encryption"
-version = "0.10"
+version = "0.11"
 default-features = false
 features = [
     "data_scheme",
@@ -98,7 +98,7 @@ workspace = true
 
 [dependencies.p2panda-store]
 package = "p2mere-store"
-version = "0.10"
+version = "0.11"
 default-features = false
 
 [dependencies.mooting]
@@ -114,7 +114,7 @@ features = [
 ]
 
 [dev-dependencies]
-p2panda-sync = { package = "p2mere-sync", version = "0.10" }
+p2panda-sync = { package = "p2mere-sync", version = "0.11" }
 tokio-stream = "0.1"
 tempfile = "3"
 rcgen = "0.14"
