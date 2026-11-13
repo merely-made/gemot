@@ -1,4 +1,6 @@
-/target/
+# Unanchored: crates/address, crates/site-model, crates/site-host and
+# probes/spaces-eval are their own workspaces and build beside themselves.
+target/
 /.cargo/config.local.toml
 # No Cargo.lock is tracked (engine split D139); what cargo resolved rides on each
 # commit as a git note: `house resolved show <commit>`.
