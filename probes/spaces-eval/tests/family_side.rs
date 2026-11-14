@@ -16,8 +16,8 @@ use identity::InMemoryProvider;
 use muniment::MemoryBackend;
 use pollster::block_on;
 use stickleback::{
-    GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile, GroupKeyLane, GroupPrekeyBundle,
-    GroupSession, GroupSessionDispatch, GroupSessionError, GroupSessionId,
+    GroupCryptoError, GroupKeyLane, GroupPrekeyBundle, GroupSession, GroupSessionDispatch,
+    GroupSessionError, GroupSessionId,
 };
 
 fn id(byte: u8) -> [u8; 32] {
@@ -367,11 +367,10 @@ fn c6_group_key_lane_runs_on_muniment() {
 // ~~~ 7. durable data versus forward secrecy ~~~
 
 /// Stickleback's session is the data scheme: a member added later is welcomed with
-/// every retained epoch and reads earlier data. A forward-secure message profile
-/// exists as a label (`GroupEncryptionProfile::forward_secure_messages`) but no
-/// session operation is driven by it.
+/// every retained epoch and reads earlier data. The forward-secure profile was
+/// removed from stickleback on 2026-11-14 with its message scheme.
 #[test]
-fn c7_session_late_member_reads_earlier_data_and_the_forward_profile_is_a_label() {
+fn c7_session_late_member_reads_earlier_data() {
     let Trio {
         prekeys,
         mut alice,
@@ -399,8 +398,4 @@ fn c7_session_late_member_reads_earlier_data_and_the_forward_profile_is_a_label(
         .unwrap();
     assert_eq!(welcomed.installed_epochs.len(), alice.epoch_count());
     assert_eq!(dave.open(&early).unwrap(), b"written before dave joined");
-
-    let profile = GroupEncryptionProfile::forward_secure_messages();
-    assert_eq!(profile.mode, GroupEncryptionMode::Message);
-    assert_eq!(profile.retained_data_epochs, 0);
 }
