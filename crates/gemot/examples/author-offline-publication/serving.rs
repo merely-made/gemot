@@ -167,6 +167,9 @@ pub(super) async fn reader_process(
     fs::create_dir_all(&cache)?;
     let cache_started_empty = fs::read_dir(&cache)?.next().is_none();
     ensure(cache_started_empty, "reader cache was not empty")?;
+    // The reader fetches its own just-started localhost host: pin on first
+    // contact for this process.
+    errand::set_trust_store(Arc::new(errand::InMemoryTofu::new()));
     let proof_response = fetch_retry(proof_url).await?;
     ensure(
         proof_response.raw_status == Some(20),
