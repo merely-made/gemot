@@ -17,16 +17,11 @@ gemot = { path = "../../crates/gemot" }
 stickleback = { git = "https://github.com/merely-made/eidetic.git", branch = "main" }
 muniment = { git = "https://github.com/merely-made/eidetic.git", branch = "main" }
 identity = { package = "personae", version = "0.3.0", git = "https://github.com/merely-made/dramatis.git", branch = "main" }
-# The family's current supplier (what Gemot and Stickleback run on): the published
-# p2mere 0.8 crates. The intake branch below is 0.9 and links beside them.
-auth-old = { package = "p2mere-auth", version = "0.8", default-features = false }
-core-old = { package = "p2mere-core", version = "0.8" }
-# The intake branch of the p2mere fork, which carries p2panda-spaces.
-p2spaces = { package = "p2mere-spaces", git = "https://github.com/merely-made/p2mere.git", branch = "main", features = ["test_utils"] }
-p2auth = { package = "p2mere-auth", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false }
-p2core = { package = "p2mere-core", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false }
-p2enc = { package = "p2mere-encryption", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false, features = ["data_scheme"] }
-p2store = { package = "p2mere-store", git = "https://github.com/merely-made/p2mere.git", branch = "main", default-features = false, features = ["spaces"] }
+p2spaces = { package = "p2mere-spaces", version = "0.12.0", default-features = false }
+p2auth = { package = "p2mere-auth", version = "0.12.0", default-features = false }
+p2core = { package = "p2mere-core", version = "0.12.0", default-features = false }
+p2enc = { package = "p2mere-encryption", version = "0.12.0", default-features = false, features = ["data_scheme"] }
+p2store = { package = "p2mere-store", version = "0.12.0", default-features = false, features = ["spaces"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 pollster = "0.4"
 thiserror = "1"

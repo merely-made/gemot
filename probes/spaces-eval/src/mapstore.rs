@@ -9,13 +9,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::TestOperation;
 use p2auth::group::GroupCrdtState;
 use p2auth::traits::{Conditions, Operation as AuthOperation};
 use p2core::cbor::{decode_cbor, encode_cbor};
 use p2core::{Hash, VerifyingKey};
 use p2enc::key_manager::PreKeyBundlesState;
 use p2enc::key_registry::KeyRegistryState;
-use p2spaces::test_utils::TestOperation;
 use p2store::Transaction;
 use p2store::groups::GroupsStore;
 use p2store::key_registry::KeyRegistryStore;
@@ -63,15 +63,15 @@ impl MapStore {
     pub fn put_operation(&self, operation: &TestOperation) {
         self.data()
             .operations
-            .insert(operation.hash, operation.clone());
+            .insert(operation.0.hash, operation.clone());
     }
 
     pub fn latest_of(&self, author: &VerifyingKey) -> Option<TestOperation> {
         self.data()
             .operations
             .values()
-            .filter(|operation| &operation.header.verifying_key == author)
-            .max_by_key(|operation| operation.header.seq_num)
+            .filter(|operation| &operation.0.header.verifying_key == author)
+            .max_by_key(|operation| operation.0.header.seq_num)
             .cloned()
     }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! R25 criteria exercised on p2panda-spaces (the intake branch of p2mere), with the
+//! R25 criteria exercised on p2mere-spaces 0.12, with the
 //! `Manager` running over a map store: no SQLite at runtime. The family's current
 //! code is exercised on the same scenarios in `family_side.rs`.
 
@@ -11,9 +11,9 @@ use p2auth::Access;
 use p2core::VerifyingKey;
 use p2enc::Rng;
 use p2spaces::space::SpaceOutput;
-use p2spaces::test_utils::{TestConditions, TestOperation};
 use p2spaces::{Event, SpaceEvent, SpaceId, SpacesArgs};
 use spaces_eval::{MapPeer, exchange_bundles};
+use spaces_eval::{TestConditions, TestOperation};
 
 type Op = TestOperation;
 
@@ -61,7 +61,7 @@ fn ids(members: &[(VerifyingKey, Access<TestConditions>)]) -> BTreeSet<Verifying
 fn direct_recipients(message: &Op) -> BTreeSet<VerifyingKey> {
     let args: &SpacesArgs<TestConditions> = message.borrow();
     match args {
-        SpacesArgs::SpaceMembership {
+        SpacesArgs::KeyAgreement {
             direct_messages, ..
         } => direct_messages
             .iter()

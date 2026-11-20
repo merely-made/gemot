@@ -7,13 +7,13 @@
 
 use std::collections::BTreeSet;
 
-use auth_old::Access;
-use auth_old::group::{GroupAction, GroupMember};
 use gemot::moot::group::{
     MootGroup, MootGroupError, MootGroupHandle, MootGroupOperation, MootGroupOperationId,
 };
 use identity::InMemoryProvider;
 use muniment::MemoryBackend;
+use p2auth::Access;
+use p2auth::group::{GroupAction, GroupMember};
 use pollster::block_on;
 use stickleback::{
     GroupCryptoError, GroupKeyLane, GroupPrekeyBundle, GroupSession, GroupSessionDispatch,

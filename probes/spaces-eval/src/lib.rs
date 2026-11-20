@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! R25 probe: p2panda-spaces (the `intake-20261105` branch of merely-made/p2mere,
-//! upstream p2panda d01898bf) against Gemot's `MootGroup` and Stickleback's group
+//! R25 probe: p2mere-spaces 0.12 against Gemot's `MootGroup` and Stickleback's group
 //! session and lane. Each test name starts with its R25 criterion number:
 //! 1 concurrent add and remove, 2 nested devices, 3 key rotation, 4 offline
 //! revoked peers, 5 cold reopen, 6 Muniment storage without SQLite, 7 durable-data
@@ -14,14 +13,44 @@
 
 pub mod mapstore;
 
-use p2core::{Header, SigningKey, VerifyingKey};
+use p2core::traits::{Digest, Provenance};
+use p2core::{Hash, Header, Operation, SigningKey, VerifyingKey};
+use std::borrow::Borrow;
 
 use mapstore::{MapError, MapStore};
 use p2enc::Rng;
 use p2spaces::manager::{Manager, ManagerError};
 use p2spaces::member::AuthenticatedMember;
-use p2spaces::test_utils::{TestConditions, TestOperation};
 use p2spaces::{Config, Credentials, Forge, MemberStatus, SpacesArgs};
+
+pub type TestConditions = ();
+
+/// A signed spaces message for the map store. The upstream test message lives
+/// behind the SQLite test-helper feature.
+#[derive(Clone, Debug)]
+pub struct TestOperation(Operation<SpacesArgs<TestConditions>>);
+
+impl Borrow<SpacesArgs<TestConditions>> for TestOperation {
+    fn borrow(&self) -> &SpacesArgs<TestConditions> {
+        &self.0.header.extensions
+    }
+}
+
+impl Digest<Hash> for TestOperation {
+    fn hash(&self) -> Hash {
+        self.0.hash
+    }
+}
+
+impl Provenance<VerifyingKey> for TestOperation {
+    fn author(&self) -> VerifyingKey {
+        self.0.author()
+    }
+
+    fn verify(&self) -> bool {
+        self.0.verify()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct MapForge {
@@ -42,13 +71,13 @@ impl Forge<TestConditions> for MapForge {
         let (seq_num, backlink) = self
             .store
             .latest_of(&self.key.verifying_key())
-            .map(|operation| (operation.header.seq_num + 1, Some(operation.hash)))
+            .map(|operation| (operation.0.header.seq_num + 1, Some(operation.0.hash)))
             .unwrap_or((0, None));
         let header = Header::builder()
             .seq_num(seq_num)
             .backlink(backlink)
             .build(&self.key, args);
-        let operation = TestOperation::from_parts(header, None);
+        let operation = TestOperation(Operation::from_parts(header, None));
         self.store.put_operation(&operation);
         Ok(operation)
     }
