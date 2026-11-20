@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use p2auth::Access;
 use p2core::VerifyingKey;
+use p2core::traits::Digest;
 use p2enc::Rng;
 use p2spaces::space::SpaceOutput;
 use p2spaces::{Event, SpaceEvent, SpaceId, SpacesArgs};
@@ -382,6 +383,7 @@ async fn c7_a_late_member_reads_earlier_data() {
     let mut f = founded().await;
     let space = f.alice.manager.space(space_id()).joined().await.unwrap();
     let (early, _) = space.publish(b"written before dave joined").await.unwrap();
+    let early_id = early.hash();
     f.log.push(early);
     let welcome = ops(space
         .add(f.dave.manager.id(), Access::read())
@@ -390,6 +392,14 @@ async fn c7_a_late_member_reads_earlier_data() {
     f.log.extend(welcome);
 
     let events = deliver(&f.dave, &f.log).await;
+    let delivered_ids: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Application { operation_id, .. } => Some(*operation_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(delivered_ids, vec![early_id]);
     assert_eq!(
         applications(&events),
         vec![b"written before dave joined".to_vec()]

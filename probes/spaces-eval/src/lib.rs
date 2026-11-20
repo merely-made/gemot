@@ -109,7 +109,7 @@ impl MapPeer {
         let manager = MapManager::new_with_config(
             store.clone(),
             forge,
-            credentials.clone(),
+            Credentials::from_keys(credentials.signing_key(), credentials.identity_secret()),
             Config::default(),
             rng,
         )

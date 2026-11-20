@@ -20,7 +20,7 @@ identity = { package = "personae", version = "0.3.0", git = "https://github.com/
 p2spaces = { package = "p2mere-spaces", version = "0.12.0", default-features = false }
 p2auth = { package = "p2mere-auth", version = "0.12.0", default-features = false }
 p2core = { package = "p2mere-core", version = "0.12.0", default-features = false }
-p2enc = { package = "p2mere-encryption", version = "0.12.0", default-features = false, features = ["data_scheme"] }
+p2enc = { package = "p2mere-encryption", version = "0.12.0", default-features = false, features = ["data_scheme", "test_utils"] }
 p2store = { package = "p2mere-store", version = "0.12.0", default-features = false, features = ["spaces"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 pollster = "0.4"
