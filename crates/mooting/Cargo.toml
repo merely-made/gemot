@@ -26,7 +26,7 @@ workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-p2panda-core = { package = "p2mere-core", version = "0.12.0" }
+p2panda-core = { package = "p2mere-core", version = "0.12.1" }
 thiserror = "2"
 
 [dependencies.serde]
