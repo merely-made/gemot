@@ -14,9 +14,9 @@
 
 [dependencies]
 "site-model" = { "package" = "gemot-site", "version" = "0.1.0", "path" = "../site-model" }
-"muniment" = { "version" = "0.2.1", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "optional" = true }
+"muniment" = { "version" = ">=0.2.1", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "optional" = true }
 "gemot" = { "version" = "0.1.1", "git" = "https://github.com/merely-made/gemot.git", "branch" = "main", "optional" = true }
-"personae" = { "version" = "0.3.0", "git" = "https://github.com/merely-made/dramatis.git", "branch" = "main", "optional" = true }
+"personae" = { "version" = ">=0.3.0", "git" = "https://github.com/merely-made/dramatis.git", "branch" = "main", "optional" = true }
 "zeroize" = { "version" = "1", "optional" = true }
 "stickleback" = { "version" = "0.4", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "optional" = true }
 "proofs" = { "package" = "mere-proofs", "version" = "0.1.0", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "optional" = true }
@@ -39,7 +39,7 @@
 "tempfile" = "3"
 
 [dev-dependencies]
-"muniment" = { "version" = "0.2.1", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "features" = ["directory"] }
+"muniment" = { "version" = ">=0.2.1", "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main", "features" = ["directory"] }
 "tempfile" = "3"
 "tokio-rustls" = { "version" = "0.26", "default-features" = false, "features" = ["ring", "tls12"] }
 
