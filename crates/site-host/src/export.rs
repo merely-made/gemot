@@ -87,7 +87,12 @@ pub(crate) fn checked_destination(path: &Path) -> Result<PathBuf, String> {
     let mut current = PathBuf::new();
     for component in absolute.components() {
         match component {
-            Component::Prefix(prefix) => current.push(prefix.as_os_str()),
+            Component::Prefix(prefix) => {
+                // A bare drive prefix, plain or extended-length, names a volume, not a directory:
+                // statting it fails on verbatim paths. The check starts at the root.
+                current.push(prefix.as_os_str());
+                continue;
+            },
             Component::RootDir => current.push(component.as_os_str()),
             Component::CurDir => {},
             Component::ParentDir => {

@@ -135,3 +135,43 @@ fn exported_files_have_no_execute_permissions() {
         assert_eq!(mode & 0o111, 0);
     }
 }
+
+#[test]
+fn export_accepts_plain_and_extended_length_destinations() {
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot = saved_micron_snapshot(temp.path());
+    // The extended-length (verbatim) form used to fail on its bare drive prefix.
+    let canonical = fs::canonicalize(temp.path()).unwrap();
+    let verbatim = canonical.join("verbatim-handoff");
+    export_micron_snapshot(&snapshot, &verbatim).unwrap();
+    assert!(verbatim.join("snapshot.json").is_file());
+    let plain = temp.path().join("plain-handoff");
+    export_micron_snapshot(&snapshot, &plain).unwrap();
+    assert!(plain.join("snapshot.json").is_file());
+}
+
+#[test]
+fn export_refuses_a_symlinked_parent_component() {
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot = saved_micron_snapshot(temp.path());
+    let actual = temp.path().join("actual");
+    fs::create_dir(&actual).unwrap();
+    let alias = temp.path().join("alias");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&actual, &alias).unwrap();
+    #[cfg(windows)]
+    if std::os::windows::fs::symlink_dir(&actual, &alias).is_err() {
+        // Symlinks need a privilege; a junction is a reparse point without one.
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&alias)
+            .arg(&actual)
+            .output()
+            .unwrap();
+        assert!(made.status.success(), "could not make a junction");
+    }
+    let canonical = fs::canonicalize(temp.path()).unwrap().join("alias");
+    assert!(export_micron_snapshot(&snapshot, &alias.join("out")).is_err());
+    assert!(export_micron_snapshot(&snapshot, &canonical.join("out")).is_err());
+    assert!(fs::read_dir(actual).unwrap().next().is_none());
+}
