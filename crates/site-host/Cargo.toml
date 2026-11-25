@@ -34,7 +34,7 @@
 "tokio" = { "version" = "1", "features" = ["rt", "sync", "net", "time", "macros"] }
 "blake3" = "1"
 "murm-resolve" = { "version" = ">=0.0.1", "git" = "https://github.com/merely-made/murm.git", "branch" = "main", "optional" = true }
-"retinue" = { "git" = "https://github.com/merely-made/murm.git", "branch" = "main", "optional" = true }
+"retinue" = { "git" = "https://github.com/merely-made/retinue.git", "branch" = "main", "optional" = true }
 "getrandom" = { "version" = "0.2", "optional" = true }
 "tempfile" = "3"
 
@@ -46,7 +46,7 @@
 [patch]
 "crates-io" = { "hodograph" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "portolan" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "eidetic" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "scroll-protocol" = { "git" = "https://github.com/merely-made/errand.git", "branch" = "main" }, "servitor" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "spartan-protocol" = { "git" = "https://github.com/merely-made/errand.git", "branch" = "main" }, "stickleback" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "muniment" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "mere-proofs" = { "git" = "https://github.com/merely-made/eidetic.git", "branch" = "main" }, "gemini-protocol" = { "git" = "https://github.com/merely-made/errand.git", "branch" = "main" } }
 "https://github.com/merely-made/mere.git" = {  }
-"https://github.com/merely-made/retinue.git" = { "retinue" = { "git" = "https://github.com/merely-made/murm.git", "branch" = "main" } }
+"https://github.com/merely-made/retinue.git" = {  }
 "https://github.com/merely-made/distillery.git" = {  }
 
 [features]
